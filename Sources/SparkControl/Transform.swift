@@ -176,6 +176,17 @@ enum Transform {
         return (Data("data: ".utf8) + data + Data("\n".utf8), u)
     }
 
+    /// True for the first SSE chunk that carries generated output (text, reasoning or a tool call).
+    static func isTokenChunk(_ line: Data) -> Bool {
+        guard line.starts(with: dataPrefix),
+              let obj = (try? JSONSerialization.jsonObject(with: line.dropFirst(dataPrefix.count))) as? [String: Any],
+              let choice = (obj["choices"] as? [[String: Any]])?.first else { return false }
+        if let t = choice["text"] as? String, !t.isEmpty { return true }
+        guard let d = choice["delta"] as? [String: Any] else { return false }
+        for k in ["content", "reasoning_content", "reasoning"] { if let s = d[k] as? String, !s.isEmpty { return true } }
+        return (d["tool_calls"] as? [Any])?.isEmpty == false
+    }
+
     /// `…/manifests/<registry>/<namespace>/<repo>/<tag>` → the name `ollama run` uses.
     static func ollamaName(manifestPath: String) -> String? {
         guard let r = manifestPath.range(of: "/manifests/") else { return nil }

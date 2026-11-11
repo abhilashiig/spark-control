@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Pane: Hashable {
-    case model(UUID), connect, discovered, requests, usage, logs
+    case chat, model(UUID), connect, discovered, requests, usage, logs
 }
 
 struct MainView: View {
@@ -12,6 +12,9 @@ struct MainView: View {
         @Bindable var state = state
         NavigationSplitView {
             List(selection: $selection) {
+                Section {
+                    Label("Chat", systemImage: "bubble.left.and.bubble.right").tag(Pane.chat)
+                }
                 Section("Models") {
                     ForEach(state.config.recipes) { r in
                         HStack(spacing: 8) {
@@ -52,6 +55,7 @@ struct MainView: View {
             switch selection {
             case .model(let id) where state.config.recipes.contains { $0.id == id }:
                 ModelView(id: id, selection: $selection).id(id)
+            case .chat: ChatView()
             case .connect: ConnectView()
             case .discovered: DiscoveredView(selection: $selection)
             case .requests: RequestsView()

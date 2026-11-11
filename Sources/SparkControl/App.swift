@@ -3,11 +3,13 @@ import SwiftUI
 
 struct SparkControlApp: App {
     @State private var state = AppState()
+    @State private var chats = ChatStore()
 
     var body: some Scene {
         Window("Spark Control", id: "main") {
             MainView()
                 .environment(state)
+                .environment(chats)
                 .frame(minWidth: 780, minHeight: 500)
         }
         .defaultSize(width: 960, height: 640)

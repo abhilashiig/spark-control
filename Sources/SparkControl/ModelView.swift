@@ -24,6 +24,8 @@ struct ModelView: View {
                 TextField("Name", text: r.name)
                 CodeField(title: "Start command", text: r.startCommand, prompt: "qwen-start")
                 CodeField(title: "Stop command", text: r.stopCommand, prompt: "qwen-stop")
+                TextField("Spark port", value: r.port, format: .number.grouping(.never),
+                          prompt: Text("\((state.config.device?.backendPort ?? 18300).formatted(.number.grouping(.never))) (default)"))
                 TextField("Startup timeout (seconds)", value: r.timeout, format: .number.grouping(.never))
                 Toggle(isOn: r.enabled) {
                     Text("Enabled")

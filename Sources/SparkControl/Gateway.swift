@@ -196,7 +196,7 @@ final class Gateway: @unchecked Sendable {
         do { try await state.ensureRunning(recipe) } catch {
             return await sendError(c, 503, error.localizedDescription, type: "server_error")
         }
-        guard let base = await state.backendBase, let url = URL(string: base + req.target) else {
+        guard let base = await state.backendBase(for: recipe), let url = URL(string: base + req.target) else {
             return await sendError(c, 503, "The Spark is unreachable.", type: "server_error")
         }
 
@@ -221,6 +221,7 @@ final class Gateway: @unchecked Sendable {
 
         var usage: Transform.Usage?
         var status = 0
+        var firstToken: Date?
         do {
             if streaming {
                 let (bytes, resp) = try await session.bytes(for: up)
@@ -231,6 +232,7 @@ final class Gateway: @unchecked Sendable {
                 for try await byte in bytes {
                     line.append(byte)
                     guard byte == 10 else { continue }
+                    if firstToken == nil, Transform.isTokenChunk(line) { firstToken = Date() }
                     let (l, u) = Transform.sseLine(line, recipe: recipe, inject: s.settings.injectCost)
                     if let u { usage = u }
                     out.append(l)
@@ -264,8 +266,11 @@ final class Gateway: @unchecked Sendable {
                                       duration: Date().timeIntervalSince(started), error: error.localizedDescription)
             return
         }
+        let ended = Date()
         await state.finishRequest(entry, status: status, usage: usage, recipe: recipe,
-                                  duration: Date().timeIntervalSince(started), error: nil)
+                                  duration: ended.timeIntervalSince(started),
+                                  ttft: firstToken.map { $0.timeIntervalSince(started) },
+                                  decodeTime: firstToken.map { ended.timeIntervalSince($0) }, error: nil)
     }
 
     private func modelObject(_ r: Recipe, _ s: GatewaySnapshot) -> [String: Any] {

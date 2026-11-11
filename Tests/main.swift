@@ -89,4 +89,20 @@ check(d.host(.tailscale) == "aitopatom-049b", "tailscale never has .local")
 check(d.host(.local) == "aitopatom-049b.local", "local adds .local")
 check(Probe.isTailscale("100.101.12.3") && !Probe.isTailscale("192.168.1.20"), "tailscale IP range")
 
+// First-token detection for TTFT: role-only and empty chunks don't count
+func sse(_ json: String) -> Data { Data(("data: " + json + "\n").utf8) }
+check(!Transform.isTokenChunk(sse(#"{"choices":[{"delta":{"role":"assistant","content":""}}]}"#)), "role chunk isn't a token")
+check(Transform.isTokenChunk(sse(#"{"choices":[{"delta":{"reasoning_content":"Hm"}}]}"#)), "reasoning counts as first token")
+check(Transform.isTokenChunk(sse(#"{"choices":[{"delta":{"content":"Hi"}}]}"#)), "content counts")
+check(Transform.isTokenChunk(sse(#"{"choices":[{"delta":{"tool_calls":[{"index":0}]}}]}"#)), "tool call counts")
+check(!Transform.isTokenChunk(sse(#"{"choices":[],"usage":{"prompt_tokens":1}}"#)) && !Transform.isTokenChunk(Data("data: [DONE]\n".utf8)), "usage/DONE aren't tokens")
+
+// Speeds
+check(Speed.decode(completion: 101, decodeTime: 2) == 50, "decode = (101-1)/2s")
+check(Speed.prefill(prompt: 20_000, cached: 19_200, ttft: 0.4) == 2000, "prefill = uncached/ttft")
+check(Speed.prefill(prompt: 100, cached: 100, ttft: 0.2) == nil && Speed.decode(completion: 1, decodeTime: 1) == nil, "no speed without work")
+
+// Per-model port
+check(d.backendBase(.local) == "http://aitopatom-049b.local:18300" && d.backendBase(.tailscale, port: 8000) == "http://aitopatom-049b:8000", "per-model port")
+
 print("All checks passed")

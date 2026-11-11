@@ -16,12 +16,9 @@ Needs only Xcode Command Line Tools.
 
 ## One-time: key-based SSH
 
-The app can't type passwords, so the Spark must accept your SSH key:
-
-```bash
-ssh-keygen -t ed25519            # skip if ~/.ssh/id_ed25519 exists
-ssh-copy-id abhi@aitopatom-049b.local
-```
+The app signs in with your SSH key. If the Spark doesn't accept it yet, click
+**Set Up Key Login…** (Settings → Spark, or on a model's error): enter the Spark password once
+and the app installs your key. The password is passed to ssh through a pipe and never stored.
 
 ## How it works
 
@@ -33,4 +30,8 @@ ssh-copy-id abhi@aitopatom-049b.local
 - **API**: requests pass through untouched, except the model name is renamed to the backend ID, plus any
   per-model parameter rules you set. A request for a stopped model switches to it (configurable).
   Responses get `usage.cost` from the model's prices (toggle in Settings → API).
-- **Data**: `~/Library/Application Support/Spark Control/` (`config.json`, `usage.jsonl`).
+- **Ports**: each model can override the Spark port (default 18300).
+- **Usage**: tokens split like Kilo (In excludes cached, Out excludes reasoning), cache hit rate, and for
+  streamed requests time to first token, prefill and decode speed, over 4h / 24h / week / month / year / all.
+- **Chat**: built-in chat through the same gateway, with image, PDF and text file attachments.
+- **Data**: `~/Library/Application Support/Spark Control/` (`config.json`, `usage.jsonl`, `chats.json`).

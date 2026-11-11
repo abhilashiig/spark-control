@@ -97,7 +97,9 @@ final class AppState {
 
     var activeRecipe: Recipe? { config.recipes.first { $0.id == activeID } }
     var sshTarget: String? { route.flatMap { r in config.device?.sshTarget(r) } }
-    var backendBase: String? { route.flatMap { r in config.device?.backendBase(r) } }
+    /// Where a model is served: its own port, or the Spark's default.
+    func backendBase(for r: Recipe?) -> String? { route.flatMap { config.device?.backendBase($0, port: r?.port) } }
+    private func port(of r: Recipe) -> Int { r.port ?? config.device?.backendPort ?? 18300 }
     var apiBaseURL: String { "http://localhost:\(config.gateway.port)/v1" }
     var isBusy: Bool { transition != nil || phase.busy }
 
@@ -183,13 +185,19 @@ final class AppState {
     /// Reconciles state with what's actually serving on the Spark.
     func refresh() async {
         guard transition == nil else { return }
-        guard let base = backendBase else {
+        guard let route, let device = config.device else {
             if config.device != nil { phase = .offline }
             return
         }
-        let info = await Probe.backend(base)
+        // The active model's port, or every port a model could be on when we don't know what's running.
+        let ports = activeRecipe.map { [port(of: $0)] }
+            ?? Array(Set([device.backendPort] + config.recipes.map(port(of:)))).sorted()
+        var found: (port: Int, info: Probe.Backend)?
+        for p in ports {
+            if let info = await Probe.backend(device.backendBase(route, port: p)) { found = (p, info); break }
+        }
         guard transition == nil else { return }
-        guard let info else {
+        guard let (foundPort, info) = found else {
             if activeID != nil, phase == .ready { phase = .failed("Not responding") }
             else if activeID == nil { phase = .stopped; external = nil }
             return
@@ -200,8 +208,9 @@ final class AppState {
             external = nil
             return
         }
-        let match = config.recipes.first { $0.id == config.lastActive && info.serves($0.upstreamModel) }
-            ?? config.recipes.first { !$0.upstreamModel.isEmpty && info.serves($0.upstreamModel) }
+        let onPort = config.recipes.filter { port(of: $0) == foundPort }
+        let match = onPort.first { $0.id == config.lastActive && info.serves($0.upstreamModel) }
+            ?? onPort.first { !$0.upstreamModel.isEmpty && info.serves($0.upstreamModel) }
         if let match {
             if activeID != match.id { event("Detected \(match.name) running on the Spark") }
             activeID = match.id
@@ -260,7 +269,7 @@ final class AppState {
     }
 
     private func doStart(_ r: Recipe) async throws {
-        guard let target = sshTarget, let base = backendBase else {
+        guard let target = sshTarget, let base = backendBase(for: r) else {
             phase = .offline
             throw AppError("The Spark is unreachable.")
         }
@@ -317,11 +326,11 @@ final class AppState {
     }
 
     private func doStop() async throws {
-        guard let target = sshTarget, let base = backendBase else {
+        guard let target = sshTarget else {
             phase = .offline
             throw AppError("The Spark is unreachable.")
         }
-        guard let r = activeRecipe else {
+        guard let r = activeRecipe, let base = backendBase(for: r) else {
             phase = .failed("An unknown model (\(external ?? "?")) is using port \(config.device?.backendPort ?? 0). Stop it on the Spark first.")
             throw AppError(phase.label)
         }
@@ -396,7 +405,8 @@ final class AppState {
         return e.id
     }
 
-    func finishRequest(_ id: UUID, status: Int, usage u: Transform.Usage?, recipe: Recipe, duration: Double, error: String?) {
+    func finishRequest(_ id: UUID, status: Int, usage u: Transform.Usage?, recipe: Recipe, duration: Double,
+                       ttft: Double? = nil, decodeTime: Double? = nil, error: String?) {
         let cost = u.map { Transform.cost($0, recipe) } ?? 0
         if let i = requests.firstIndex(where: { $0.id == id }) {
             requests[i].status = status
@@ -405,11 +415,14 @@ final class AppState {
             requests[i].completion = u?.completion ?? 0
             requests[i].cached = u?.cached ?? 0
             requests[i].reasoning = u?.reasoning ?? 0
+            requests[i].ttft = ttft
+            requests[i].decodeTime = decodeTime
             requests[i].cost = cost
             requests[i].error = error
         }
         if let u {
-            let rec = UsageRecord(date: Date(), model: recipe.apiID, prompt: u.prompt, completion: u.completion, cached: u.cached, reasoning: u.reasoning, cost: cost)
+            let rec = UsageRecord(date: Date(), model: recipe.apiID, prompt: u.prompt, completion: u.completion, cached: u.cached, reasoning: u.reasoning, cost: cost,
+                                  ttft: ttft, decodeTime: decodeTime)
             usage.append(rec)
             Store.append(rec)
         }

@@ -42,7 +42,7 @@ struct Device: Codable, Equatable {
     }
 
     func sshTarget(_ route: Route) -> String { "\(user)@\(host(route))" }
-    func backendBase(_ route: Route) -> String { "http://\(host(route)):\(backendPort)" }
+    func backendBase(_ route: Route, port: Int? = nil) -> String { "http://\(host(route)):\(port ?? backendPort)" }
 }
 
 struct ParamRule: Codable, Identifiable, Hashable {
@@ -76,6 +76,8 @@ struct Recipe: Codable, Identifiable, Hashable {
     /// Price for cached prompt tokens. nil = charged at the input price.
     var priceCache: Double?
     var enabled = true
+    /// Port this model serves on, when it isn't the Spark's default.
+    var port: Int?
     var timeout = 600.0
     var rules: [ParamRule] = []
 
@@ -125,6 +127,9 @@ struct UsageRecord: Codable {
     var cached: Int?
     var reasoning: Int?
     var cost: Double
+    /// Streamed requests only: seconds to the first token, and from first token to the end.
+    var ttft: Double?
+    var decodeTime: Double?
 }
 
 struct RequestEntry: Identifiable {
@@ -141,6 +146,8 @@ struct RequestEntry: Identifiable {
     var cached = 0
     var reasoning = 0
     var cost = 0.0
+    var ttft: Double?
+    var decodeTime: Double?
     var error: String?
 }
 
@@ -186,4 +193,18 @@ enum Store {
     }
 
     static func resetUsage() { try? FileManager.default.removeItem(at: usageURL) }
+}
+
+/// Speeds are only known for streamed requests (time to first token is measurable there).
+enum Speed {
+    /// Prompt tokens actually computed (not from cache) per second of time-to-first-token.
+    static func prefill(prompt: Int, cached: Int, ttft: Double?) -> Double? {
+        guard let ttft, ttft > 0, prompt - cached > 0 else { return nil }
+        return Double(prompt - cached) / ttft
+    }
+    /// Generated tokens (incl. reasoning) per second after the first token.
+    static func decode(completion: Int, decodeTime: Double?) -> Double? {
+        guard let decodeTime, decodeTime > 0, completion > 1 else { return nil }
+        return Double(completion - 1) / decodeTime
+    }
 }

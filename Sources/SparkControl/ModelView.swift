@@ -1,0 +1,185 @@
+import SwiftUI
+
+struct ModelView: View {
+    @Environment(AppState.self) private var state
+    let id: UUID
+    @Binding var selection: Pane?
+    @State private var confirmDelete = false
+
+    /// Looked up by id so deleting the model can't leave a stale index behind.
+    private var recipe: Binding<Recipe> {
+        Binding {
+            state.config.recipes.first { $0.id == id } ?? Recipe(name: "", startCommand: "", stopCommand: "")
+        } set: { new in
+            if let i = state.config.recipes.firstIndex(where: { $0.id == id }) { state.config.recipes[i] = new }
+        }
+    }
+
+    var body: some View {
+        let r = recipe
+        Form {
+            Section { ModelHeader(recipe: r.wrappedValue) }
+
+            Section {
+                TextField("Name", text: r.name)
+                CodeField(title: "Start command", text: r.startCommand, prompt: "qwen-start")
+                CodeField(title: "Stop command", text: r.stopCommand, prompt: "qwen-stop")
+                TextField("Startup timeout (seconds)", value: r.timeout, format: .number.grouping(.never))
+                Toggle(isOn: r.enabled) {
+                    Text("Enabled")
+                    Text("Only enabled models can be started or requested through the API.")
+                }
+            } header: {
+                Text("Recipe")
+            } footer: {
+                Text("Commands run on the Spark through your shell, exactly as typed, so aliases and functions work.")
+            }
+
+            Section {
+                LabeledContent("API model name") {
+                    HStack(spacing: 6) {
+                        Text(r.wrappedValue.apiID).monospaced().textSelection(.enabled)
+                        CopyButton(text: r.wrappedValue.apiID)
+                    }
+                }
+                CodeField(title: "Backend model ID", text: r.upstreamModel, prompt: "Detected on first start")
+            } header: {
+                Text("API")
+            } footer: {
+                Text("Clients ask for “\(r.wrappedValue.apiID)” at \(state.apiBaseURL). It's renamed to the backend model ID before reaching the Spark.")
+            }
+
+            Section {
+                TextField("Input", value: r.priceIn, format: .number.precision(.fractionLength(0...4)))
+                TextField("Output", value: r.priceOut, format: .number.precision(.fractionLength(0...4)))
+                TextField("Cache read", value: r.priceCache, format: .number.precision(.fractionLength(0...4)),
+                          prompt: Text("Same as input"))
+            } header: {
+                Text("Pricing")
+            } footer: {
+                Text("USD per 1M tokens. Cached prompt tokens use the cache read price. Used for usage totals and usage.cost. Nothing is billed.")
+            }
+
+            Section {
+                RulesEditor(rules: r.rules)
+            } header: {
+                Text("Parameter Rules")
+            } footer: {
+                Text("Requests pass through unchanged unless a rule applies. Default fills in a missing value, Override always replaces it, and Remove strips it. Values are JSON (0.6, true, {\"enable_thinking\": false}) or plain text.")
+            }
+
+            Section {
+                Button("Delete Model…", role: .destructive) { confirmDelete = true }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(r.wrappedValue.name.isEmpty ? "Untitled" : r.wrappedValue.name)
+        .confirmationDialog("Delete “\(r.wrappedValue.name)”?", isPresented: $confirmDelete) {
+            Button("Delete", role: .destructive) {
+                selection = nil
+                state.deleteRecipe(id)
+            }
+        } message: {
+            Text("This removes the recipe from Spark Control. Nothing on the Spark is changed.")
+        }
+    }
+}
+
+private struct ModelHeader: View {
+    @Environment(AppState.self) private var state
+    let recipe: Recipe
+    @State private var keyTarget: String?
+
+    var body: some View {
+        let phase = state.phase(for: recipe)
+        HStack(spacing: 14) {
+            Image(systemName: "cpu")
+                .font(.system(size: 24, weight: .medium))
+                .foregroundStyle(.tint)
+                .frame(width: 46, height: 46)
+                .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(recipe.name.isEmpty ? "Untitled" : recipe.name).font(.title3.weight(.semibold))
+                HStack(spacing: 6) {
+                    StatusDot(phase: phase)
+                    Text(phase.label)
+                        .foregroundStyle(phase.isFailure ? Color.red : Color.secondary)
+                        .lineLimit(2)
+                }
+                .font(.callout)
+            }
+            Spacer()
+            if case .failed(let m) = phase, m.contains("Permission denied"), let target = state.sshTarget {
+                Button("Set Up Key Login…") { keyTarget = target }.controlSize(.large)
+            }
+            if phase.busy {
+                ProgressView().controlSize(.small)
+            } else if phase == .ready {
+                Button("Stop") { state.stop() }.controlSize(.large)
+            } else {
+                Button(state.activeID != nil && state.activeID != recipe.id ? "Switch to This" : (phase.isFailure ? "Try Again" : "Start")) {
+                    state.start(recipe)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!recipe.enabled || recipe.startCommand.isEmpty || state.route == nil || state.isBusy)
+            }
+        }
+        .padding(.vertical, 4)
+        .sheet(item: $keyTarget) { target in
+            KeyLoginSheet(target: target) { state.start(recipe) }
+        }
+    }
+}
+
+/// Regular label, monospaced value.
+private struct CodeField: View {
+    let title: String
+    @Binding var text: String
+    let prompt: String
+
+    var body: some View {
+        LabeledContent(title) {
+            TextField(title, text: $text, prompt: Text(prompt))
+                .labelsHidden()
+                .font(.body.monospaced())
+                .multilineTextAlignment(.trailing)
+        }
+    }
+}
+
+private extension Phase {
+    var isFailure: Bool { if case .failed = self { true } else { false } }
+}
+
+private struct RulesEditor: View {
+    @Binding var rules: [ParamRule]
+
+    var body: some View {
+        ForEach($rules) { $rule in
+            HStack(spacing: 8) {
+                TextField("", text: $rule.key, prompt: Text("parameter"))
+                    .labelsHidden()
+                    .font(.body.monospaced())
+                    .frame(width: 170)
+                Picker("", selection: $rule.kind) {
+                    ForEach(ParamRule.Kind.allCases, id: \.self) { Text($0.label) }
+                }
+                .labelsHidden()
+                .fixedSize()
+                TextField("", text: $rule.value, prompt: Text(rule.kind == .remove ? "" : "value"))
+                    .labelsHidden()
+                    .font(.body.monospaced())
+                    .disabled(rule.kind == .remove)
+                Button {
+                    rules.removeAll { $0.id == rule.id }
+                } label: {
+                    Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help("Remove Rule")
+            }
+        }
+        Button("Add Rule") { rules.append(ParamRule()) }
+    }
+}

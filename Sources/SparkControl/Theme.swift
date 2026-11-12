@@ -194,7 +194,7 @@ struct NoticeBanner: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(VizColor.warning)
-            Text(text).fixedSize(horizontal: false, vertical: true)
+            Text(text)
             Spacer(minLength: 0)
             Button { state.notice = nil } label: {
                 Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(.secondary)

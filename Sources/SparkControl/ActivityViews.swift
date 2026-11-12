@@ -35,7 +35,7 @@ struct DiscoveredView: View {
                 }
             }
         }
-        .navigationTitle("Discovered")
+        .navigationTitle("Ollama")
         .toolbar {
             Button { Task { await state.discover() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                 .disabled(state.discovering || state.route == nil)

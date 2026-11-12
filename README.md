@@ -34,7 +34,7 @@ and the app installs your key. The password is passed to ssh through a pipe and 
 - **Usage**: tokens split like Kilo (In excludes cached, Out excludes reasoning), cache hit rate, and for
   streamed requests time to first token, prefill and decode speed, over 4h / 24h / week / month / year / all.
 - **Chat**: built-in chat through the same gateway, with image, PDF and text file attachments.
-- **TensorFold** (sidebar → Catalog): installs TensorFold's pinned GB10 release into
+- **TensorFold** (sidebar → Engines): installs TensorFold's pinned GB10 release into
   `~/.local/share/spark-control/tensorfold` on the Spark (checksum, release signature and every file checked; no sudo),
   or uses one you put on your `PATH`. Lists the models TensorFold has tested on one GB10, downloads each with the
   drafter TensorFold names for it (detached, so it survives the Mac sleeping), and adds it as a model that serves with
@@ -44,4 +44,10 @@ and the app installs your key. The password is passed to ssh through a pipe and 
   without downloading again), and "X of Y" with a bar for partial or running downloads.
   Each TensorFold model's page has a Context picker: TensorFold's default, the model's full trained window (the default
   for new models; 262k for Super VL), or YaRN ×2/×4 on the Qwen3.6 models, written into the start command's flags.
+- **vLLM** (sidebar → Engines): pulls the official vLLM image, pinned by digest, with Docker (no sudo) and lists NVFP4 models that
+  fit one GB10 and carry an MTP head. Downloads use `hf` inside the image as your user, into the same Hugging Face cache.
+  Models run as the `spark-vllm` container with the shared API key, 85% of memory, 4 requests at once and prefix
+  caching. Each model's page has Context and MTP drafts pickers. Suggested drafts come from published single-Spark
+  measurements: 3 for Qwen3.6 35B-A3B (about 100 tok/s, +45%), 2 for Gemma 4 (1.7–1.8×, and 2 beat 4), and 2 elsewhere,
+  where nobody has published a sweep. The first start of a model can take 10–15 minutes.
 - **Data**: `~/Library/Application Support/Spark Control/` (`config.json`, `usage.jsonl`, `chats.json`).

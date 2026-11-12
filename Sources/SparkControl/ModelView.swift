@@ -23,6 +23,9 @@ struct ModelView: View {
             if let m = TensorFold.model(r.wrappedValue.tensorfold) {
                 TensorFoldSection(recipe: r, model: m)
             }
+            if let m = VLLM.model(r.wrappedValue.vllm) {
+                VLLMSection(recipe: r, model: m)
+            }
 
             BenchmarkSection(recipe: r.wrappedValue)
 
@@ -231,5 +234,41 @@ private struct TensorFoldSection: View {
             s += " YaRN changes replies at every length, not only long prompts: leave it off unless prompts go past \(model.window.formatted()) tokens. At 1M tokens a GB10 runs two requests at once, and a 1M-token prompt takes about 26 minutes to prefill."
         }
         return s
+    }
+}
+
+/// Context window and MTP drafts for vLLM catalog models, kept in the start command's flags.
+private struct VLLMSection: View {
+    @Binding var recipe: Recipe
+    let model: VLLM.Model
+
+    var body: some View {
+        let ctx = VLLM.context(of: recipe.startCommand) ?? model.window
+        let options = VLLM.contextOptions(model)
+        let drafts = VLLM.drafts(of: recipe.startCommand)
+        Section {
+            Picker("Context", selection: Binding { ctx } set: {
+                recipe.startCommand = VLLM.withContext(recipe.startCommand, $0)
+            }) {
+                ForEach(options.contains(ctx) ? options : (options + [ctx]).sorted(), id: \.self) {
+                    Text($0 == model.window ? "Full window (\($0.formatted()))" : "\($0.formatted()) tokens").tag($0)
+                }
+            }
+            Picker(selection: Binding { drafts } set: {
+                recipe.startCommand = VLLM.withDrafts(recipe.startCommand, $0, model: model)
+            }) {
+                Text("Off").tag(0)
+                ForEach(Array(Set([1, 2, 3, drafts, model.suggested])).filter { $0 > 0 }.sorted(), id: \.self) { n in
+                    Text(n == model.suggested ? "\(n) tokens (suggested)" : "\(n) token\(n == 1 ? "" : "s")").tag(n)
+                }
+            } label: {
+                Text("MTP drafts")
+                Text("Tokens the MTP head drafts per step. Same replies, faster decoding; more isn't always faster because later drafts are accepted less often.")
+            }
+        } header: {
+            Text("vLLM")
+        } footer: {
+            Text("Changes apply at the next start. MTP also takes some memory from the KV cache (about 20% fewer cached tokens measured on a GB10). Run a benchmark after changing drafts to see which is fastest for your prompts.")
+        }
     }
 }

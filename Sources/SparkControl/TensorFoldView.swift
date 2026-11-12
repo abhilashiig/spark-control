@@ -29,7 +29,10 @@ extension AppState {
 
     func tfLoadSizes() async {
         for m in TensorFold.catalog where tfSizes[m.id] == nil {
-            if let size = await TensorFold.downloadSize(m) { tfSizes[m.id] = size }
+            if let size = await TensorFold.downloadSize(m.downloads) { tfSizes[m.id] = size }
+        }
+        for m in VLLM.catalog where tfSizes[m.key] == nil {
+            if let size = await TensorFold.downloadSize(m.downloads) { tfSizes[m.key] = size }
         }
     }
 
@@ -46,7 +49,7 @@ extension AppState {
 
     /// Stops the serving model first when it's one of these, so nothing is deleted from under it.
     private func tfStopIfServing(_ ids: Set<String>) async {
-        if let id = activeRecipe?.tensorfold, ids.contains(id) { await stopAndWait() }
+        if let id = activeRecipe.flatMap({ $0.tensorfold ?? $0.vllm.map { "vllm-" + $0 } }), ids.contains(id) { await stopAndWait() }
     }
 
     func tfUninstall(deleteModels: Bool) async {
@@ -55,7 +58,7 @@ extension AppState {
         tfLog = []
         defer { tfBusy = false }
         await tfStopIfServing(Set(TensorFold.catalog.map(\.id)))
-        let models = deleteModels ? TensorFold.catalog.filter { tfDownloadedByApp($0) } : []
+        let models = deleteModels ? TensorFold.catalog.filter { downloadedByApp(.tf($0)) } : []
         event("Removing TensorFold from the Spark" + (deleteModels ? " with its downloaded models" : ""))
         let res = await tfRun(TensorFold.uninstallScript(models: models), timeout: 300, stream: true)
         if res?.code == 0 {
@@ -67,48 +70,122 @@ extension AppState {
         await tfRefresh()
     }
 
-    func tfDownload(_ m: TensorFold.Model) async {
-        guard let binary = tf.engine.binary else { return }
-        event("Downloading \(m.name): " + m.downloads.map(\.spec).joined(separator: ", "))
-        let res = await tfRun(TensorFold.downloadScript(m, binary: binary), timeout: 30)
+    func catDownload(_ i: CatalogItem) async {
+        let script: String
+        switch i {
+        case .tf(let m):
+            guard let binary = tf.engine.binary else { return }
+            script = TensorFold.downloadScript(m, binary: binary)
+        case .vllm(let m): script = VLLM.downloadScript(m)
+        }
+        event("Downloading \(i.name): " + i.downloads.map(\.spec).joined(separator: ", "))
+        let res = await tfRun(script, timeout: 30)
         if res?.code != 0 { event("Couldn't start the download: \(res?.output ?? "Spark unreachable")") }
         await tfRefresh()
     }
 
-    func tfCancel(_ m: TensorFold.Model) async {
-        _ = await tfRun(TensorFold.cancelScript(m), timeout: 30)
-        event("Cancelled downloading \(m.name)")
+    func catCancel(_ i: CatalogItem) async {
+        _ = await tfRun(TensorFold.cancelScript(i.key), timeout: 30)
+        event("Cancelled downloading \(i.name)")
         await tfRefresh()
     }
 
-    func tfDelete(_ m: TensorFold.Model) async {
-        await tfStopIfServing([m.id])
-        let res = await tfRun(TensorFold.deleteScript(m), timeout: 300)
+    func catDelete(_ i: CatalogItem) async {
+        await tfStopIfServing([i.key])
+        let script = switch i {
+        case .tf(let m): TensorFold.deleteScript(m)
+        case .vllm(let m): VLLM.deleteScript(m)
+        }
+        let res = await tfRun(script, timeout: 300)
         if res?.code == 0 {
-            config.recipes.removeAll { $0.tensorfold == m.id }
-            event("Deleted \(m.name) from the Spark")
+            config.recipes.removeAll { $0.id == catRecipeID(i) }
+            event("Deleted \(i.name) from the Spark")
         } else {
-            event("Deleting \(m.name) failed: \(res?.output ?? "Spark unreachable")")
+            event("Deleting \(i.name) failed: \(res?.output ?? "Spark unreachable")")
         }
         await tfRefresh()
     }
 
     /// Only what Spark Control downloaded is ever offered for deletion: the same cache folders may
     /// belong to another setup on the Spark.
-    func tfDownloadedByApp(_ m: TensorFold.Model) -> Bool {
-        (tf.models[m.id]?.download).map { $0 != TensorFold.Download.none } ?? false
+    func downloadedByApp(_ i: CatalogItem) -> Bool {
+        (tf.models[i.key]?.download).map { $0 != TensorFold.Download.none } ?? false
     }
 
-    func tfRecipeID(_ m: TensorFold.Model) -> UUID? { config.recipes.first { $0.tensorfold == m.id }?.id }
+    func catRecipeID(_ i: CatalogItem) -> UUID? {
+        switch i {
+        case .tf(let m): config.recipes.first { $0.tensorfold == m.id }?.id
+        case .vllm(let m): config.recipes.first { $0.vllm == m.id }?.id
+        }
+    }
+
+    func engineReady(_ i: CatalogItem) -> Bool {
+        guard route != nil else { return false }
+        switch i {
+        case .tf: return tf.engine != .none
+        case .vllm: return tf.vllm == "ready"
+        }
+    }
+
+    func catAdd(_ i: CatalogItem) async -> UUID? {
+        switch i {
+        case .tf(let m): return await tfAddRecipe(m)
+        case .vllm(let m): return await vllmAddRecipe(m)
+        }
+    }
+
+    /// Creates the shared API key on the Spark once and returns it.
+    private func sparkAPIKey() async -> String? {
+        guard let res = await tfRun(TensorFold.apiKeyScript, timeout: 30), res.code == 0,
+              let key = res.output.split(separator: "\n").last.map(String.init), key.count == 48 else {
+            event("Couldn't create the API key on the Spark")
+            return nil
+        }
+        return key
+    }
+
+    func vllmInstall() async {
+        guard !tfBusy else { return }
+        tfBusy = true
+        tfLog = []
+        defer { tfBusy = false }
+        event("Pulling vLLM \(VLLM.version) on the Spark")
+        let res = await tfRun(VLLM.pullScript, timeout: 3600, stream: true)
+        event(res?.code == 0 ? "vLLM \(VLLM.version) installed" : "vLLM install failed")
+        await tfRefresh()
+    }
+
+    func vllmRemove() async {
+        guard !tfBusy else { return }
+        tfBusy = true
+        tfLog = []
+        defer { tfBusy = false }
+        await tfStopIfServing(Set(VLLM.catalog.map(\.key)))
+        let res = await tfRun(VLLM.removeScript, timeout: 300, stream: true)
+        event(res?.code == 0 ? "vLLM removed" : "Removing vLLM failed")
+        await tfRefresh()
+    }
+
+    func vllmAddRecipe(_ m: VLLM.Model) async -> UUID? {
+        guard let device = config.device, let key = await sparkAPIKey() else { return nil }
+        let taken = { (x: String) in self.config.recipes.contains { $0.answers(to: x) } }
+        let base = taken(m.name) ? "\(m.name) (vLLM)" : m.name
+        let name = ([base] + (2...9).map { "\(base) \($0)" }).first { !taken($0) } ?? base
+        let served = Recipe(name: name, startCommand: "", stopCommand: "").apiID
+        var r = Recipe(name: name, startCommand: VLLM.startCommand(m, port: device.backendPort, name: served),
+                       stopCommand: VLLM.stopCommand, upstreamModel: served)
+        r.port = device.backendPort
+        // First start loads the weights and compiles kernels: vLLM's Spark guide measured 10-15 minutes.
+        r.timeout = 2400
+        r.vllm = m.id
+        r.backendKey = key
+        config.recipes.append(r)
+        return r.id
+    }
 
     /// Adds the model to Spark Control, serving on the Spark's default port with the shared API key.
     func tfAddRecipe(_ m: TensorFold.Model) async -> UUID? {
-        guard let binary = tf.engine.binary, let device = config.device else { return nil }
-        guard let res = await tfRun(TensorFold.apiKeyScript, timeout: 30), res.code == 0,
-              let key = res.output.split(separator: "\n").last.map(String.init), key.count == 48 else {
-            event("Couldn't create the TensorFold API key on the Spark")
-            return nil
-        }
+        guard let binary = tf.engine.binary, let device = config.device, let key = await sparkAPIKey() else { return nil }
         let (name, served) = TensorFold.uniqueName(m) { x in config.recipes.contains { $0.answers(to: x) } }
         var r = Recipe(name: name, startCommand: TensorFold.startCommand(m, binary: binary, port: device.backendPort, name: served),
                        stopCommand: TensorFold.stopCommand, upstreamModel: served)
@@ -126,7 +203,7 @@ extension AppState {
 struct TensorFoldView: View {
     @Environment(AppState.self) private var state
     @Binding var selection: Pane?
-    @State private var deleting: TensorFold.Model?
+    @State private var deleting: CatalogItem?
     @State private var removing = false
     @State private var manual = false
 
@@ -147,7 +224,7 @@ struct TensorFoldView: View {
 
             Section {
                 ForEach(TensorFold.catalog.filter { !$0.untested }) { m in
-                    ModelRow(model: m, selection: $selection, deleting: $deleting)
+                    ModelRow(item: .tf(m), selection: $selection, deleting: $deleting)
                 }
             } header: {
                 Text("Tested on One GB10")
@@ -157,7 +234,7 @@ struct TensorFoldView: View {
 
             Section {
                 ForEach(TensorFold.catalog.filter(\.untested)) { m in
-                    ModelRow(model: m, selection: $selection, deleting: $deleting)
+                    ModelRow(item: .tf(m), selection: $selection, deleting: $deleting)
                 }
             } header: {
                 Text("Not Tested on One GB10")
@@ -165,35 +242,89 @@ struct TensorFoldView: View {
                 Text("TensorFold reads these checkpoints but hasn't recorded them on a single GB10, so they may refuse to start or run slower than expected. If the files are already on the Spark, Download only checks them against Hugging Face.")
             }
         }
-        .formStyle(.grouped)
-        .navigationTitle("TensorFold")
-        .toolbar {
-            Button { Task { await state.tfRefresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                .disabled(state.route == nil)
-        }
-        .task {
-            await state.tfRefresh()
-            await state.tfLoadSizes()
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(4))
-                if state.tf.models.values.contains(where: { $0.download == .running }) { await state.tfRefresh() }
-            }
-        }
-        .confirmationDialog("Delete \(deleting?.name ?? "") from the Spark?",
-                            isPresented: Binding { deleting != nil } set: { if !$0 { deleting = nil } },
-                            presenting: deleting) { m in
-            Button("Delete", role: .destructive) { Task { await state.tfDelete(m) } }
-        } message: { m in
-            Text(deleteMessage(m))
-        }
+        .catalogPage("TensorFold", deleting: $deleting)
         .sheet(isPresented: $removing) { RemoveEngineSheet() }
         .sheet(isPresented: $manual) { ManualSetupSheet() }
     }
+}
 
-    private func deleteMessage(_ m: TensorFold.Model) -> String {
-        let size = (state.tf.models[m.id]?.bytes ?? 0).formatted(.byteCount(style: .file))
+struct VLLMView: View {
+    @Environment(AppState.self) private var state
+    @Binding var selection: Pane?
+    @State private var deleting: CatalogItem?
+    @State private var removing = false
+
+    var body: some View {
+        Form {
+            Section {
+                VLLMEngineRow(removing: $removing)
+                if !state.tfLog.isEmpty { LogBox(lines: state.tfLog) }
+            } header: {
+                Text("Engine")
+            } footer: {
+                Text("The official vLLM \(VLLM.version) image, pinned by digest and run with Docker. No sudo needed.")
+            }
+
+            Section {
+                ForEach(VLLM.catalog) { m in
+                    ModelRow(item: .vllm(m), selection: $selection, deleting: $deleting)
+                }
+            } header: {
+                Text("NVFP4 with MTP")
+            } footer: {
+                Text("Models that fit one GB10 and carry an MTP head, which drafts tokens for faster decoding; each model's page sets how many. Downloads go to the Spark's Hugging Face cache, shared with TensorFold, and keep going if the Mac sleeps. The first start of a model loads its weights and compiles kernels, which can take 10–15 minutes.")
+            }
+        }
+        .catalogPage("vLLM", deleting: $deleting)
+        .confirmationDialog("Remove vLLM from the Spark?", isPresented: $removing) {
+            Button("Remove", role: .destructive) { Task { await state.vllmRemove() } }
+        } message: {
+            Text("Deletes the vLLM image (about 10 GB). Downloaded models and models added to Spark Control stay; they start again after reinstalling.")
+        }
+    }
+}
+
+/// What both engines' catalog pages share: refresh, polling while downloads run, and the delete confirmation.
+private struct CatalogPage: ViewModifier {
+    @Environment(AppState.self) private var state
+    let title: String
+    @Binding var deleting: CatalogItem?
+
+    func body(content: Content) -> some View {
+        content
+            .formStyle(.grouped)
+            .navigationTitle(title)
+            .toolbar {
+                Button { Task { await state.tfRefresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    .disabled(state.route == nil)
+            }
+            .task {
+                await state.tfRefresh()
+                await state.tfLoadSizes()
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(4))
+                    if state.tf.models.values.contains(where: { $0.download == .running }) { await state.tfRefresh() }
+                }
+            }
+            .confirmationDialog("Delete \(deleting?.name ?? "") from the Spark?",
+                                isPresented: Binding { deleting != nil } set: { if !$0 { deleting = nil } },
+                                presenting: deleting) { m in
+                Button("Delete", role: .destructive) { Task { await state.catDelete(m) } }
+            } message: { m in
+                Text(deleteMessage(m))
+            }
+    }
+
+    private func deleteMessage(_ m: CatalogItem) -> String {
+        let size = (state.tf.models[m.key]?.bytes ?? 0).formatted(.byteCount(style: .file))
         let what = m.downloads.map(\.id).joined(separator: " and ")
         return "Deletes \(what) (\(size)) from the Spark's Hugging Face cache and removes the model from Spark Control. Files that were already on the Spark before Spark Control first downloaded this model are kept. This can't be undone."
+    }
+}
+
+private extension View {
+    func catalogPage(_ title: String, deleting: Binding<CatalogItem?>) -> some View {
+        modifier(CatalogPage(title: title, deleting: deleting))
     }
 }
 
@@ -251,20 +382,51 @@ private struct EngineRow: View {
     }
 }
 
+/// A model from either engine's catalog. Download records are keyed so the two never clash.
+enum CatalogItem: Hashable, Identifiable {
+    case tf(TensorFold.Model), vllm(VLLM.Model)
+
+    var id: String { key }
+    var key: String {
+        switch self {
+        case .tf(let m): m.id
+        case .vllm(let m): m.key
+        }
+    }
+    var name: String {
+        switch self {
+        case .tf(let m): m.name
+        case .vllm(let m): m.name
+        }
+    }
+    var note: String {
+        switch self {
+        case .tf(let m): m.note
+        case .vllm(let m): m.note
+        }
+    }
+    var downloads: [TensorFold.Repo] {
+        switch self {
+        case .tf(let m): m.downloads
+        case .vllm(let m): m.downloads
+        }
+    }
+}
+
 private struct ModelRow: View {
     @Environment(AppState.self) private var state
-    let model: TensorFold.Model
+    let item: CatalogItem
     @Binding var selection: Pane?
-    @Binding var deleting: TensorFold.Model?
+    @Binding var deleting: CatalogItem?
     @State private var adding = false
 
     var body: some View {
-        let st = state.tf.models[model.id] ?? .init()
+        let st = state.tf.models[item.key] ?? .init()
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(model.name).font(.body.weight(.medium))
-                Text(model.note).font(.callout).foregroundStyle(.secondary)
-                Text(model.downloads.map(\.id).joined(separator: " + "))
+                Text(item.name).font(.body.weight(.medium))
+                Text(item.note).font(.callout).foregroundStyle(.secondary)
+                Text(item.downloads.map(\.id).joined(separator: " + "))
                     .font(.caption.monospaced()).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
                 if st.download == .running || st.download == .failed, !st.message.isEmpty {
                     Text(st.message)
@@ -280,18 +442,18 @@ private struct ModelRow: View {
     }
 
     @ViewBuilder private func actions(_ st: TensorFold.ModelStatus) -> some View {
-        let noEngine = state.tf.engine == .none || state.route == nil
-        let size = state.tfSizes[model.id]
+        let noEngine = !state.engineReady(item)
+        let size = state.tfSizes[item.key]
         // ponytail: 99% because a pull may skip a repo's non-weight files; a per-file check would be exact.
         let complete = size.map { st.bytes > 0 && st.bytes >= $0 * 99 / 100 } ?? false
         switch st.download {
         case .running:
             progress(st.bytes, of: size)
-            Button("Cancel") { Task { await state.tfCancel(model) } }
+            Button("Cancel") { Task { await state.catCancel(item) } }
         case .done:
             Text(st.bytes.formatted(.byteCount(style: .file))).foregroundStyle(.secondary).monospacedDigit()
             addOrOpen(noEngine)
-            Button(role: .destructive) { deleting = model } label: { Image(systemName: "trash") }
+            Button(role: .destructive) { deleting = item } label: { Image(systemName: "trash") }
                 .help("Delete from the Spark")
                 .disabled(state.route == nil)
         case .none where complete:
@@ -310,10 +472,10 @@ private struct ModelRow: View {
             } else if let size {
                 Text(size.formatted(.byteCount(style: .file))).foregroundStyle(.secondary).monospacedDigit()
             }
-            Button(st.download == .failed ? "Retry" : st.bytes > 0 ? "Resume" : "Download") { Task { await state.tfDownload(model) } }
+            Button(st.download == .failed ? "Retry" : st.bytes > 0 ? "Resume" : "Download") { Task { await state.catDownload(item) } }
                 .disabled(noEngine || tooBig)
             if st.download == .failed {
-                Button(role: .destructive) { deleting = model } label: { Image(systemName: "trash") }
+                Button(role: .destructive) { deleting = item } label: { Image(systemName: "trash") }
                     .help("Delete the partial download")
                     .disabled(state.route == nil)
             }
@@ -335,18 +497,52 @@ private struct ModelRow: View {
     }
 
     @ViewBuilder private func addOrOpen(_ noEngine: Bool) -> some View {
-        if let id = state.tfRecipeID(model) {
+        if let id = state.catRecipeID(item) {
             Button("Open") { selection = .model(id) }
         } else {
             Button("Add Model") {
                 adding = true
                 Task {
-                    if let id = await state.tfAddRecipe(model) { selection = .model(id) }
+                    if let id = await state.catAdd(item) { selection = .model(id) }
                     adding = false
                 }
             }
             .buttonStyle(.borderedProminent)
             .disabled(noEngine || adding)
+        }
+    }
+}
+
+private struct VLLMEngineRow: View {
+    @Environment(AppState.self) private var state
+    @Binding var removing: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(state.tf.vllm == "ready" ? "vLLM \(VLLM.version)" : "vLLM isn't installed").font(.headline)
+                Text(subtitle).font(.callout).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if state.tfBusy {
+                ProgressView().controlSize(.small)
+            } else if state.tf.vllm == "ready" {
+                Button("Remove…", role: .destructive) { removing = true }.disabled(state.route == nil)
+            } else {
+                Button("Install") { Task { await state.vllmInstall() } }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(state.route == nil || state.tf.vllm == "nodocker")
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var subtitle: String {
+        if state.route == nil { return "The Spark is unreachable." }
+        switch state.tf.vllm {
+        case "ready": return "Docker image \(VLLM.image.prefix(40))…"
+        case "nodocker": return "Docker isn't installed on the Spark. DGX OS includes it; install it to use vLLM."
+        default: return "Pulls the official vLLM \(VLLM.version) image (about 10 GB) with Docker. No sudo needed."
         }
     }
 }
@@ -378,7 +574,7 @@ private struct RemoveEngineSheet: View {
     @State private var deleteModels = false
 
     var body: some View {
-        let downloaded = TensorFold.catalog.filter { state.tfDownloadedByApp($0) }
+        let downloaded = TensorFold.catalog.filter { state.downloadedByApp(.tf($0)) }
         let bytes = downloaded.reduce(Int64(0)) { $0 + (state.tf.models[$1.id]?.bytes ?? 0) }
         let recipes = state.config.recipes.filter { $0.tensorfold != nil }.count
         VStack(alignment: .leading, spacing: 14) {

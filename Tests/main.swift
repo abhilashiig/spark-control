@@ -133,7 +133,7 @@ func bash(_ script: String, env: [String: String] = [:], syntaxOnly: Bool = fals
 }
 for (name, s) in [("status", TensorFold.statusScript()), ("install", TensorFold.installScript()),
                   ("uninstall", TensorFold.uninstallScript(models: TensorFold.catalog)), ("download", TensorFold.downloadScript(q27, binary: "tf")),
-                  ("cancel", TensorFold.cancelScript(q27)), ("delete", TensorFold.deleteScript(q27)), ("key", TensorFold.apiKeyScript),
+                  ("cancel", TensorFold.cancelScript(q27.id)), ("delete", TensorFold.deleteScript(q27)), ("key", TensorFold.apiKeyScript),
                   ("stop", TensorFold.stopCommand), ("manual", TensorFold.manualSteps)] {
     let (code, out) = bash(s, syntaxOnly: true)
     check(code == 0, "\(name) script parses: \(out)")
@@ -233,5 +233,24 @@ try! Data(Benchmark.script.utf8).write(to: py)
 let pyCheck = bash("python3 -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())' \(py.path)", env: ["PATH": "/usr/bin:/bin:/opt/homebrew/bin"])
 try? FileManager.default.removeItem(at: py)
 check(pyCheck.0 == 0, "benchmark script is valid Python: \(pyCheck.1)")
+
+// vLLM catalog and commands
+let vq = VLLM.model("qwen3.6-35b-a3b")!, vg = VLLM.model("gemma-4-26b-a4b")!
+let vqStart = VLLM.startCommand(vq, port: 18300, name: "qwen3.6-35b-a3b")
+check(VLLM.drafts(of: vqStart) == 3 && VLLM.context(of: vqStart) == 262_144 && vqStart.contains("-p 18300:8000")
+      && vqStart.contains("--revision 1355db6a052410cfd62085d94b58866fd0f2c3c5"), "vLLM start command has port, revision, context and suggested drafts")
+check(VLLM.drafts(of: VLLM.withDrafts(vqStart, 0, model: vq)) == 0 && VLLM.drafts(of: VLLM.withDrafts(vqStart, 1, model: vq)) == 1
+      && VLLM.context(of: VLLM.withContext(vqStart, 65_536)) == 65_536, "vLLM drafts and context flags round-trip")
+check(VLLM.startCommand(vg, port: 1, name: "g").contains(#"'{"method":"mtp","model":"google/gemma-4-26B-A4B-it-assistant","num_speculative_tokens":2}'"#),
+      "Gemma drafts from its assistant checkpoint")
+check(VLLM.catalog.allSatisfy { $0.repo.revision?.count == 40 } && Set(VLLM.catalog.map(\.key)).isDisjoint(with: tfIDs),
+      "vLLM models are pinned and their records don't clash with TensorFold's")
+for (name, s) in [("vllm start", vqStart), ("vllm stop", VLLM.stopCommand), ("vllm pull", VLLM.pullScript), ("vllm remove", VLLM.removeScript),
+                  ("vllm download", VLLM.downloadScript(vg)), ("vllm delete", VLLM.deleteScript(vg))] {
+    let (code, out) = bash(s, syntaxOnly: true)
+    check(code == 0, "\(name) script parses: \(out)")
+}
+check(TensorFold.parseStatus("VLLM|ready\nMODEL|vllm-qwen3.6-35b-a3b|running|7|x").vllm == "ready", "vLLM status parses")
+check(!TensorFold.uninstallScript(models: TensorFold.catalog).contains(#"rm -rf "$D""#), "removing TensorFold keeps the shared data folder")
 
 print("All checks passed")

@@ -22,7 +22,7 @@ extension AppState {
             say("The Spark is unreachable.")
             return
         }
-        let key: String? = r.tensorfold != nil ? "\"$(cat \"\(TensorFold.dataDir)/api-key\")\"" : r.backendKey.map(SSH.quote)
+        let key: String? = r.tensorfold != nil || r.vllm != nil ? "\"$(cat \"\(TensorFold.dataDir)/api-key\")\"" : r.backendKey.map(SSH.quote)
         let launch = Benchmark.launchScript(port: port(of: r), model: r.upstreamModel, keyExpr: key)
         let res = await SSH.run(target, "bash -c \(SSH.quote(launch))", timeout: 30)
         guard res.code == 0, let pid = res.output.split(separator: "\n").last.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }) else {

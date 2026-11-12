@@ -154,6 +154,8 @@ enum TensorFold {
         var engine = Engine.none
         var freeBytes: Int64?
         var models: [String: ModelStatus] = [:]
+        /// vLLM's image: "ready", "none" (Docker but no image), "nodocker", or nil before the first check.
+        var vllm: String?
     }
 
     static func statusScript() -> String {
@@ -189,7 +191,7 @@ enum TensorFold {
         for m in catalog {
             s += "m \(SSH.quote(m.id)) " + m.downloads.map { SSH.quote($0.cacheName + "@" + $0.snapshot) }.joined(separator: " ") + "\n"
         }
-        return s
+        return s + VLLM.statusLines
     }
 
     static func parseStatus(_ output: String) -> Status {
@@ -203,6 +205,8 @@ enum TensorFold {
                 case "user": st.engine = .user(path: f[2], version: f[3])
                 default: st.engine = .none
                 }
+            case "VLLM" where f.count >= 2:
+                st.vllm = f[1]
             case "FREE" where f.count >= 2:
                 st.freeBytes = Int64(f[1].trimmingCharacters(in: .whitespaces))
             case "MODEL" where f.count >= 4:
@@ -266,7 +270,9 @@ enum TensorFold {
         s += "rm -rf \"$E\" && echo \"› Removed $E\"\n"
         if !models.isEmpty {
             s += models.map(removeFiles).joined()
-            s += "rm -rf \"$D\" && echo \"› Removed downloaded models\"\n"
+            // Only TensorFold's records: the folder also holds the API key and vLLM's records.
+            s += models.map { "rm -f \"$D/\($0.id)\".ok \"$D/\($0.id)\".log \"$D/\($0.id)\".pid \"$D/\($0.id)\".keep\n" }.joined()
+            s += "echo \"› Removed downloaded models\"\n"
         }
         return s
     }
@@ -304,10 +310,11 @@ enum TensorFold {
         """
     }
 
-    static func cancelScript(_ m: Model) -> String {
+    /// Stops a detached download by its record id (a TensorFold model id or a vLLM model's key).
+    static func cancelScript(_ id: String) -> String {
         """
-        D="\(dataDir)"; p=$(cat "$D/\(m.id).pid" 2>/dev/null) || exit 0
-        pkill -TERM -P "$p"; kill "$p" 2>/dev/null; rm -f "$D/\(m.id).pid"; echo "Download cancelled" >> "$D/\(m.id).log"
+        D="\(dataDir)"; p=$(cat "$D/\(id).pid" 2>/dev/null) || exit 0
+        pkill -TERM -P "$p"; kill "$p" 2>/dev/null; rm -f "$D/\(id).pid"; echo "Download cancelled" >> "$D/\(id).log"
         """
     }
 
@@ -427,10 +434,10 @@ enum TensorFold {
 
     // MARK: Sizes
 
-    /// Download size from the Hugging Face API, summed over the model and its drafter.
-    static func downloadSize(_ m: Model) async -> Int64? {
+    /// Download size from the Hugging Face API, summed over the repos (a model and its drafter).
+    static func downloadSize(_ repos: [Repo]) async -> Int64? {
         var total: Int64 = 0
-        for r in m.downloads {
+        for r in repos {
             guard let url = URL(string: "https://huggingface.co/api/models/\(r.id)/revision/\(r.revision ?? "main")?blobs=true"),
                   let (data, resp) = try? await URLSession.shared.data(from: url),
                   (resp as? HTTPURLResponse)?.statusCode == 200,

@@ -6,7 +6,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ## [Unreleased]
 
 ### Fixed
-- Spark charts: time labels no longer pile on top of each other and the charts always show the last five minutes instead of rescaling as readings arrive.
+- Spark charts: time labels no longer pile on top of each other and the charts always show the last five minutes instead of rescaling as readings arrive. The CPU Cores and Temperatures cards are now the same height.
 
 ## [1.6.0] - 2026-11-12
 

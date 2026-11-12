@@ -47,6 +47,7 @@ struct SparkView: View {
                         CoresCard(samples: samples)
                         TemperaturesCard(sample: now)
                     }
+                    .fixedSize(horizontal: false, vertical: true)
                     StorageCard(sample: now)
                 }
                 .padding(20)
@@ -304,6 +305,7 @@ private struct TemperaturesCard: View {
                 Text("System sensors: " + sample.zones.map { String(format: "%.0f", $0) }.joined(separator: " · ") + " °C")
                     .font(.caption).foregroundStyle(.secondary).monospacedDigit()
             }
+            Spacer(minLength: 0)  // stretch to the CPU Cores card beside it
         }
     }
 

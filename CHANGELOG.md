@@ -7,7 +7,14 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ### Added
 - Connect → Coding Tools adds Spark Control as a provider to Kilo Code, Pi and Hermes with one click, listing your enabled models with their prices and whether each reasons and takes images. Kilo Code is set up to show each request's cost. Tools you've added are kept up to date as models change (can be turned off); the previous config is kept as a `.spark-control.bak` file.
+- Requests and Usage show which app sent each request: Kilo Code, Pi, Hermes (set up from Coding Tools) and Chat by name, any other app by the name it sends (X-Title or its User-Agent). Usage has a By Client breakdown.
+- Chat: edit a message you sent (hover it and click the pencil, or right-click → Edit). Save & Resend replaces the replies after it.
+- Chat: hover the gauge at the top for the chat's stats: context used (of the model's window when known), decode and prefill speed, time to first token, tokens, cache hit rate and cost.
+- Chat profiles: each chat uses a profile with its own system prompt, picked from the menu at the top of the chat. Comes with Casual, Abliterated, Mathematics, Coding and Legal; add, edit, reorder, delete or restore them under Edit Profiles…. A chat's own instructions are sent after its profile's prompt. Profiles are kept on the Spark with the model list, so every Mac using it shares them.
 - Each model's page has Reasoning and Image input switches, guessed from the model until you set them.
+
+### Fixed
+- Chat: Shift-Return (or Option-Return) adds a new line; Return sends.
 
 ### Changed
 - `/v1/models` lists prices in OpenRouter's format (USD per token) plus each model's input types and reasoning support, so clients like Hermes can price requests.

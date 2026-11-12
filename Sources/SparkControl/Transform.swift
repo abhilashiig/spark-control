@@ -197,4 +197,17 @@ enum Transform {
         }
         return "\(p[0])/\(p[1])/\(p[2]):\(p[3])"
     }
+
+    /// Which app sent a request: the header Spark Control writes into the coding tools it sets up, else the name the
+    /// app gives itself in X-Title, else the product in its User-Agent without the version ("OpenAI/Python 1.40" →
+    /// "OpenAI/Python", "curl/8.7.1" → "curl").
+    static func client(spark: String?, title: String?, userAgent: String?) -> String {
+        for v in [spark, title] {
+            if let v = v?.trimmingCharacters(in: .whitespaces), !v.isEmpty { return String(v.prefix(60)) }
+        }
+        guard let first = userAgent?.split(separator: " ").first else { return "Unknown" }
+        var parts = first.split(separator: "/")
+        if parts.count > 1, let last = parts.last, last.drop(while: { $0 == "v" }).first?.isNumber == true { parts.removeLast() }
+        return String(parts.joined(separator: "/").prefix(60))
+    }
 }

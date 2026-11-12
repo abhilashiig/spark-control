@@ -395,8 +395,33 @@ check(!y2.contains("qwen3.8-27b") && y2.contains("\"nemotron-lightning\":\n     
       && y2.contains("  aitopatom:\n    name: AiTopAtom") && y2.hasSuffix("onboarding:\n  seen: true")
       && y2.components(separatedBy: "spark-control:").count == 2, "Hermes: updating replaces only its own block")
 check(try! ClientTool.hermes.apply(to: y2, models: [textOnly], gateway: gw) == y2, "Hermes: applying twice changes nothing")
-check(try! ClientTool.hermes.apply(to: "model: x\n", models: [], gateway: gw) == "model: x\nproviders:\n  spark-control:\n    name: Spark Control\n    base_url: \"http://localhost:18080/v1\"\n    api_key: \"sk-local\"\n    api_mode: chat_completions\n    models: {}\n",
+check(try! ClientTool.hermes.apply(to: "model: x\n", models: [], gateway: gw) == "model: x\nproviders:\n  spark-control:\n    name: Spark Control\n    base_url: \"http://localhost:18080/v1\"\n    api_key: \"sk-local\"\n    api_mode: chat_completions\n    extra_headers:\n      X-Spark-Client: \"Hermes\"\n    models: {}\n",
       "Hermes: providers section created when missing")
 check((try? ClientTool.hermes.apply(to: "providers: {a: 1}\n", models: [], gateway: gw)) == nil, "Hermes: inline YAML is left alone")
+
+// Client names
+check(Transform.client(spark: "Kilo Code", title: "Other", userAgent: "ai-sdk/openrouter/1.2.3") == "Kilo Code", "our header wins")
+check(Transform.client(spark: nil, title: "Hermes Agent", userAgent: "OpenAI/Python 1.40.0") == "Hermes Agent", "then X-Title")
+check(Transform.client(spark: nil, title: " ", userAgent: "OpenAI/Python 1.40.0") == "OpenAI/Python"
+      && Transform.client(spark: nil, title: nil, userAgent: "curl/8.7.1") == "curl"
+      && Transform.client(spark: nil, title: nil, userAgent: "ai-sdk/openrouter/v2.0.1 runtime/bun") == "ai-sdk/openrouter"
+      && Transform.client(spark: nil, title: nil, userAgent: "MyTool") == "MyTool"
+      && Transform.client(spark: nil, title: nil, userAgent: nil) == "Unknown", "else the User-Agent product without its version")
+check(y2.contains("    extra_headers:\n      X-Spark-Client: \"Hermes\"") && kiloOut.contains("\"X-Spark-Client\" : \"Kilo Code\"")
+      && piOut.contains("\"X-Spark-Client\" : \"Pi\""), "tool configs name themselves")
+
+// Chat profiles shared through the Spark
+let casual = ChatProfile.defaults[0], mineP = ChatProfile(name: "Mine", system: "x")
+var edited = casual; edited.system = "changed"
+let withProfiles = SharedModels(updated: Date(timeIntervalSince1970: 100), recipes: [], profiles: [edited])
+check(withProfiles.mergedProfiles(into: [casual], local: Date(timeIntervalSince1970: 200)) == nil
+      && withProfiles.mergedProfiles(into: [casual], local: Date(timeIntervalSince1970: 50)) == [edited]
+      && withProfiles.mergedProfiles(into: [casual, mineP], local: nil) == [edited, mineP]
+      && shared.mergedProfiles(into: [casual], local: nil) == nil,
+      "newer profiles win; a first sync keeps this Mac's extra ones; a file without profiles keeps this Mac's")
+check(Set(ChatProfile.defaults.map(\.id)).count == 5,
+      "default profiles have fixed, distinct ids")
+check((try? JSONDecoder().decode(Config.self, from: Data(#"{"recipes": []}"#.utf8)))?.profiles.count ?? 0 >= 5, "an old config gets profiles")
+check((try? JSONDecoder().decode(SharedModels.self, from: JSONEncoder().encode(withProfiles)))?.profiles == [edited], "shared profiles read back")
 
 print("All checks passed")

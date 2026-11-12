@@ -6,6 +6,8 @@ enum ClientTool: String, CaseIterable, Identifiable {
     case kilo, pi, hermes
     var id: Self { self }
     static let provider = "spark-control"
+    /// Sent by every tool set up here, so Requests and Usage can say which app a request came from.
+    static let header = "X-Spark-Client"
 
     var name: String {
         switch self {
@@ -79,7 +81,7 @@ enum ClientTool: String, CaseIterable, Identifiable {
         [
             "name": "Spark Control",
             "npm": "@openrouter/ai-sdk-provider",
-            "options": ["baseURL": g.baseURL, "apiKey": g.apiKey],
+            "options": ["baseURL": g.baseURL, "apiKey": g.apiKey, "headers": [header: "Kilo Code"]],
             "models": Dictionary(models.map { r in
                 (r.apiID, [
                     "name": r.name,
@@ -99,6 +101,7 @@ enum ClientTool: String, CaseIterable, Identifiable {
             "baseUrl": g.baseURL,
             "api": "openai-completions",
             "apiKey": g.apiKey,
+            "headers": [header: "Pi"],
             // The Spark's servers reject the developer role and reasoning_effort.
             "compat": ["supportsDeveloperRole": false, "supportsReasoningEffort": false],
             "models": models.map { r in
@@ -119,6 +122,8 @@ enum ClientTool: String, CaseIterable, Identifiable {
             "  base_url: \(quote(g.baseURL))",
             "  api_key: \(quote(g.apiKey))",
             "  api_mode: chat_completions",
+            "  extra_headers:",
+            "    \(header): \"Hermes\"",
         ]
         if let first = models.first { lines.append("  model: \(quote(first.apiID))") }
         lines.append(models.isEmpty ? "  models: {}" : "  models:")

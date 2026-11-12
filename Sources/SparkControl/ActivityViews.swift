@@ -53,6 +53,7 @@ struct RequestsView: View {
             Table(state.requests, selection: $selected) {
                 TableColumn("Time") { e in Text(e.date, format: .dateTime.hour().minute().second()) }.width(76)
                 TableColumn("Model", value: \.model)
+                TableColumn("Client", value: \.client)
                 TableColumn("Endpoint", value: \.path)
                 TableColumn("Status") { e in
                     Text(e.status == 0 ? "…" : "\(e.status)")
@@ -96,6 +97,7 @@ struct RequestsView: View {
             return "Select a request to see exactly what was sent to the Spark."
         }
         var text = "\(e.method) \(e.path) → \(e.model)\n"
+        text += "Client: \(e.client)" + (e.userAgent.isEmpty ? "" : "  ·  User-Agent: \(e.userAgent)") + "\n"
         if let err = e.error { text += "Error: \(err)\n" }
         text += "\nForwarded body:\n"
         if let obj = try? JSONSerialization.jsonObject(with: Data(e.forwarded.utf8)),
@@ -179,6 +181,9 @@ struct UsageView: View {
             .map { Stats(model: $0.key, $0.value) }
             .sorted { ($0.cost, $0.requests) > ($1.cost, $1.requests) }
         let total = Stats(records)
+        let clients = Dictionary(grouping: records, by: { $0.client ?? "Unknown" })
+            .map { Stats(model: $0.key, $0.value) }
+            .sorted { ($0.cost, $0.requests) > ($1.cost, $1.requests) }
         let speedPoints = records.compactMap { r in
             Speed.decode(completion: r.completion, decodeTime: r.decodeTime).map { (date: r.date, model: r.model, tps: $0) }
         }
@@ -271,6 +276,41 @@ struct UsageView: View {
                         }
                     }
                 }
+            }
+
+            Section {
+                if clients.isEmpty {
+                    Text("No usage in this period.").foregroundStyle(.secondary)
+                } else {
+                    Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
+                        GridRow {
+                            Text("Client"); Text("Requests"); Text("In"); Text("Cached"); Text("Out"); Text("Reasoning")
+                            Text("Hit Rate"); Text("Cost")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        ForEach(clients) { r in
+                            GridRow {
+                                Text(r.model)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(minWidth: 160, alignment: .leading)
+                                    .textSelection(.enabled)
+                                Text(r.requests.formatted())
+                                Text(r.input.compact)
+                                Text(r.cached.compact)
+                                Text(r.output.compact)
+                                Text(r.reasoning.compact)
+                                Text(r.hitRate.map(Self.percent) ?? "—")
+                                Text(r.cost.usd)
+                            }
+                            .monospacedDigit()
+                        }
+                    }
+                }
+            } header: {
+                Text("By Client")
+            } footer: {
+                Text("Kilo Code, Pi and Hermes are named when set up from Connect → Coding Tools; other apps by the name they send (X-Title or User-Agent). Unknown = before clients were tracked.")
             }
 
             Section {

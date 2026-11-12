@@ -164,7 +164,8 @@ final class AppState {
     private func configChanged(from old: Config) {
         guard config != old else { return }
         Store.save(config)
-        if config.recipes.filter({ !$0.isBlank }) != old.recipes.filter({ !$0.isBlank }) && !applyingShared {
+        if (config.recipes.filter({ !$0.isBlank }) != old.recipes.filter({ !$0.isBlank }) || config.profiles != old.profiles)
+            && !applyingShared {
             modelsUpdated = Date()
             pushModels()
         }
@@ -264,16 +265,21 @@ final class AppState {
             return
         }
         guard let merged = shared.merged(into: config.recipes, local: modelsUpdated) else {
+            // A file without profiles gets this Mac's, stamped now so the other Macs take them.
+            if shared.profiles == nil { modelsUpdated = Date() }
             if let m = modelsUpdated, m > shared.updated || shared.recipes.contains(where: \.isBlank) { pushModels() }
             return
         }
+        let profiles = shared.mergedProfiles(into: config.profiles, local: modelsUpdated)
         let port = config.device?.backendPort ?? 18300
         applyingShared = true
         config.recipes = merged.map { $0.migrated(defaultPort: port) }
+        if let profiles { config.profiles = profiles }
         applyingShared = false
         modelsUpdated = shared.updated
-        event("Loaded \(shared.recipes.count) models from the Spark")
-        if merged.count != shared.recipes.count {
+        event("Loaded \(shared.recipes.count) models" + (profiles.map { " and \($0.count) chat profiles" } ?? "") + " from the Spark")
+        // Push back what the Spark lacks: this Mac's own models or profiles on a first sync, or profiles at all.
+        if merged.count != shared.recipes.count || profiles?.count != shared.profiles?.count || shared.profiles == nil {
             modelsUpdated = Date()
             pushModels()
         }
@@ -287,7 +293,7 @@ final class AppState {
             guard !Task.isCancelled, let target = sshTarget, let stamp = modelsUpdated else { return }
             let e = JSONEncoder()
             e.outputFormatting = [.prettyPrinted, .sortedKeys]
-            guard let data = try? e.encode(SharedModels(updated: stamp, recipes: config.recipes.filter { !$0.isBlank })) else { return }
+            guard let data = try? e.encode(SharedModels(updated: stamp, recipes: config.recipes.filter { !$0.isBlank }, profiles: config.profiles)) else { return }
             let file = SharedModels.path
             let cmd = "mkdir -p \"$(dirname \"\(file)\")\" && cat > \"\(file).tmp\" && mv \"\(file).tmp\" \"\(file)\""
             // Detached: writing the list to ssh's stdin may block until ssh connects.
@@ -671,8 +677,8 @@ final class AppState {
                         active: activeRecipe, running: Set(runningRecipes.map(\.id)))
     }
 
-    func beginRequest(method: String, path: String, model: String, body: Data) -> UUID {
-        let e = RequestEntry(method: method, path: path, model: model,
+    func beginRequest(method: String, path: String, model: String, client: String, userAgent: String, body: Data) -> UUID {
+        let e = RequestEntry(method: method, path: path, model: model, client: client, userAgent: userAgent,
                              forwarded: String(decoding: body.prefix(64 << 10), as: UTF8.self))
         requests.insert(e, at: 0)
         if requests.count > 200 { requests.removeLast() }
@@ -695,7 +701,7 @@ final class AppState {
             requests[i].error = error
         }
         if let u {
-            let rec = UsageRecord(date: Date(), model: recipe.apiID, prompt: u.prompt, completion: u.completion, cached: u.cached, reasoning: u.reasoning, cost: cost,
+            let rec = UsageRecord(date: Date(), model: recipe.apiID, client: requests.first { $0.id == id }?.client, prompt: u.prompt, completion: u.completion, cached: u.cached, reasoning: u.reasoning, cost: cost,
                                   ttft: ttft, decodeTime: decodeTime)
             usage.append(rec)
             Store.append(rec)

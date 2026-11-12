@@ -40,6 +40,8 @@ and the app installs your key. The password is passed to ssh through a pipe and 
   drafter TensorFold names for it (detached, so it survives the Mac sleeping), and adds it as a model that serves with
   `--drafter` and an API key the gateway sends for you. Deleting a model, or removing TensorFold, asks first and only
   touches what the app downloaded.
+  Each catalog row shows what's already on the Spark: "On Spark" for models another setup downloaded (add them
+  without downloading again), and "X of Y" with a bar for partial or running downloads.
   Each TensorFold model's page has a Context picker: TensorFold's default, the model's full trained window (the default
   for new models; 262k for Super VL), or YaRN ×2/×4 on the Qwen3.6 models, written into the start command's flags.
 - **Data**: `~/Library/Application Support/Spark Control/` (`config.json`, `usage.jsonl`, `chats.json`).

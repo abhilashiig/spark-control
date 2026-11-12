@@ -281,43 +281,72 @@ private struct ModelRow: View {
 
     @ViewBuilder private func actions(_ st: TensorFold.ModelStatus) -> some View {
         let noEngine = state.tf.engine == .none || state.route == nil
+        let size = state.tfSizes[model.id]
+        // ponytail: 99% because a pull may skip a repo's non-weight files; a per-file check would be exact.
+        let complete = size.map { st.bytes > 0 && st.bytes >= $0 * 99 / 100 } ?? false
         switch st.download {
         case .running:
-            ProgressView().controlSize(.small)
+            progress(st.bytes, of: size)
             Button("Cancel") { Task { await state.tfCancel(model) } }
         case .done:
             Text(st.bytes.formatted(.byteCount(style: .file))).foregroundStyle(.secondary).monospacedDigit()
-            if let id = state.tfRecipeID(model) {
-                Button("Open") { selection = .model(id) }
-            } else {
-                Button("Add Model") {
-                    adding = true
-                    Task {
-                        if let id = await state.tfAddRecipe(model) { selection = .model(id) }
-                        adding = false
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(noEngine || adding)
-            }
+            addOrOpen(noEngine)
             Button(role: .destructive) { deleting = model } label: { Image(systemName: "trash") }
                 .help("Delete from the Spark")
                 .disabled(state.route == nil)
+        case .none where complete:
+            Label("On Spark", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .help("Already in the Spark's Hugging Face cache (\(st.bytes.formatted(.byteCount(style: .file)))), downloaded outside Spark Control.")
+            addOrOpen(noEngine)
         case .failed, .none:
-            let size = state.tfSizes[model.id]
-            let tooBig = size.map { s in state.tf.freeBytes.map { s > $0 } ?? false } ?? false
-            if let size {
-                Text(tooBig ? "Needs \(size.formatted(.byteCount(style: .file))), not enough space" : size.formatted(.byteCount(style: .file)))
-                    .foregroundStyle(tooBig ? Color.red : Color.secondary)
-                    .monospacedDigit()
+            let missing = size.map { max(0, $0 - st.bytes) }
+            let tooBig = missing.map { m in state.tf.freeBytes.map { m > $0 } ?? false } ?? false
+            if tooBig, let missing {
+                Text("Needs \(missing.formatted(.byteCount(style: .file))) more, not enough space")
+                    .foregroundStyle(.red).monospacedDigit()
+            } else if st.bytes > 0 {
+                progress(st.bytes, of: size)
+            } else if let size {
+                Text(size.formatted(.byteCount(style: .file))).foregroundStyle(.secondary).monospacedDigit()
             }
-            Button(st.download == .failed ? "Retry" : "Download") { Task { await state.tfDownload(model) } }
+            Button(st.download == .failed ? "Retry" : st.bytes > 0 ? "Resume" : "Download") { Task { await state.tfDownload(model) } }
                 .disabled(noEngine || tooBig)
             if st.download == .failed {
                 Button(role: .destructive) { deleting = model } label: { Image(systemName: "trash") }
                     .help("Delete the partial download")
                     .disabled(state.route == nil)
             }
+        }
+    }
+
+    /// "12.4 GB of 41.8 GB" with a bar, or just the bytes so far while the full size is unknown.
+    @ViewBuilder private func progress(_ bytes: Int64, of size: Int64?) -> some View {
+        let have = bytes.formatted(.byteCount(style: .file))
+        if let size, size > 0 {
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(have) of \(size.formatted(.byteCount(style: .file)))").foregroundStyle(.secondary).monospacedDigit()
+                ProgressView(value: Double(min(bytes, size)), total: Double(size)).frame(width: 120)
+            }
+        } else {
+            ProgressView().controlSize(.small)
+            if bytes > 0 { Text(have).foregroundStyle(.secondary).monospacedDigit() }
+        }
+    }
+
+    @ViewBuilder private func addOrOpen(_ noEngine: Bool) -> some View {
+        if let id = state.tfRecipeID(model) {
+            Button("Open") { selection = .model(id) }
+        } else {
+            Button("Add Model") {
+                adding = true
+                Task {
+                    if let id = await state.tfAddRecipe(model) { selection = .model(id) }
+                    adding = false
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(noEngine || adding)
         }
     }
 }

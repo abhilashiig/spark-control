@@ -143,7 +143,8 @@ enum TensorFold {
 
     struct ModelStatus: Equatable {
         var download = Download.none
-        /// Bytes on the Spark for the model and its drafter.
+        /// Bytes on the Spark for the model and its drafter, including files still downloading. Counted
+        /// whoever downloaded them, so models another setup put there show too.
         var bytes: Int64 = 0
         /// Last line of the download log.
         var message = ""
@@ -165,11 +166,17 @@ enum TensorFold {
         echo "FREE|$(df -Pk "$d" | awk 'NR==2{print $4 * 1024}')"
         m() {
           id=$1; shift; dirs=()
+          inc=0
           for r in "$@"; do
             n=${r%@*}; v=${r#*@}; [ -n "$v" ] || v=$(cat "$H/$n/refs/main" 2>/dev/null)
             dirs+=("$H/$n/snapshots/$v")
+            # Files still downloading. An interrupted download can leave several attempts at one blob
+            # (hash.<random>.incomplete), so count the largest per blob, and none once the blob is complete.
+            inc=$((inc + $(find "$H/$n/blobs" -maxdepth 1 ! -type d -printf '%f %s\\n' 2>/dev/null | awk '
+              {h = $1; if (h ~ /incomplete$/) { sub(/[.].*/, "", h); if ($2 > m[h]) m[h] = $2 } else done[h] = 1}
+              END {for (h in m) if (!(h in done)) s += m[h]; print s + 0}')))
           done
-          b=$(du -sbcL "${dirs[@]}" 2>/dev/null | tail -1 | cut -f1)
+          b=$(( $(du -sbcL "${dirs[@]}" 2>/dev/null | tail -1 | cut -f1) + inc ))
           if [ -f "$D/$id.pid" ] && kill -0 "$(cat "$D/$id.pid")" 2>/dev/null; then st=running
           elif [ -f "$D/$id.ok" ]; then st=done
           elif [ -f "$D/$id.log" ]; then st=failed

@@ -45,7 +45,7 @@ struct ModelsView: View {
     var body: some View {
         let rows = rows
         VStack(spacing: 0) {
-            if let n = state.notice { NoticeBanner(text: n).padding(12).transition(.move(edge: .top).combined(with: .opacity)) }
+            if let n = state.notice { NoticeBanner(text: n).padding(12) }
             Table(rows, selection: $picked, sortOrder: sortOrder) {
                 TableColumn("") { r in actions(r.recipe) }.width(30)
                 TableColumn("Model", value: \.name) { r in name(r.recipe) }.width(min: 160, ideal: 220)
@@ -74,7 +74,6 @@ struct ModelsView: View {
                 .background(Color.pageBackground)
                 .overlay(alignment: .top) { Divider() }
         }
-        .animation(.snappy, value: state.notice)
         .searchable(text: $search, placement: .toolbar, prompt: "Search models")
         .navigationTitle("Models")
     }

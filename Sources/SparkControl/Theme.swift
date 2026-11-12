@@ -196,7 +196,7 @@ struct NoticeBanner: View {
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(VizColor.warning)
             Text(text).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
-            Button { withAnimation { state.notice = nil } } label: {
+            Button { state.notice = nil } label: {
                 Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(.secondary)
             }
             .buttonStyle(.borderless)

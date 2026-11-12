@@ -253,4 +253,17 @@ for (name, s) in [("vllm start", vqStart), ("vllm stop", VLLM.stopCommand), ("vl
 check(TensorFold.parseStatus("VLLM|ready\nMODEL|vllm-qwen3.6-35b-a3b|running|7|x").vllm == "ready", "vLLM status parses")
 check(!TensorFold.uninstallScript(models: TensorFold.catalog).contains(#"rm -rf "$D""#), "removing TensorFold keeps the shared data folder")
 
+// ComfyUI
+for (name, s) in [("comfy install", ComfyUI.installScript), ("comfy remove", ComfyUI.removeScript), ("comfy start", ComfyUI.startScript),
+                  ("comfy stop", ComfyUI.stopCommand), ("comfy download", ComfyUI.downloadScript(ComfyUI.catalog[0])),
+                  ("comfy delete", ComfyUI.deleteScript(ComfyUI.catalog[0]))] {
+    let (code, out) = bash(s, syntaxOnly: true)
+    check(code == 0, "\(name) script parses: \(out)")
+}
+let cst = TensorFold.parseStatus("COMFY|v0.45.0|running\nMODEL|comfy-z-image-turbo|running|42|› x")
+check(cst.comfyVersion == "v0.45.0" && cst.comfyRunning && cst.models["comfy-z-image-turbo"]?.bytes == 42
+      && TensorFold.parseStatus("COMFY||").comfyVersion == nil, "ComfyUI status parses")
+check(ComfyUI.catalog.allSatisfy { m in m.files.allSatisfy { $0.url.contains("/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/") } }
+      && ComfyUI.startScript.contains("--listen 127.0.0.1"), "ComfyUI models are pinned and the server stays on the Spark's loopback")
+
 print("All checks passed")

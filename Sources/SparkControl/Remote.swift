@@ -62,6 +62,16 @@ enum SSH {
 }
 
 extension SSH {
+    /// Forwards `local` on this Mac's loopback to `remote` on the Spark's loopback until the process ends.
+    static func forward(_ target: String, local: Int, remote: Int) -> Process? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        p.arguments = options + ["-N", "-o", "ExitOnForwardFailure=yes", "-L", "127.0.0.1:\(local):127.0.0.1:\(remote)", target]
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        return (try? p.run()) == nil ? nil : p
+    }
+
     /// Adds this Mac's public key to the Spark's authorized_keys using the password once.
     /// ssh runs this app as its askpass helper; the password reaches it over stdin and is never stored.
     static func installKey(_ target: String, password: String) async -> (ok: Bool, message: String) {

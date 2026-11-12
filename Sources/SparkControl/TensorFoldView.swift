@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // MARK: Actions
 
@@ -31,6 +32,7 @@ extension AppState {
         for m in TensorFold.catalog where tfSizes[m.id] == nil {
             if let size = await TensorFold.downloadSize(m.downloads) { tfSizes[m.id] = size }
         }
+        for m in ComfyUI.catalog { tfSizes[m.key] = m.size }
         for m in VLLM.catalog where tfSizes[m.key] == nil {
             if let size = await TensorFold.downloadSize(m.downloads) { tfSizes[m.key] = size }
         }
@@ -77,8 +79,9 @@ extension AppState {
             guard let binary = tf.engine.binary else { return }
             script = TensorFold.downloadScript(m, binary: binary)
         case .vllm(let m): script = VLLM.downloadScript(m)
+        case .comfy(let m): script = ComfyUI.downloadScript(m)
         }
-        event("Downloading \(i.name): " + i.downloads.map(\.spec).joined(separator: ", "))
+        event("Downloading \(i.name): " + i.sources.joined(separator: ", "))
         let res = await tfRun(script, timeout: 30)
         if res?.code != 0 { event("Couldn't start the download: \(res?.output ?? "Spark unreachable")") }
         await tfRefresh()
@@ -95,6 +98,7 @@ extension AppState {
         let script = switch i {
         case .tf(let m): TensorFold.deleteScript(m)
         case .vllm(let m): VLLM.deleteScript(m)
+        case .comfy(let m): ComfyUI.deleteScript(m)
         }
         let res = await tfRun(script, timeout: 300)
         if res?.code == 0 {
@@ -116,6 +120,7 @@ extension AppState {
         switch i {
         case .tf(let m): config.recipes.first { $0.tensorfold == m.id }?.id
         case .vllm(let m): config.recipes.first { $0.vllm == m.id }?.id
+        case .comfy: nil
         }
     }
 
@@ -124,6 +129,7 @@ extension AppState {
         switch i {
         case .tf: return tf.engine != .none
         case .vllm: return tf.vllm == "ready"
+        case .comfy: return tf.comfyVersion != nil
         }
     }
 
@@ -131,6 +137,7 @@ extension AppState {
         switch i {
         case .tf(let m): return await tfAddRecipe(m)
         case .vllm(let m): return await vllmAddRecipe(m)
+        case .comfy: return nil
         }
     }
 
@@ -164,6 +171,80 @@ extension AppState {
         let res = await tfRun(VLLM.removeScript, timeout: 300, stream: true)
         event(res?.code == 0 ? "vLLM removed" : "Removing vLLM failed")
         await tfRefresh()
+    }
+
+    func comfyInstall() async {
+        guard !tfBusy else { return }
+        tfBusy = true
+        tfLog = []
+        defer { tfBusy = false }
+        event("Installing ComfyUI \(ComfyUI.version) on the Spark")
+        let res = await tfRun(ComfyUI.installScript, timeout: 3600, stream: true)
+        event(res?.code == 0 ? "ComfyUI \(ComfyUI.version) installed" : "ComfyUI install failed")
+        await tfRefresh()
+    }
+
+    func comfyRemove() async {
+        guard !tfBusy else { return }
+        tfBusy = true
+        tfLog = []
+        defer { tfBusy = false }
+        comfyCloseTunnel()
+        let res = await tfRun(ComfyUI.removeScript, timeout: 300, stream: true)
+        event(res?.code == 0 ? "ComfyUI removed" : "Removing ComfyUI failed")
+        await tfRefresh()
+    }
+
+    /// Starts ComfyUI if needed (stopping the running model first: both need the GB10's memory), then
+    /// opens it in the browser through the SSH tunnel.
+    func comfyOpen() async {
+        guard !comfyBusy, let target = sshTarget else { return }
+        comfyBusy = true
+        defer { comfyBusy = false }
+        if !tf.comfyRunning {
+            if let r = activeRecipe {
+                event("Stopping \(r.name) to free memory for ComfyUI")
+                await stopAndWait()
+            }
+            event("Starting ComfyUI")
+            let res = await tfRun(ComfyUI.startScript, timeout: 200, stream: true)
+            await tfRefresh()
+            guard res?.code == 0 else {
+                event("ComfyUI didn't start")
+                return
+            }
+        }
+        if comfyTunnel?.target != target || comfyTunnel?.process.isRunning != true {
+            comfyCloseTunnel()
+            guard let p = SSH.forward(target, local: ComfyUI.localPort, remote: ComfyUI.port) else {
+                event("Couldn't open the tunnel to ComfyUI")
+                return
+            }
+            comfyTunnel = (p, target)
+            try? await Task.sleep(for: .seconds(1.5))
+            // A tunnel left by an earlier run of the app still holds the port; use it if ComfyUI answers there.
+            let answers = (try? await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(ComfyUI.localPort)/system_stats")!)) != nil
+            guard p.isRunning || answers else {
+                event("The tunnel to ComfyUI closed: is port \(ComfyUI.localPort) on this Mac in use?")
+                return
+            }
+        }
+        NSWorkspace.shared.open(URL(string: "http://127.0.0.1:\(ComfyUI.localPort)")!)
+    }
+
+    func comfyStop() async {
+        guard !comfyBusy else { return }
+        comfyBusy = true
+        defer { comfyBusy = false }
+        _ = await tfRun(ComfyUI.stopCommand, timeout: 30)
+        comfyCloseTunnel()
+        event("ComfyUI stopped")
+        await tfRefresh()
+    }
+
+    func comfyCloseTunnel() {
+        comfyTunnel?.process.terminate()
+        comfyTunnel = nil
     }
 
     func vllmAddRecipe(_ m: VLLM.Model) async -> UUID? {
@@ -279,7 +360,84 @@ struct VLLMView: View {
         .confirmationDialog("Remove vLLM from the Spark?", isPresented: $removing) {
             Button("Remove", role: .destructive) { Task { await state.vllmRemove() } }
         } message: {
-            Text("Deletes the vLLM image (about 10 GB). Downloaded models and models added to Spark Control stay; they start again after reinstalling.")
+            Text("Deletes the vLLM image (about 26 GB). Downloaded models and models added to Spark Control stay; they start again after reinstalling.")
+        }
+    }
+}
+
+struct ComfyView: View {
+    @Environment(AppState.self) private var state
+    @Binding var selection: Pane?
+    @State private var deleting: CatalogItem?
+    @State private var removing = false
+
+    var body: some View {
+        let installed = state.tf.comfyVersion != nil
+        Form {
+            Section {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(state.tf.comfyVersion.map { "ComfyUI \($0)" } ?? "ComfyUI isn't installed").font(.headline)
+                        Text(state.route == nil ? "The Spark is unreachable." : installed ? "Installed by Spark Control." : "Installs ComfyUI \(ComfyUI.version) with PyTorch for CUDA 13.0 in its own Python environment. About 10 GB, no sudo.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if state.tfBusy {
+                        ProgressView().controlSize(.small)
+                    } else if !installed {
+                        Button("Install") { Task { await state.comfyInstall() } }
+                            .buttonStyle(.borderedProminent).disabled(state.route == nil)
+                    } else {
+                        if state.tf.comfyVersion != ComfyUI.version {
+                            Button("Update to \(ComfyUI.version)") { Task { await state.comfyInstall() } }.disabled(state.route == nil)
+                        }
+                        Button("Remove…", role: .destructive) { removing = true }.disabled(state.route == nil)
+                    }
+                }
+                .padding(.vertical, 2)
+                if !state.tfLog.isEmpty { LogBox(lines: state.tfLog) }
+            } header: {
+                Text("Engine")
+            } footer: {
+                Text("Installs into ~/.local/share/spark-control/comfyui on the Spark, following NVIDIA's DGX Spark ComfyUI playbook.")
+            }
+
+            if installed {
+                Section {
+                    HStack(spacing: 12) {
+                        StatusDot(phase: state.tf.comfyRunning ? .ready : .stopped)
+                        Text(state.tf.comfyRunning ? "Running" : "Stopped")
+                        Spacer()
+                        if state.comfyBusy { ProgressView().controlSize(.small) }
+                        if state.tf.comfyRunning {
+                            Button("Stop") { Task { await state.comfyStop() } }.disabled(state.comfyBusy)
+                        }
+                        Button(state.tf.comfyRunning ? "Open in Browser" : "Start and Open") { Task { await state.comfyOpen() } }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(state.comfyBusy || state.route == nil || state.isBusy)
+                    }
+                } header: {
+                    Text("Server")
+                } footer: {
+                    Text("ComfyUI listens only on the Spark and opens on this Mac at 127.0.0.1:\(ComfyUI.localPort) through SSH, so nobody else on the network can reach it. It shares the GB10's memory with models: starting it stops the running model, and starting a model (a chat request included) stops ComfyUI.")
+                }
+            }
+
+            Section {
+                ForEach(ComfyUI.catalog) { m in
+                    ModelRow(item: .comfy(m), selection: $selection, deleting: $deleting)
+                }
+            } header: {
+                Text("Starter Models")
+            } footer: {
+                Text("Downloaded straight onto the Spark, into ComfyUI's models folder, and resumable. ComfyUI's own Download button for missing models saves to this Mac instead, so other models are easiest to add here or on the Spark with curl or hf.")
+            }
+        }
+        .catalogPage("ComfyUI", deleting: $deleting)
+        .confirmationDialog("Remove ComfyUI from the Spark?", isPresented: $removing) {
+            Button("Remove", role: .destructive) { Task { await state.comfyRemove() } }
+        } message: {
+            Text("Stops ComfyUI and deletes it from the Spark with its Python environment and every model in its models folder. This can't be undone.")
         }
     }
 }
@@ -317,7 +475,8 @@ private struct CatalogPage: ViewModifier {
 
     private func deleteMessage(_ m: CatalogItem) -> String {
         let size = (state.tf.models[m.key]?.bytes ?? 0).formatted(.byteCount(style: .file))
-        let what = m.downloads.map(\.id).joined(separator: " and ")
+        let what = m.sources.joined(separator: " and ")
+        if case .comfy = m { return "Deletes \(what) (\(size)) from ComfyUI's models folder on the Spark. This can't be undone." }
         return "Deletes \(what) (\(size)) from the Spark's Hugging Face cache and removes the model from Spark Control. Files that were already on the Spark before Spark Control first downloaded this model are kept. This can't be undone."
     }
 }
@@ -384,31 +543,36 @@ private struct EngineRow: View {
 
 /// A model from either engine's catalog. Download records are keyed so the two never clash.
 enum CatalogItem: Hashable, Identifiable {
-    case tf(TensorFold.Model), vllm(VLLM.Model)
+    case tf(TensorFold.Model), vllm(VLLM.Model), comfy(ComfyUI.Model)
 
     var id: String { key }
     var key: String {
         switch self {
         case .tf(let m): m.id
         case .vllm(let m): m.key
+        case .comfy(let m): m.key
         }
     }
     var name: String {
         switch self {
         case .tf(let m): m.name
         case .vllm(let m): m.name
+        case .comfy(let m): m.name
         }
     }
     var note: String {
         switch self {
         case .tf(let m): m.note
         case .vllm(let m): m.note
+        case .comfy(let m): m.note
         }
     }
-    var downloads: [TensorFold.Repo] {
+    /// What gets downloaded: Hugging Face repos, or files for ComfyUI.
+    var sources: [String] {
         switch self {
-        case .tf(let m): m.downloads
-        case .vllm(let m): m.downloads
+        case .tf(let m): m.downloads.map(\.id)
+        case .vllm(let m): m.downloads.map(\.id)
+        case .comfy(let m): m.files.map { ($0.path as NSString).lastPathComponent }
         }
     }
 }
@@ -426,7 +590,7 @@ private struct ModelRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.name).font(.body.weight(.medium))
                 Text(item.note).font(.callout).foregroundStyle(.secondary)
-                Text(item.downloads.map(\.id).joined(separator: " + "))
+                Text(item.sources.joined(separator: " + "))
                     .font(.caption.monospaced()).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
                 if st.download == .running || st.download == .failed, !st.message.isEmpty {
                     Text(st.message)
@@ -497,7 +661,9 @@ private struct ModelRow: View {
     }
 
     @ViewBuilder private func addOrOpen(_ noEngine: Bool) -> some View {
-        if let id = state.catRecipeID(item) {
+        if case .comfy = item {
+            EmptyView()
+        } else if let id = state.catRecipeID(item) {
             Button("Open") { selection = .model(id) }
         } else {
             Button("Add Model") {
@@ -542,7 +708,7 @@ private struct VLLMEngineRow: View {
         switch state.tf.vllm {
         case "ready": return "Docker image \(VLLM.image.prefix(40))…"
         case "nodocker": return "Docker isn't installed on the Spark. DGX OS includes it; install it to use vLLM."
-        default: return "Pulls the official vLLM \(VLLM.version) image (about 10 GB) with Docker. No sudo needed."
+        default: return "Pulls the official vLLM \(VLLM.version) image (about 26 GB on disk) with Docker. No sudo needed."
         }
     }
 }

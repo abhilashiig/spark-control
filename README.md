@@ -50,4 +50,10 @@ and the app installs your key. The password is passed to ssh through a pipe and 
   caching. Each model's page has Context and MTP drafts pickers. Suggested drafts come from published single-Spark
   measurements: 3 for Qwen3.6 35B-A3B (about 100 tok/s, +45%), 2 for Gemma 4 (1.7–1.8×, and 2 beat 4), and 2 elsewhere,
   where nobody has published a sweep. The first start of a model can take 10–15 minutes.
+- **ComfyUI** (sidebar → Engines): image generation on the Spark. Install sets up ComfyUI (pinned release) with PyTorch
+  for CUDA 13.0 in `~/.local/share/spark-control/comfyui`, following NVIDIA's DGX Spark playbook; no sudo. Starter
+  models (Z-Image-Turbo, about 20 GB) download straight onto the Spark. **Start and Open** stops the running model,
+  starts ComfyUI on the Spark's loopback only, and opens it at `http://127.0.0.1:18188` on this Mac through an SSH
+  tunnel. Then Templates → Image → "Z-Image-Turbo: Text to Image" → Run. Starting any model stops ComfyUI, since
+  both need the GB10's memory.
 - **Data**: `~/Library/Application Support/Spark Control/` (`config.json`, `usage.jsonl`, `chats.json`).

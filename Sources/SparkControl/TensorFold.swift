@@ -156,6 +156,9 @@ enum TensorFold {
         var models: [String: ModelStatus] = [:]
         /// vLLM's image: "ready", "none" (Docker but no image), "nodocker", or nil before the first check.
         var vllm: String?
+        /// ComfyUI's installed release (nil when it isn't installed) and whether its server runs.
+        var comfyVersion: String?
+        var comfyRunning = false
     }
 
     static func statusScript() -> String {
@@ -191,7 +194,7 @@ enum TensorFold {
         for m in catalog {
             s += "m \(SSH.quote(m.id)) " + m.downloads.map { SSH.quote($0.cacheName + "@" + $0.snapshot) }.joined(separator: " ") + "\n"
         }
-        return s + VLLM.statusLines
+        return s + VLLM.statusLines + ComfyUI.statusLines
     }
 
     static func parseStatus(_ output: String) -> Status {
@@ -205,6 +208,9 @@ enum TensorFold {
                 case "user": st.engine = .user(path: f[2], version: f[3])
                 default: st.engine = .none
                 }
+            case "COMFY" where f.count >= 3:
+                st.comfyVersion = f[1].isEmpty ? nil : f[1]
+                st.comfyRunning = f[2] == "running"
             case "VLLM" where f.count >= 2:
                 st.vllm = f[1]
             case "FREE" where f.count >= 2:

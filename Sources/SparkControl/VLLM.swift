@@ -74,7 +74,7 @@ enum VLLM {
     set -eo pipefail
     command -v docker >/dev/null || { echo "✗ Docker isn't installed on the Spark."; exit 1; }
     docker info >/dev/null 2>&1 || { echo "✗ This user can't run Docker. Add it to the docker group: sudo usermod -aG docker $USER"; exit 1; }
-    echo "› Pulling vLLM \(version) (about 10 GB)"
+    echo "› Pulling vLLM \(version) (about 26 GB on disk)"
     docker pull \(image) 2>&1 | grep --line-buffered -v -E 'Waiting|Downloading|Extracting|Verifying|Pulling fs layer' || true
     docker image inspect \(image) >/dev/null
     echo "› vLLM \(version) is ready"

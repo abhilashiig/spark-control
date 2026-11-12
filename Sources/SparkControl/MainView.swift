@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Pane: Hashable {
-    case chat, model(UUID), connect, discovered, tensorfold, vllm, requests, usage, logs
+    case chat, model(UUID), connect, discovered, tensorfold, vllm, comfy, requests, usage, logs
 }
 
 struct MainView: View {
@@ -36,6 +36,7 @@ struct MainView: View {
                     Label("TensorFold", systemImage: "square.stack.3d.up").tag(Pane.tensorfold)
                     Label("vLLM", systemImage: "shippingbox").tag(Pane.vllm)
                     Label("Ollama", systemImage: "magnifyingglass").tag(Pane.discovered)
+                    Label("ComfyUI", systemImage: "photo.on.rectangle.angled").tag(Pane.comfy)
                 }
                 Section("Activity") {
                     Label("Requests", systemImage: "arrow.left.arrow.right").tag(Pane.requests)
@@ -62,6 +63,7 @@ struct MainView: View {
             case .discovered: DiscoveredView(selection: $selection)
             case .tensorfold: TensorFoldView(selection: $selection)
             case .vllm: VLLMView(selection: $selection)
+            case .comfy: ComfyView(selection: $selection)
             case .requests: RequestsView()
             case .usage: UsageView()
             case .logs: LogsView()

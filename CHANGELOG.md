@@ -10,6 +10,10 @@ New entries go under **Unreleased**; a release renames that section to the versi
   models whose MTP head drafts tokens: Qwen3.6 35B-A3B, Qwen3.8 27B, Nemotron 3.5 Lightning,
   Nemotron 3 Super and Gemma 4 26B-A4B. Each model's page picks the context and MTP drafts (Off, 1, 2, 3),
   starting from the value that measured fastest on a Spark.
+- ComfyUI engine for image generation: installs ComfyUI with PyTorch for CUDA 13.0 on the Spark (no sudo),
+  downloads Z-Image-Turbo onto the Spark, and opens ComfyUI in this Mac's browser through an SSH tunnel; it
+  listens only on the Spark, so it isn't reachable from the network. Starting it stops the running model,
+  and starting a model stops it.
 
 ## [1.0.0] - 2026-11-12
 

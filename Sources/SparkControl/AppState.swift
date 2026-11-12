@@ -59,6 +59,9 @@ final class AppState {
     var tfBusy = false
     var tfLog: [String] = []
     var tfSizes: [String: Int64] = [:]
+    var comfyBusy = false
+    /// The SSH tunnel that brings ComfyUI's port to this Mac, and the Spark address it goes to.
+    @ObservationIgnored var comfyTunnel: (process: Process, target: String)?
     /// The benchmark in progress: which model, its output so far, and its pid on the Spark.
     var bench: (recipe: UUID, lines: [String], pid: Int?, running: Bool)?
     var benchResults = Store.loadBenchmarks()
@@ -297,7 +300,9 @@ final class AppState {
         // Detach the start command so a backgrounded server can't hold the SSH session open,
         // then follow its output until it exits.
         // `;` (not `&&`) so only nohup is backgrounded and the SSH session returns at once.
-        let launch = "mkdir -p /tmp/spark-control; nohup \(SSH.interactive(r.startCommand + "; echo __SPARK_EXIT__$?")) > /tmp/spark-control/start.log 2>&1 < /dev/null & echo $!"
+        // ComfyUI and a model can't share the GB10's memory, so starting a model stops ComfyUI.
+        if tf.comfyRunning { event("Stopping ComfyUI to free memory for \(r.name)") }
+        let launch = "\(ComfyUI.stopCommand); mkdir -p /tmp/spark-control; nohup \(SSH.interactive(r.startCommand + "; echo __SPARK_EXIT__$?")) > /tmp/spark-control/start.log 2>&1 < /dev/null & echo $!"
         let res = await SSH.run(target, launch, timeout: 20)
         guard res.code == 0, let pid = res.output.split(separator: "\n").last.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }) else {
             let why = res.output.trimmingCharacters(in: .whitespacesAndNewlines)

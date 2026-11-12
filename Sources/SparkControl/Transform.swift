@@ -135,6 +135,16 @@ enum Transform {
         }
     }
 
+    /// A model's chat-title reply, minus any thinking, quotes, markdown and "Title:" prefix.
+    static func chatTitle(_ raw: String) -> String? {
+        var t = raw
+        if let end = t.range(of: "</think>") { t = String(t[end.upperBound...]) }
+        let junk = CharacterSet(charactersIn: "\"'`*#.").union(.whitespaces)
+        t = (t.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .newlines).first ?? "").trimmingCharacters(in: junk)
+        if t.lowercased().hasPrefix("title:") { t = String(t.dropFirst(6)).trimmingCharacters(in: junk) }
+        return t.isEmpty ? nil : String(t.prefix(60))
+    }
+
     static func usage(_ obj: [String: Any]) -> Usage? {
         guard let u = obj["usage"] as? [String: Any] else { return nil }
         let p = u["prompt_tokens"] as? Int ?? u["input_tokens"] as? Int

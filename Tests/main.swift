@@ -424,4 +424,7 @@ check(Set(ChatProfile.defaults.map(\.id)).count == 5,
 check((try? JSONDecoder().decode(Config.self, from: Data(#"{"recipes": []}"#.utf8)))?.profiles.count ?? 0 >= 5, "an old config gets profiles")
 check((try? JSONDecoder().decode(SharedModels.self, from: JSONEncoder().encode(withProfiles)))?.profiles == [edited], "shared profiles read back")
 
+check(Transform.chatTitle("<think>hmm</think>\n\n**Title: \"Fixing SSH timeouts.\"**\nmore") == "Fixing SSH timeouts", "title cleaned")
+check(Transform.chatTitle("  \n") == nil, "empty title rejected")
+
 print("All checks passed")

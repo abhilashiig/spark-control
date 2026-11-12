@@ -100,9 +100,10 @@ final class ChatStore {
     func send(_ text: String, attachments: [ChatAttachment], chatID: UUID, profiles: [ChatProfile], baseURL: String, apiKey: String) {
         guard let i = index(chatID), streamingChat == nil else { return }
         chats[i].messages.append(ChatMessage(role: "user", content: text, attachments: attachments))
-        if chats[i].title == "New Chat" {
-            let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            chats[i].title = t.isEmpty ? (attachments.first?.name ?? "New Chat") : String(t.prefix(60))
+        let question = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let needsTitle = chats[i].title == "New Chat"
+        if needsTitle {
+            chats[i].title = question.isEmpty ? (attachments.first?.name ?? "New Chat") : String(question.prefix(60))
         }
         let request = makeRequest(chats[i], profiles: profiles, baseURL: baseURL, apiKey: apiKey)
         let reply = ChatMessage(role: "assistant")
@@ -112,6 +113,10 @@ final class ChatStore {
         chats.insert(moved, at: 0)
         save()
         streamingChat = chatID
+        if needsTitle && !question.isEmpty {
+            let fallback = chats[0].title, model = chats[0].model
+            Task { await generateTitle(question, fallback: fallback, chatID: chatID, model: model, baseURL: baseURL, apiKey: apiKey) }
+        }
         task = Task {
             await stream(request, chatID: chatID, replyID: reply.id)
             streamingChat = nil
@@ -137,6 +142,31 @@ final class ChatStore {
             "model": chat.model, "messages": messages,
             "stream": true, "stream_options": ["include_usage": true],
         ]
+        return Self.post(body, baseURL: baseURL, apiKey: apiKey)
+    }
+
+    /// Asks the chat's model for a short title; the question stays as the title until it answers,
+    /// and a title the user changed meanwhile is kept.
+    private func generateTitle(_ question: String, fallback: String, chatID: UUID, model: String, baseURL: String, apiKey: String) async {
+        let body: [String: Any] = [
+            "model": model, "max_tokens": 300,
+            // Reasoning models would spend the token budget thinking about a title.
+            "chat_template_kwargs": ["enable_thinking": false],
+            "messages": [
+                ["role": "system", "content": "Write a short title, at most 6 words, for a chat that starts with the user's message below. Reply with the title only: no quotes, no trailing punctuation."],
+                ["role": "user", "content": String(question.prefix(4000))],
+            ],
+        ]
+        guard let (data, _) = try? await Self.session.data(for: Self.post(body, baseURL: baseURL, apiKey: apiKey)),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let content = ((obj["choices"] as? [[String: Any]])?.first?["message"] as? [String: Any])?["content"] as? String,
+              let title = Transform.chatTitle(content),
+              let i = index(chatID), chats[i].title == fallback else { return }
+        chats[i].title = title
+        save()
+    }
+
+    private static func post(_ body: [String: Any], baseURL: String, apiKey: String) -> URLRequest {
         var r = URLRequest(url: URL(string: baseURL + "/chat/completions")!)
         r.httpMethod = "POST"
         r.setValue("application/json", forHTTPHeaderField: "Content-Type")

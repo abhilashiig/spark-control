@@ -10,6 +10,9 @@ struct ModelsView: View {
     @State private var deleting: CatalogItem?
     @State private var picked: Entry.ID?
     @State private var adding: Set<String> = []
+    /// The column the table is sorted by, remembered across launches. Empty = running first, then the rest.
+    @AppStorage("modelsSort") private var sortKey = ""
+    @AppStorage("modelsSortDescending") private var sortDescending = false
 
     enum Kind: String, CaseIterable, Identifiable {
         case all = "All", text = "Text", image = "Image"
@@ -26,19 +29,51 @@ struct ModelsView: View {
         }
     }
 
+    /// One table row, with the values its columns sort by.
+    struct Row: Identifiable {
+        let entry: Entry
+        var id: String { entry.id }
+        let name, engine, status, drafts: String
+        let context, port: Int
+        let memory, disk: Int64
+    }
+
+    /// Sortable columns by the key they're remembered under.
+    private static let sortKeys: [(String, (SortOrder) -> KeyPathComparator<Row>)] = [
+        ("name", { KeyPathComparator(\Row.name, comparator: .localizedStandard, order: $0) }),
+        ("engine", { KeyPathComparator(\Row.engine, order: $0) }),
+        ("status", { KeyPathComparator(\Row.status, order: $0) }),
+        ("context", { KeyPathComparator(\Row.context, order: $0) }),
+        ("drafts", { KeyPathComparator(\Row.drafts, order: $0) }),
+        ("memory", { KeyPathComparator(\Row.memory, order: $0) }),
+        ("disk", { KeyPathComparator(\Row.disk, order: $0) }),
+        ("port", { KeyPathComparator(\Row.port, order: $0) }),
+    ]
+
+    private var sortOrder: Binding<[KeyPathComparator<Row>]> {
+        Binding {
+            Self.sortKeys.first { $0.0 == sortKey }.map { [$0.1(sortDescending ? .reverse : .forward)] } ?? []
+        } set: { new in
+            guard let c = new.first else { sortKey = ""; return }
+            sortKey = Self.sortKeys.first { $0.1(.forward).keyPath == c.keyPath }?.0 ?? ""
+            sortDescending = c.order == .reverse
+        }
+    }
+
     var body: some View {
+        let rows = rows
         VStack(spacing: 0) {
             if let n = state.notice { NoticeBanner(text: n).padding(12) }
-            Table(entries, selection: $picked) {
-                TableColumn("") { e in actions(e) }.width(30)
-                TableColumn("Model") { e in name(e) }.width(min: 160, ideal: 220)
-                TableColumn("Engine") { e in EngineBadge(name: engine(e)) }.width(min: 70, ideal: 80)
-                TableColumn("Status") { e in status(e) }.width(min: 80, ideal: 110)
-                TableColumn("Context") { e in Text(context(e)) }.width(min: 60, ideal: 90)
-                TableColumn("Drafts") { e in Text(drafts(e)) }.width(min: 50, ideal: 70)
-                TableColumn("Memory") { e in Text(memory(e)).monospacedDigit() }.width(min: 50, ideal: 70)
-                TableColumn("On Disk") { e in Text(disk(e)).monospacedDigit() }.width(min: 55, ideal: 75)
-                TableColumn("Port") { e in Text(port(e)).monospacedDigit() }.width(min: 45, ideal: 55)
+            Table(rows, selection: $picked, sortOrder: sortOrder) {
+                TableColumn("") { r in actions(r.entry) }.width(30)
+                TableColumn("Model", value: \.name) { r in name(r.entry) }.width(min: 160, ideal: 220)
+                TableColumn("Engine", value: \.engine) { r in EngineBadge(name: r.engine) }.width(min: 70, ideal: 80)
+                TableColumn("Status", value: \.status) { r in status(r.entry) }.width(min: 80, ideal: 110)
+                TableColumn("Context", value: \.context) { r in Text(context(r.entry)) }.width(min: 60, ideal: 90)
+                TableColumn("Drafts", value: \.drafts) { r in Text(r.drafts) }.width(min: 50, ideal: 70)
+                TableColumn("Memory", value: \.memory) { r in Text(Self.gb(r.memory)).monospacedDigit() }.width(min: 50, ideal: 70)
+                TableColumn("On Disk", value: \.disk) { r in Text(r.disk > 0 ? r.disk.formatted(.byteCount(style: .file)) : "—").monospacedDigit() }.width(min: 55, ideal: 75)
+                TableColumn("Port", value: \.port) { r in Text(r.port > 0 ? String(r.port) : "—").monospacedDigit() }.width(min: 45, ideal: 55)
             }
             .contextMenu(forSelectionType: Entry.ID.self) { ids in
                 if let e = ids.first.flatMap(entry) { menu(e) }
@@ -46,7 +81,7 @@ struct ModelsView: View {
                 if let e = ids.first.flatMap(entry) { open(e) }
             }
             .overlay {
-                if entries.isEmpty {
+                if rows.isEmpty {
                     ContentUnavailableView(search.isEmpty ? "No Models Yet" : "No Matches", systemImage: "cpu",
                                            description: Text(search.isEmpty ? "Download one from an engine below." : ""))
                 }
@@ -77,6 +112,21 @@ struct ModelsView: View {
     }
 
     private func entry(_ id: Entry.ID) -> Entry? { entries.first { $0.id == id } }
+
+    private var rows: [Row] {
+        let rows = entries.map { e in
+            Row(entry: e, name: name(of: e), engine: engine(e), status: statusText(e), drafts: drafts(e),
+                context: contextTokens(e), port: port(e), memory: memoryBytes(e) ?? 0, disk: diskBytes(e) ?? 0)
+        }
+        return rows.sorted(using: sortOrder.wrappedValue)
+    }
+
+    private func name(of e: Entry) -> String {
+        switch e {
+        case .recipe(let r): r.name.isEmpty ? "Untitled" : r.name
+        case .catalog(let i): i.name
+        }
+    }
 
     private func matches(_ name: String, image: Bool) -> Bool {
         (kind == .all || (kind == .image) == image) && (search.isEmpty || name.localizedCaseInsensitiveContains(search))
@@ -112,7 +162,7 @@ struct ModelsView: View {
             let p = state.phase(for: r)
             HStack(spacing: 6) {
                 StatusDot(phase: p)
-                Text(p == .stopped ? (r.enabled ? "Stopped" : "Off") : p.label)
+                Text(statusText(e))
                     .foregroundStyle(p.isFailure ? Color.red : Color.primary)
             }
             .help(p.label)
@@ -120,9 +170,33 @@ struct ModelsView: View {
             let running = i.isImage && state.tf.comfyRunning
             HStack(spacing: 6) {
                 StatusDot(phase: running ? .ready : .stopped)
-                Text(running ? "In ComfyUI" : i.isImage ? "Ready" : "Not added").foregroundStyle(.secondary)
+                Text(statusText(e)).foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func statusText(_ e: Entry) -> String {
+        switch e {
+        case .recipe(let r):
+            let p = state.phase(for: r)
+            return p == .stopped ? (r.enabled ? "Stopped" : "Off") : p.label
+        case .catalog(let i):
+            return i.isImage && state.tf.comfyRunning ? "In ComfyUI" : i.isImage ? "Ready" : "Not added"
+        }
+    }
+
+    /// The window in tokens, for sorting: TensorFold's default sorts first, YaRN by the window it stretches to.
+    private func contextTokens(_ e: Entry) -> Int {
+        guard case .recipe(let r) = e else { return -1 }
+        if let m = TensorFold.model(r.tensorfold) {
+            return switch TensorFold.context(of: r.startCommand) {
+            case .engineDefault: 0
+            case .window(let n): n
+            case .yarn(let f): m.window * f
+            }
+        }
+        if let m = VLLM.model(r.vllm) { return VLLM.context(of: r.startCommand) ?? m.window }
+        return -1
     }
 
     private func context(_ e: Entry) -> String {
@@ -150,27 +224,28 @@ struct ModelsView: View {
         return "—"
     }
 
-    private func memory(_ e: Entry) -> String {
-        let bytes: Int64? = switch e {
+    private func memoryBytes(_ e: Entry) -> Int64? {
+        switch e {
         case .recipe(let r): state.memoryNeed(r)
         case .catalog(.vllm(let m)): Int64(m.memoryGB * 1e9)
         case .catalog: nil
         }
-        return bytes.map { String(format: "%.0f GB", Double($0) / 1e9) } ?? "—"
     }
 
-    private func disk(_ e: Entry) -> String {
+    private static func gb(_ bytes: Int64) -> String { bytes > 0 ? String(format: "%.0f GB", Double(bytes) / 1e9) : "—" }
+
+    private func diskBytes(_ e: Entry) -> Int64? {
         let key: String? = switch e {
         case .recipe(let r): r.tensorfold ?? VLLM.model(r.vllm)?.key
         case .catalog(let i): i.key
         }
-        guard let bytes = key.flatMap({ state.tf.models[$0]?.bytes }), bytes > 0 else { return "—" }
-        return bytes.formatted(.byteCount(style: .file))
+        return key.flatMap { state.tf.models[$0]?.bytes }
     }
 
-    private func port(_ e: Entry) -> String {
-        guard case .recipe(let r) = e else { return "—" }
-        return String(state.port(of: r))
+    /// 0 for catalog models not added yet, which have no port.
+    private func port(_ e: Entry) -> Int {
+        guard case .recipe(let r) = e else { return 0 }
+        return state.port(of: r)
     }
 
     @ViewBuilder private func actions(_ e: Entry) -> some View {

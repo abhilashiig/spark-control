@@ -155,13 +155,6 @@ final class AppState {
         return "No model running"
     }
 
-    var menuSymbol: String {
-        switch phase {
-        case .ready: "cpu.fill"
-        case .failed, .offline: "exclamationmark.triangle"
-        default: "cpu"
-        }
-    }
 
     // MARK: Connection
 

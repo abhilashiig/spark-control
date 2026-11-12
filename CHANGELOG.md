@@ -5,11 +5,17 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-12
+
+### Added
+- Models table sorts by any column (click its header), and remembers the choice.
+
 ### Fixed
 - Models page: on a large or full-screen window the sidebar and page no longer get cut off at the top and bottom.
 
 ### Changed
 - Models table: Start and Stop are round green and red buttons, so they read as buttons.
+- The menu bar icon is the new app icon's dial and spark in black and white, following the menu bar's colour. The spark is filled while a model runs.
 
 ## [1.1.0] - 2026-11-12
 

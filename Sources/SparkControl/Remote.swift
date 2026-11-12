@@ -202,11 +202,10 @@ enum Probe {
         var loaded: [String]?
         var listed: [String]
 
+        /// Ollama lists every pulled model but serves only what it has loaded: an idle Ollama (say, up for a pull) serves nothing.
         func serves(_ model: String) -> Bool {
-            if model.isEmpty { return true }
-            let m = Transform.norm(model)
-            if let loaded, !loaded.isEmpty { return loaded.contains(m) }
-            return listed.contains(m)
+            if let loaded { return model.isEmpty ? !loaded.isEmpty : loaded.contains(Transform.norm(model)) }
+            return model.isEmpty || listed.contains(Transform.norm(model))
         }
     }
 

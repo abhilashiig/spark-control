@@ -352,7 +352,7 @@ final class AppState {
                     lastUsed[match.id] = lastUsed[match.id] ?? Date()
                     if activeID == nil { activeID = match.id }
                 }
-            } else if p == device.backendPort {
+            } else if p == device.backendPort, info.loaded?.isEmpty != true {
                 foundExternal = info.loaded?.first ?? info.listed.first ?? "unknown"
             }
         }

@@ -88,6 +88,10 @@ let d = Device(baseHost: "aitopatom-049b.local")
 check(d.host(.tailscale) == "aitopatom-049b", "tailscale never has .local")
 check(d.host(.local) == "aitopatom-049b.local", "local adds .local")
 check(Probe.isTailscale("100.101.12.3") && !Probe.isTailscale("192.168.1.20"), "tailscale IP range")
+let idleOllama = Probe.Backend(loaded: [], listed: ["laguna", "qwen35-abl"])
+check(!idleOllama.serves("laguna") && !idleOllama.serves(""), "an idle Ollama serves none of its pulled models")
+check(Probe.Backend(loaded: ["qwen35-abl"], listed: ["laguna", "qwen35-abl"]).serves("qwen35-abl:latest"), "Ollama serves what it has loaded")
+check(Probe.Backend(loaded: nil, listed: ["qwen3.8-27b"]).serves("qwen3.8-27b"), "other servers serve what they list")
 
 // First-token detection for TTFT: role-only and empty chunks don't count
 func sse(_ json: String) -> Data { Data(("data: " + json + "\n").utf8) }

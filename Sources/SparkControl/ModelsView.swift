@@ -239,8 +239,9 @@ private struct AddModelsHelp: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Get More Models").font(.headline)
             Text("Spark Control starts and stops models on your DGX Spark over SSH and serves the running ones to this Mac through one OpenAI-compatible API. This list and each model's settings are kept on the Spark, so every Mac using it sees the same models. Download new models from an engine:")
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 6) {
+                .font(.callout).foregroundStyle(.secondary)
+            // No Grid or fixedSize here: either one beside the Table left the whole window blank on first launch.
+            VStack(alignment: .leading, spacing: 6) {
                 row("TensorFold", "square.stack.3d.up", .tensorfold,
                     "Builds TensorFold has tested on one GB10, with speculative drafts and long contexts. A good default for one person chatting or coding.")
                 row("vLLM", "shippingbox", .vllm,
@@ -258,10 +259,10 @@ private struct AddModelsHelp: View {
     }
 
     private func row(_ title: String, _ symbol: String, _ pane: Pane, _ text: String) -> some View {
-        GridRow {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             Button { selection = pane } label: { Label(title, systemImage: symbol).frame(minWidth: 100, alignment: .leading) }
                 .buttonStyle(.link)
-            Text(text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(text).font(.callout).foregroundStyle(.secondary)
         }
     }
 }

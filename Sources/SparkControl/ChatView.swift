@@ -318,13 +318,17 @@ struct ChatView: View {
         HSplitView {
             List(selection: $store.selection) {
                 ForEach(store.chats) { chat in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(chat.title).lineLimit(1)
-                        Text(chat.updated, format: .relative(presentation: .named))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    let recipe = state.config.recipes.first { $0.apiID == chat.model }
+                    HStack(spacing: 10) {
+                        ModelAvatar(name: recipe?.name ?? chat.model, phase: recipe.map { state.phase(for: $0) }, size: 30)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(chat.title).font(.body.weight(.medium)).lineLimit(1)
+                            Text(chat.updated, format: .relative(presentation: .named))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .padding(.vertical, 2)
+                    .padding(.vertical, 3)
                     .tag(chat.id)
                     .contextMenu {
                         Button("Delete Chat", role: .destructive) { store.delete(chat.id) }
@@ -388,6 +392,7 @@ private struct Conversation: View {
                 .fixedSize()
                 if let r = models.first(where: { $0.apiID == chat?.model }) {
                     StatusDot(phase: state.phase(for: r))
+                        .animation(.smooth, value: state.phase(for: r))
                     if state.phase(for: r) != .ready {
                         Text(state.config.gateway.autoSwap ? "Starts on first message" : "Not running")
                             .font(.caption).foregroundStyle(.secondary)
@@ -436,13 +441,15 @@ private struct Conversation: View {
             .buttonStyle(.borderless)
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
+            .background(.bar)
             Divider()
 
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 18) {
                         ForEach(chat?.messages ?? []) { m in
-                            MessageView(message: m, live: streaming && m.id == chat?.messages.last?.id,
+                            MessageView(message: m, modelName: models.first(where: { $0.apiID == chat?.model })?.name ?? chat?.model ?? "",
+                                        live: streaming && m.id == chat?.messages.last?.id,
                                         onEdit: store.streamingChat != nil ? nil : { text in
                                             store.resend(m.id, text: text, chatID: chatID, profiles: state.config.profiles, baseURL: state.apiBaseURL,
                                                          apiKey: state.toolGateway.apiKey)
@@ -455,6 +462,7 @@ private struct Conversation: View {
                     .frame(maxWidth: 860)
                     .frame(maxWidth: .infinity)
                 }
+                .background(Color.pageBackground)
                 .overlay {
                     if chat?.messages.isEmpty ?? true {
                         ContentUnavailableView("Start a Conversation", systemImage: "bubble.left.and.text.bubble.right",
@@ -504,26 +512,34 @@ private struct Conversation: View {
                     .onSubmit(send)
                     .newlineOnShiftReturn()
                 if streaming {
-                    Button { store.stop() } label: { Image(systemName: "stop.circle.fill").font(.system(size: 22)) }
-                        .buttonStyle(.borderless)
+                    Button { store.stop() } label: { RoundIcon(symbol: "stop.fill", fill: .red) }
+                        .buttonStyle(PressableStyle())
                         .help("Stop")
+                        .transition(.scale.combined(with: .opacity))
                 } else {
-                    Button(action: send) { Image(systemName: "arrow.up.circle.fill").font(.system(size: 22)) }
-                        .buttonStyle(.borderless)
+                    Button(action: send) { RoundIcon(symbol: "arrow.up", fill: canSend ? .brand : Color.secondary.opacity(0.35)) }
+                        .buttonStyle(PressableStyle())
                         .disabled(!canSend)
                         .keyboardShortcut(.return, modifiers: .command)
                         .help("Send (Return). Shift-Return adds a new line.")
                 }
             }
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.primary.opacity(0.05)))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.1)))
+        .animation(.snappy, value: streaming)
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .padding(.vertical, 8)
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .strokeBorder(focused ? Color.brand.opacity(0.5) : Color.cardBorder, lineWidth: focused ? 1.5 : 1))
+        .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
+        .animation(.easeOut(duration: 0.15), value: focused)
         .padding(.horizontal, 16)
         .padding(.bottom, 14)
         .padding(.top, 6)
         .frame(maxWidth: 892)
         .frame(maxWidth: .infinity)
+        .background(Color.pageBackground)
     }
 
     private var canSend: Bool {
@@ -551,8 +567,21 @@ private struct Conversation: View {
     }
 }
 
+private struct RoundIcon: View {
+    let symbol: String
+    let fill: Color
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 28, height: 28)
+            .background(fill.gradient, in: Circle())
+    }
+}
+
 private struct MessageView: View {
     let message: ChatMessage
+    let modelName: String
     let live: Bool
     /// Nil while a reply is streaming.
     var onEdit: ((String) -> Void)?
@@ -592,9 +621,10 @@ private struct MessageView: View {
                         if !message.content.isEmpty {
                             Text(message.content)
                                 .textSelection(.enabled)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Color.accentColor.opacity(0.16), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 9)
+                                .background(Color.brand.gradient, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         }
                         Button { startEditing() } label: { Image(systemName: "pencil") }
                             .buttonStyle(.borderless)
@@ -604,44 +634,53 @@ private struct MessageView: View {
                             .disabled(onEdit == nil)
                     }
                 }
+                UserAvatar()
             }
             .onHover { hovering = $0 }
             .contextMenu { Button("Edit") { startEditing() }.disabled(onEdit == nil) }
         } else {
-            VStack(alignment: .leading, spacing: 8) {
-                if !message.reasoning.isEmpty {
-                    DisclosureGroup(isExpanded: $showThoughts) {
-                        Text(message.reasoning)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 4)
-                    } label: {
-                        Label(live && message.content.isEmpty ? "Thinking…" : "Thoughts", systemImage: "brain")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                if !message.content.isEmpty { MarkdownText(text: message.content) }
-                if live && message.content.isEmpty && message.reasoning.isEmpty {
-                    ProgressView().controlSize(.small)
-                }
-                if let error = message.error {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                        .textSelection(.enabled)
-                }
-                if !live {
-                    HStack(spacing: 10) {
-                        if let stats = message.stats {
-                            Text(stats).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            HStack(alignment: .top, spacing: 10) {
+                ModelAvatar(name: modelName, size: 28)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(modelName).font(.subheadline.weight(.bold)).padding(.top, 4)
+                    if !message.reasoning.isEmpty {
+                        DisclosureGroup(isExpanded: $showThoughts) {
+                            Text(message.reasoning)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 4)
+                        } label: {
+                            Label(live && message.content.isEmpty ? "Thinking…" : "Thoughts", systemImage: "brain")
+                                .font(.callout.weight(.medium))
+                                .foregroundStyle(.secondary)
                         }
-                        if !message.content.isEmpty { CopyButton(text: message.content).font(.caption) }
+                        .padding(10)
+                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    if !message.content.isEmpty { MarkdownText(text: message.content) }
+                    if live && message.content.isEmpty && message.reasoning.isEmpty {
+                        ProgressView().controlSize(.small)
+                    }
+                    if let error = message.error {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                            .textSelection(.enabled)
+                            .padding(10)
+                            .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    if !live {
+                        HStack(spacing: 10) {
+                            if let stats = message.stats {
+                                Text(stats).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                            }
+                            if !message.content.isEmpty { CopyButton(text: message.content).font(.caption) }
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -870,7 +909,8 @@ private struct CodeBlock: View {
                     .padding(10)
             }
         }
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.cardBorder))
     }
 }
 

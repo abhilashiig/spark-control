@@ -46,7 +46,7 @@ private struct DeviceSettings: View {
                     TextField("Model port", value: d.backendPort, format: .number.grouping(.never))
                 }
             }
-            .formStyle(.grouped)
+            .page()
         } else {
             ContentUnavailableView {
                 Label("No Spark", systemImage: "server.rack")
@@ -193,7 +193,7 @@ struct DeviceSetupView: View {
                 DeviceFields(device: $device)
                 Section("Routes") { RouteChecksView(device: device) }
             }
-            .formStyle(.grouped)
+            .page()
             .scrollDisabled(true)
 
             HStack {
@@ -267,7 +267,7 @@ private struct GatewaySettingsView: View {
                 }
             }
         }
-        .formStyle(.grouped)
+        .page()
     }
 }
 
@@ -288,7 +288,7 @@ private struct GeneralSettings: View {
                     .disabled(state.benchResults.values.allSatisfy(\.isEmpty))
             }
         }
-        .formStyle(.grouped)
+        .page()
         .confirmationDialog("Clear all benchmark results?", isPresented: $confirmClearBench) {
             Button("Clear", role: .destructive) { state.clearBenchmarks() }
         } message: {
@@ -306,15 +306,19 @@ struct ShutdownButton: View {
     @State private var error: String?
 
     var body: some View {
-        HStack {
-            Button(role: .destructive) { confirm = true } label: {
-                Label("Shut Down Spark…", systemImage: "power")
+        Group {
+            if working {
+                ProgressView().controlSize(.small)
+            } else {
+                Button(role: .destructive) { confirm = true } label: { Image(systemName: "power") }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.red)
+                    .disabled(state.sshTarget == nil)
+                    .help("Shut Down Spark…")
+                    .accessibilityLabel("Shut Down Spark")
             }
-            .buttonStyle(.borderless)
-            .disabled(state.sshTarget == nil || working)
-            Spacer()
-            if working { ProgressView().controlSize(.small) }
         }
+        .frame(width: 18)
         .confirmationDialog("Shut down the Spark?", isPresented: $confirm) {
             Button("Shut Down", role: .destructive) {
                 working = true

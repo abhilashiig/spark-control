@@ -7,9 +7,11 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ### Added
 - Chat: a new chat is titled by its model from your first message. Your question is shown as the title until then.
+- Requests: search by model, client, endpoint, status or error.
 
 ### Changed
 - The menu bar icon is the new bolt in black and white, filled while a model runs.
+- A fresh look matching the iPhone app: rounded cards on a soft background, colourful model avatars with live status, coloured engine badges and sidebar icons, a redesigned Spark dashboard, and chat with avatars, gradient bubbles and a floating composer.
 
 ## [1.5.0] - 2026-11-12
 

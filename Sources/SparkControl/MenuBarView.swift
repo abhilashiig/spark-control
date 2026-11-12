@@ -9,6 +9,7 @@ struct MenuBarView: View {
         let models = state.config.recipes.filter(\.enabled)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
+                BoltTile(size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Spark").font(.headline)
                     Text(state.statusLine)
@@ -25,14 +26,14 @@ struct MenuBarView: View {
                 Spacer()
                 RouteBadge(route: state.route)
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
+            .card(padding: 12, radius: 14)
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
 
-            Divider().padding(.horizontal, 10)
-
-            Text("Models")
-                .font(.caption.weight(.semibold))
+            Text("MODELS")
+                .font(.caption2.weight(.bold))
+                .tracking(0.6)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 14)
                 .padding(.top, 8)
@@ -47,15 +48,7 @@ struct MenuBarView: View {
             ForEach(models) { r in
                 let phase = state.phase(for: r)
                 MenuRow(action: { state.start(r) }) {
-                    Group {
-                        switch phase {
-                        case .ready: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                        case .starting, .stopping: ProgressView().controlSize(.mini)
-                        case .failed: Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                        default: Image(systemName: "circle").foregroundStyle(.tertiary)
-                        }
-                    }
-                    .frame(width: 16)
+                    ModelAvatar(name: r.name, phase: phase, size: 22)
                     Text(r.name).lineLimit(1)
                     Spacer()
                     if r.priceIn + r.priceOut > 0 {
@@ -69,13 +62,13 @@ struct MenuBarView: View {
 
             ForEach(state.runningRecipes) { r in
                 MenuRow(action: { state.stop(r) }) {
-                    Image(systemName: "stop.circle").frame(width: 16)
+                    IconTile(symbol: "stop.fill", tint: .red, size: 22)
                     Text("Stop \(r.name)")
                 }
                 .disabled(state.isBusy)
             }
             MenuRow(action: { copy(state.apiBaseURL) }) {
-                Image(systemName: "link").frame(width: 16)
+                IconTile(symbol: "link", tint: .purple, size: 22)
                 Text("Copy API URL")
                 Spacer()
                 Text(state.apiBaseURL.replacingOccurrences(of: "http://", with: ""))
@@ -85,28 +78,28 @@ struct MenuBarView: View {
                 openWindow(id: "main")
                 NSApp.activate()
             }) {
-                Image(systemName: "macwindow").frame(width: 16)
+                IconTile(symbol: "macwindow", tint: .brand, size: 22)
                 Text("Open Spark Control")
             }
             MenuRow(action: {
                 openSettings()
                 NSApp.activate()
             }) {
-                Image(systemName: "gearshape").frame(width: 16)
+                IconTile(symbol: "gearshape.fill", tint: .gray, size: 22)
                 Text("Settings…")
             }
 
             Divider().padding(.horizontal, 10).padding(.vertical, 5)
 
             MenuRow(action: { NSApp.terminate(nil) }) {
-                Image(systemName: "power").frame(width: 16)
+                IconTile(symbol: "power", tint: .secondary, size: 22)
                 Text("Quit Spark Control")
                 Spacer()
                 Text("v" + Bundle.main.appVersion).font(.caption).foregroundStyle(.tertiary)
             }
         }
         .padding(.bottom, 6)
-        .frame(width: 300)
+        .frame(width: 310)
     }
 
     private func copy(_ s: String) {
@@ -126,16 +119,17 @@ private struct MenuRow<Content: View>: View {
         Button(action: action) {
             HStack(spacing: 8) { content }
                 .padding(.horizontal, 8)
-                .padding(.vertical, 5)
+                .padding(.vertical, 4)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(isEnabled ? .primary : .secondary)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(hover && isEnabled ? Color.primary.opacity(0.1) : .clear)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(hover && isEnabled ? Color.brand.opacity(0.14) : .clear)
         )
+        .animation(.easeOut(duration: 0.12), value: hover)
         .onHover { hover = $0 }
         .padding(.horizontal, 6)
     }

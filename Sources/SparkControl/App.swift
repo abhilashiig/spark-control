@@ -11,12 +11,13 @@ struct SparkControlApp: App {
                 .environment(state)
                 .environment(chats)
                 .frame(minWidth: 780, minHeight: 500)
+                .tint(.brand)
         }
         .defaultSize(width: 960, height: 640)
         .commands { CommandGroup(replacing: .newItem) {} }
 
         MenuBarExtra {
-            MenuBarView().environment(state)
+            MenuBarView().environment(state).tint(.brand)
         } label: {
             switch state.phase {
             case .failed, .offline: Image(systemName: "exclamationmark.triangle")
@@ -26,7 +27,7 @@ struct SparkControlApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView().environment(state)
+            SettingsView().environment(state).tint(.brand)
         }
     }
 }
@@ -62,30 +63,17 @@ enum MenuIcon {
     }
 }
 
-struct StatusDot: View {
-    let phase: Phase
-    var body: some View {
-        Circle().fill(color).frame(width: 8, height: 8)
-    }
-    private var color: Color {
-        switch phase {
-        case .ready: .green
-        case .starting, .stopping: .orange
-        case .failed, .offline: .red
-        case .stopped: Color.secondary.opacity(0.35)
-        }
-    }
-}
-
 struct RouteBadge: View {
     let route: Route?
     var body: some View {
         Label(route?.shortLabel ?? "Offline", systemImage: route?.symbol ?? "bolt.horizontal.circle")
-            .font(.caption.weight(.medium))
+            .font(.caption.weight(.semibold))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(route == nil ? Color.red.opacity(0.15) : Color.secondary.opacity(0.12), in: Capsule())
-            .foregroundStyle(route == nil ? Color.red : Color.secondary)
+            .background(tint.opacity(0.14), in: Capsule())
+            .foregroundStyle(tint)
+    }
+    private var tint: Color { route == nil ? .red : .green
     }
 }
 

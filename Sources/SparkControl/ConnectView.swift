@@ -45,7 +45,8 @@ struct ConnectView: View {
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
-                        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.cardBorder))
                     CopyButton(text: code).padding(8)
                 }
             } header: {
@@ -59,9 +60,9 @@ struct ConnectView: View {
                     Text("No enabled models.").foregroundStyle(.secondary)
                 }
                 ForEach(models) { r in
-                    HStack {
-                        StatusDot(phase: state.phase(for: r))
-                        Text(r.name)
+                    HStack(spacing: 10) {
+                        ModelAvatar(name: r.name, phase: state.phase(for: r), size: 24)
+                        Text(r.name).fontWeight(.medium)
                         Spacer()
                         Text(r.apiID).font(.body.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
                         CopyButton(text: r.apiID)
@@ -69,7 +70,7 @@ struct ConnectView: View {
                 }
             }
         }
-        .formStyle(.grouped)
+        .page()
         .navigationTitle("Connect")
     }
 

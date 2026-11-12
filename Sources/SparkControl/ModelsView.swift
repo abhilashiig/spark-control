@@ -45,7 +45,7 @@ struct ModelsView: View {
     var body: some View {
         let rows = rows
         VStack(spacing: 0) {
-            if let n = state.notice { NoticeBanner(text: n).padding(12) }
+            if let n = state.notice { NoticeBanner(text: n).padding(12).transition(.move(edge: .top).combined(with: .opacity)) }
             Table(rows, selection: $picked, sortOrder: sortOrder) {
                 TableColumn("") { r in actions(r.recipe) }.width(30)
                 TableColumn("Model", value: \.name) { r in name(r.recipe) }.width(min: 160, ideal: 220)
@@ -68,11 +68,13 @@ struct ModelsView: View {
                                            description: Text(search.isEmpty ? "Download one from an engine below." : ""))
                 }
             }
-            Divider()
-            // Scrolls inside a capped height: sized to its text, it pushed the window's content past its edges.
-            ScrollView { AddModelsHelp(selection: $selection) }
-                .frame(height: 240)
+            // Fixed height: sized to its text, it pushed the window's content past its edges.
+            AddModelsHelp(selection: $selection)
+                .frame(height: 150)
+                .background(Color.pageBackground)
+                .overlay(alignment: .top) { Divider() }
         }
+        .animation(.snappy, value: state.notice)
         .searchable(text: $search, placement: .toolbar, prompt: "Search models")
         .navigationTitle("Models")
     }
@@ -92,8 +94,9 @@ struct ModelsView: View {
     // MARK: Cells
 
     private func name(_ r: Recipe) -> some View {
-        HStack(spacing: 6) {
-            Text(r.name.isEmpty ? "Untitled" : r.name).fontWeight(.medium)
+        HStack(spacing: 8) {
+            ModelAvatar(name: r.name, phase: state.phase(for: r), size: 24)
+            Text(r.name.isEmpty ? "Untitled" : r.name).fontWeight(.semibold)
                 .foregroundStyle(r.enabled ? .primary : .secondary)
             Button { selection = .model(r.id) } label: { Image(systemName: "info.circle") }
                 .buttonStyle(.borderless)
@@ -175,39 +178,51 @@ struct ModelsView: View {
 /// Where new models come from, and what this app does with them.
 private struct AddModelsHelp: View {
     @Binding var selection: Pane?
+    @Environment(AppState.self) private var state
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Get More Models").font(.headline)
-            Text("Spark Control starts and stops models on your DGX Spark over SSH and serves the running ones to this Mac through one OpenAI-compatible API. This list and each model's settings are kept on the Spark, so every Mac using it sees the same models. Download new models from an engine, or add your own:")
-                .font(.callout).foregroundStyle(.secondary)
-            // No Grid or fixedSize here: either one beside the Table left the whole window blank on first launch.
-            VStack(alignment: .leading, spacing: 6) {
-                row("TensorFold", "square.stack.3d.up", .tensorfold,
-                    "Builds TensorFold has tested on one GB10, with speculative drafts and long contexts. A good default for one person chatting or coding.")
-                row("vLLM", "shippingbox", .vllm,
-                    "NVIDIA NVFP4 models in the official vLLM container, with MTP drafts. Pick it when several clients or agents send requests at once. The first start takes 10–15 minutes.")
-                row("Ollama", "magnifyingglass", .discovered,
-                    "Models you've already pulled with Ollama on the Spark. The widest choice of GGUF sizes, usually slower.")
-                row("ComfyUI", "photo.on.rectangle.angled", .comfy,
-                    "Image generation and editing, opened in your browser.")
+            HStack(spacing: 6) {
+                Text("Get More Models").font(.headline)
+                Image(systemName: "info.circle").foregroundStyle(.secondary)
+                    .help("Spark Control starts and stops models on your DGX Spark over SSH and serves the running ones to this Mac through one OpenAI-compatible API. This list and each model's settings are kept on the Spark, so every Mac using it sees the same models. Download new models from an engine, or add your own.")
             }
-            row("Custom", "plus.circle", nil,
-                "Anything else that serves an OpenAI-compatible API on the Spark (llama.cpp, SGLang, your own scripts), when a model or setting isn't in the catalogs. Give it a start and a stop command; they run in your Spark shell, so aliases work.")
+            // No Grid or fixedSize here: either one beside the Table left the whole window blank on first launch.
+            HStack(spacing: 10) {
+                tile("TensorFold", "square.stack.3d.up.fill", .indigo, .tensorfold, "Tested GB10 builds, drafts, long contexts",
+                     "Builds TensorFold has tested on one GB10, with speculative drafts and long contexts. A good default for one person chatting or coding.")
+                tile("vLLM", "shippingbox.fill", .teal, .vllm, "NVFP4 with MTP, many requests at once",
+                     "NVIDIA NVFP4 models in the official vLLM container, with MTP drafts. Pick it when several clients or agents send requests at once. The first start takes 10–15 minutes.")
+                tile("Ollama", "magnifyingglass", .brown, .discovered, "Models already pulled on the Spark",
+                     "Models you've already pulled with Ollama on the Spark. The widest choice of GGUF sizes, usually slower.")
+                tile("ComfyUI", "photo.on.rectangle.angled", .pink, .comfy, "Image generation and editing",
+                     "Image generation and editing, opened in your browser.")
+                tile("Custom", "plus", .gray, nil, "Any OpenAI-compatible server",
+                     "Anything else that serves an OpenAI-compatible API on the Spark (llama.cpp, SGLang, your own scripts), when a model or setting isn't in the catalogs. Give it a start and a stop command; they run in your Spark shell, so aliases work.")
+            }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    @Environment(AppState.self) private var state
-
     /// `pane` nil = a custom model: adds one and opens its page.
-    private func row(_ title: String, _ symbol: String, _ pane: Pane?, _ text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Button { selection = pane ?? .model(state.addRecipe()) } label: { Label(title, systemImage: symbol).frame(minWidth: 100, alignment: .leading) }
-                .buttonStyle(.link)
-            Text(text).font(.callout).foregroundStyle(.secondary)
+    private func tile(_ title: String, _ symbol: String, _ tint: Color, _ pane: Pane?, _ short: String, _ long: String) -> some View {
+        Button { selection = pane ?? .model(state.addRecipe()) } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                IconTile(symbol: symbol, tint: tint, size: 30)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.callout.weight(.semibold))
+                    Text(short).font(.caption).foregroundStyle(.secondary).lineLimit(2).multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+            }
+            .card(padding: 12, radius: 12)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(PressableStyle())
+        .help(long)
     }
 }
 
@@ -257,10 +272,12 @@ private struct IconButton: View {
     }
 }
 
-struct EngineBadge: View {
-    let name: String
-    var body: some View {
-        Text(name).font(.caption).padding(.horizontal, 6).padding(.vertical, 1)
-            .background(.quaternary, in: Capsule()).foregroundStyle(.secondary)
+/// Scales down a touch while pressed, for card-sized buttons.
+struct PressableStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
     }
 }

@@ -13,15 +13,16 @@ struct MainView: View {
         NavigationSplitView {
             List(selection: $selection) {
                 Section {
-                    Label("Chat", systemImage: "bubble.left.and.bubble.right").tag(Pane.chat)
+                    SidebarLabel("Chat", "bubble.left.and.bubble.right.fill", .brand).tag(Pane.chat)
                 }
                 Section("Models") {
-                    Label("All Models", systemImage: "square.grid.2x2").tag(Pane.models)
+                    SidebarLabel("All Models", "square.grid.2x2.fill", .sparkNavy).tag(Pane.models)
                     // Only what's running (or starting, stopping, failed); the rest is on the Models page.
                     ForEach(state.config.recipes.filter { state.phase(for: $0) != .stopped || selection == .model($0.id) }) { r in
                         HStack(spacing: 8) {
-                            StatusDot(phase: state.phase(for: r))
+                            ModelAvatar(name: r.name, phase: state.phase(for: r), size: 22)
                             Text(r.name.isEmpty ? "Untitled" : r.name)
+                                .lineLimit(1)
                                 .foregroundStyle(r.enabled ? .primary : .secondary)
                             Spacer()
                             if !r.enabled {
@@ -32,19 +33,19 @@ struct MainView: View {
                     }
                 }
                 Section("Engines") {
-                    Label("TensorFold", systemImage: "square.stack.3d.up").tag(Pane.tensorfold)
-                    Label("vLLM", systemImage: "shippingbox").tag(Pane.vllm)
-                    Label("Ollama", systemImage: "magnifyingglass").tag(Pane.discovered)
-                    Label("ComfyUI", systemImage: "photo.on.rectangle.angled").tag(Pane.comfy)
+                    SidebarLabel("TensorFold", "square.stack.3d.up.fill", .indigo).tag(Pane.tensorfold)
+                    SidebarLabel("vLLM", "shippingbox.fill", .teal).tag(Pane.vllm)
+                    SidebarLabel("Ollama", "magnifyingglass", .brown).tag(Pane.discovered)
+                    SidebarLabel("ComfyUI", "photo.on.rectangle.angled", .pink).tag(Pane.comfy)
                 }
                 Section("Activity") {
-                    Label("Spark", systemImage: "gauge.with.dots.needle.50percent").tag(Pane.spark)
-                    Label("Requests", systemImage: "arrow.left.arrow.right").tag(Pane.requests)
-                    Label("Usage", systemImage: "chart.bar.xaxis").tag(Pane.usage)
-                    Label("Logs", systemImage: "text.alignleft").tag(Pane.logs)
+                    SidebarLabel("Spark", "gauge.with.dots.needle.67percent", .orange).tag(Pane.spark)
+                    SidebarLabel("Requests", "arrow.left.arrow.right", .blue).tag(Pane.requests)
+                    SidebarLabel("Usage", "chart.bar.xaxis", .green).tag(Pane.usage)
+                    SidebarLabel("Logs", "text.alignleft", .gray).tag(Pane.logs)
                 }
                 Section("API") {
-                    Label("Connect", systemImage: "link").tag(Pane.connect)
+                    SidebarLabel("Connect", "link", .purple).tag(Pane.connect)
                 }
             }
             .navigationSplitViewColumnWidth(min: 210, ideal: 230)
@@ -86,34 +87,42 @@ struct MainView: View {
     }
 }
 
+private struct SidebarLabel: View {
+    let title: String
+    let symbol: String
+    let tint: Color
+    init(_ title: String, _ symbol: String, _ tint: Color) { (self.title, self.symbol, self.tint) = (title, symbol, tint) }
+    var body: some View {
+        Label { Text(title) } icon: { IconTile(symbol: symbol, tint: tint) }
+    }
+}
+
 private struct ConnectionFooter: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-            ShutdownButton()
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-            Divider()
-            HStack(spacing: 10) {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle().fill(tint.opacity(0.15)).frame(width: 30, height: 30)
                 Image(systemName: state.route?.symbol ?? "bolt.horizontal.circle")
-                    .foregroundStyle(state.route == nil ? Color.red : Color.secondary)
-                    .frame(width: 18)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(state.route?.label ?? "Spark Unreachable").font(.callout.weight(.medium))
-                    Text(state.route.flatMap { r in state.config.device?.host(r) } ?? "Check Settings")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                Spacer()
-                SettingsLink { Image(systemName: "gearshape") }
-                    .buttonStyle(.borderless)
-                    .help("Settings")
+                    .font(.footnote.weight(.semibold)).foregroundStyle(tint)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(state.route?.label ?? "Spark Unreachable").font(.callout.weight(.semibold))
+                Text(state.route.flatMap { r in state.config.device?.host(r) } ?? "Check Settings")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            SettingsLink { Image(systemName: "gearshape.fill").foregroundStyle(.secondary) }
+                .buttonStyle(.borderless)
+                .help("Settings")
+            ShutdownButton()
         }
+        .card(padding: 12, radius: 14)
+        .padding(10)
     }
+
+    private var tint: Color { state.route == nil ? .red : state.runningRecipes.isEmpty ? .secondary : .green }
 }

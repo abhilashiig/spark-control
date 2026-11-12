@@ -92,7 +92,7 @@ struct ModelView: View {
                 Button("Delete Model…", role: .destructive) { confirmDelete = true }
             }
         }
-        .formStyle(.grouped)
+        .page()
         .navigationTitle(r.wrappedValue.name.isEmpty ? "Untitled" : r.wrappedValue.name)
         .confirmationDialog("Delete “\(r.wrappedValue.name)”?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) {
@@ -113,15 +113,13 @@ private struct ModelHeader: View {
     var body: some View {
         let phase = state.phase(for: recipe)
         HStack(spacing: 14) {
-            Image(systemName: "cpu")
-                .font(.system(size: 24, weight: .medium))
-                .foregroundStyle(.tint)
-                .frame(width: 46, height: 46)
-                .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(recipe.name.isEmpty ? "Untitled" : recipe.name).font(.title3.weight(.semibold))
+            ModelAvatar(name: recipe.name, phase: phase, size: 52)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(recipe.name.isEmpty ? "Untitled" : recipe.name).font(.title2.weight(.bold))
+                    EngineBadge(name: state.engineName(recipe))
+                }
                 HStack(spacing: 6) {
-                    StatusDot(phase: phase)
                     Text(phase.label)
                         .foregroundStyle(phase.isFailure ? Color.red : Color.secondary)
                         .lineLimit(2)
@@ -135,17 +133,21 @@ private struct ModelHeader: View {
             if phase.busy {
                 ProgressView().controlSize(.small)
             } else if phase == .ready {
-                Button("Stop") { state.stop(recipe) }.controlSize(.large)
+                Button { state.stop(recipe) } label: { Label("Stop", systemImage: "stop.fill") }
+                    .buttonStyle(.bordered).tint(.red).controlSize(.large)
             } else {
-                Button(phase.isFailure ? "Try Again" : "Start") {
+                Button {
                     state.start(recipe)
+                } label: {
+                    Label(phase.isFailure ? "Try Again" : "Start", systemImage: phase.isFailure ? "arrow.clockwise" : "play.fill")
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.green)
                 .controlSize(.large)
                 .disabled(!recipe.enabled || recipe.startCommand.isEmpty || state.route == nil || state.isBusy)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
         .sheet(item: $keyTarget) { target in
             KeyLoginSheet(target: target) { state.start(recipe) }
         }
@@ -185,19 +187,6 @@ private struct MemoryField: View {
         } label: {
             Text("Memory needed")
             if recipe.memoryMeasured { Text("Measured").font(.caption) }
-        }
-    }
-}
-
-struct NoticeBanner: View {
-    @Environment(AppState.self) private var state
-    let text: String
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(VizColor.warning)
-            Text(text).fixedSize(horizontal: false, vertical: true)
-            Spacer()
-            Button { state.notice = nil } label: { Image(systemName: "xmark") }.buttonStyle(.borderless).help("Dismiss")
         }
     }
 }

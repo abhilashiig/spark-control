@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Changed
+- The menu bar icon is the new bolt in black and white, filled while a model runs.
+
 ## [1.5.0] - 2026-11-12
 
 ### Changed

@@ -33,36 +33,27 @@ struct SparkControlApp: App {
 
 // MARK: Shared bits
 
-/// The app icon's dial and spark, drawn as a black-and-white template so the menu bar tints it.
-/// The spark is filled while a model runs and outlined otherwise.
+/// The app icon's bolt, drawn as a black-and-white template so the menu bar tints it.
+/// The bolt is filled while a model runs and outlined otherwise.
 enum MenuIcon {
     static func image(running: Bool) -> NSImage {
         let img = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { r in
             NSColor.black.set()
-            let ring = NSBezierPath(ovalIn: r.insetBy(dx: 1.5, dy: 1.5))
-            ring.lineWidth = 1.5
-            ring.stroke()
-            // Four points joined by curves pulled toward the centre, like the app icon's spark.
-            let c = NSPoint(x: r.midX, y: r.midY), reach = 5.6
-            let tips = (0..<4).map { i in
-                let a = Double(i) * .pi / 2 + .pi / 2
-                return NSPoint(x: c.x + reach * cos(a), y: c.y + reach * sin(a))
+            // The bolt from the icon's 1024 grid, centred and scaled to 15.5 pt tall.
+            let pts: [(CGFloat, CGFloat)] = [(594, 292), (382, 568), (504, 568), (446, 732), (654, 444), (530, 444)]
+            let s = 15.5 / 440, c = NSPoint(x: r.midX, y: r.midY)
+            let bolt = NSBezierPath()
+            for (i, (x, y)) in pts.enumerated() {
+                let p = NSPoint(x: c.x + (x - 518) * s, y: c.y - (y - 512) * s)
+                i == 0 ? bolt.move(to: p) : bolt.line(to: p)
             }
-            let spark = NSBezierPath()
-            spark.move(to: tips[0])
-            for i in 1...4 {
-                let from = tips[i - 1], to = tips[i % 4]
-                // Pulled 70% of the way to the centre: a spark with body, not a thin cross.
-                let pull = NSPoint(x: c.x + ((from.x + to.x) / 2 - c.x) * 0.3, y: c.y + ((from.y + to.y) / 2 - c.y) * 0.3)
-                spark.curve(to: to, controlPoint1: pull, controlPoint2: pull)
-            }
-            spark.close()
+            bolt.close()
+            bolt.lineJoinStyle = .round
             if running {
-                spark.fill()
+                bolt.fill()
             } else {
-                spark.lineWidth = 1.1
-                spark.lineJoinStyle = .round
-                spark.stroke()
+                bolt.lineWidth = 1.2
+                bolt.stroke()
             }
             return true
         }

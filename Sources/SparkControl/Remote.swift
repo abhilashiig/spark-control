@@ -22,6 +22,27 @@ enum SSH {
         "-o", "StrictHostKeyChecking=accept-new",
     ]
 
+    /// Commands share one connection per host, kept open a minute after the last: no new login (key exchange,
+    /// auth, session, auth.log line) on the Spark for every reading, and ~0.2 s instead of ~0.6 s per command.
+    /// The path lives in ~/.ssh because macOS caps socket paths near 104 characters; %C is a hash of host and user.
+    /// LogLevel=ERROR keeps ssh's notices (e.g. two first commands racing to open it) out of command output.
+    private static let shared = [
+        "-o", "ControlMaster=auto",
+        "-o", "ControlPath=~/.ssh/spark-control-%C",
+        "-o", "ControlPersist=60",
+        "-o", "LogLevel=ERROR",
+    ]
+
+    /// Closes the shared connection to `target`, e.g. after a network change left it pointing at a dead route.
+    static func disconnect(_ target: String) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        p.arguments = shared + ["-O", "exit", target]
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        try? p.run()
+    }
+
     static func quote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 
     /// Wraps a command so your aliases and shell functions work, exactly as typed in a terminal.
@@ -34,7 +55,7 @@ enum SSH {
         await withCheckedContinuation { cont in
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-            p.arguments = options + [target, remote]
+            p.arguments = options + shared + [target, remote]
             let pipe = Pipe()
             p.standardOutput = pipe
             p.standardError = pipe

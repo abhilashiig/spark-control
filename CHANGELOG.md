@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Changed
+- Commands to the Spark share one SSH connection instead of logging in each time: about 0.2 s per command instead of 0.6 s, and the Spark no longer records a new login every few seconds. It's reopened after a network change.
+
 ## [1.3.0] - 2026-11-12
 
 ### Added

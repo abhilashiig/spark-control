@@ -207,6 +207,7 @@ final class AppState {
     }
 
     private func networkChanged() {
+        if let d = config.device { Route.allCases.forEach { SSH.disconnect(d.sshTarget($0)) } }
         debounce?.cancel()
         debounce = Task {
             try? await Task.sleep(for: .seconds(1))

@@ -110,11 +110,11 @@ let tfIDs = TensorFold.catalog.map(\.id)
 check(Set(tfIDs).count == tfIDs.count, "catalog ids are unique")
 check(TensorFold.catalog.allSatisfy { m in ([m.repo] + (m.drafter.map { [$0] } ?? [])).allSatisfy { $0.revision.map { $0.count == 40 } ?? true } },
       "pinned revisions are full commit hashes")
-let q27 = TensorFold.model("qwen3.8-27b")!, q36 = TensorFold.model("qwen3.6-35b-a3b-nvfp4")!
+let q27 = TensorFold.model("qwen3.8-27b")!, q36 = TensorFold.model("qwen3.6-35b-a3b")!
 let q27Start = TensorFold.startCommand(q27, binary: TensorFold.managedBinary, port: 18300)
 check(q27Start.contains("--drafter z-lab/Qwen3.8-27B-DFlash2") && q27Start.contains("--port 18300") && q27Start.contains("--api-key-file"),
       "drafter, port and key are always passed")
-check(q27.downloads.count == 2 && q36.downloads.count == 1 && TensorFold.startCommand(q36, binary: "tf", port: 1).contains("--drafter nvidia/Qwen3.6-35B-A3B-NVFP4"),
+check(q27.downloads.count == 2 && q36.downloads.count == 1 && TensorFold.startCommand(q36, binary: "tf", port: 1).contains("--drafter TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP"),
       "a separate drafter is downloaded; a self-drafter is only a flag")
 check(TensorFold.downloadScript(q27, binary: "tf").contains(#"pull '\''TensorFold/Qwen3.8-27B-MLX-4bit'\'' && "$TF" pull '\''z-lab/Qwen3.8-27B-DFlash2'\'' && touch"#),
       "model and drafter download as one job, marked done only when both finish")
@@ -188,7 +188,7 @@ let off = TensorFold.withDrafts(q36Start, false)
 check(TensorFold.draftsOn(q36Start) && !TensorFold.draftsOn(off) && off.contains("--drafter ") && TensorFold.withDrafts(off, true) == q36Start
       && TensorFold.withDrafts(off, false) == off, "drafts off adds --no-drafts once and keeps the drafter; on removes it")
 check(q36mlx.drafts == "MTP" && q27.drafts == "DFlash drafter" && TensorFold.model("lfm2.5-24b-a2b")!.drafts == nil
-      && TensorFold.model("qwen3.6-35b-a3b-nvfp4")!.drafts == "MTP", "draft source per model")
+      && TensorFold.model("qwen3.6-35b-a3b-nvfp4") == nil, "draft source per model; the NVFP4 Qwen3.6 is gone (TensorFold can't run it)")
 
 let fnNvfp4 = TensorFold.model("qwen3.8-flash-next-nvfp4")!
 check(fnNvfp4.untested && fnNvfp4.drafts == "MTP" && !fnNvfp4.yarn && fnNvfp4.downloads.map(\.spec) == ["nvidia/Qwen3.8-Flash-Next-NVFP4@fc694b54fb0174e0913e6adf86691ef85a4ead47"]

@@ -77,10 +77,6 @@ enum TensorFold {
               // server reports "drafts: copies only" (checked on a GB10 with 1.2.6).
               drafter: Repo(id: "TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP"),
               note: "MLX 4-bit; MTP drafts from the checkpoint itself.", yarn: true, mtp: true),
-        Model(id: "qwen3.6-35b-a3b-nvfp4", name: "Qwen3.6 35B-A3B NVFP4",
-              repo: Repo(id: "nvidia/Qwen3.6-35B-A3B-NVFP4", revision: "1355db6a052410cfd62085d94b58866fd0f2c3c5"),
-              drafter: Repo(id: "nvidia/Qwen3.6-35B-A3B-NVFP4"),
-              note: "NVIDIA NVFP4; MTP drafts from the checkpoint itself.", yarn: true, mtp: true),
         Model(id: "nemotron-3.5-lightning", name: "Nemotron 3.5 Lightning 30B-A3B",
               repo: Repo(id: "TensorFold/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-MLX-4bit"),
               note: "MLX 4-bit; includes its MTP head.", mtp: true),

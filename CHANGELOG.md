@@ -5,6 +5,14 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-12
+
+### Changed
+- Models page lists only the models you've added to Spark Control. Downloaded but not-added models and image models stay on their engine's page, so the Text/Image filter is gone.
+
+### Removed
+- Qwen3.6 35B-A3B NVFP4 from the TensorFold list: TensorFold can't run it. It's still available under vLLM.
+
 ## [1.2.0] - 2026-11-12
 
 ### Added

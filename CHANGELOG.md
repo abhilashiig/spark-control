@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Fixed
+- Spark charts: time labels no longer pile on top of each other when the history spans many minutes.
+
 ## [1.6.0] - 2026-11-12
 
 ### Added

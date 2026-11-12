@@ -5,6 +5,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-12
+
 ### Added
 - Chat: a new chat is titled by its model from your first message. Your question is shown as the title until then.
 - Requests: search by model, client, endpoint, status or error.

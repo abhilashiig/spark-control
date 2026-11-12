@@ -5,6 +5,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-12
+
 ### Added
 - Connect → Coding Tools adds Spark Control as a provider to Kilo Code, Pi and Hermes with one click, listing your enabled models with their prices and whether each reasons and takes images. Kilo Code is set up to show each request's cost. Tools you've added are kept up to date as models change (can be turned off); the previous config is kept as a `.spark-control.bak` file.
 - Requests and Usage show which app sent each request: Kilo Code, Pi, Hermes (set up from Coding Tools) and Chat by name, any other app by the name it sends (X-Title or its User-Agent). Usage has a By Client breakdown.

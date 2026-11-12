@@ -7,6 +7,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ### Changed
 - Chat: scanned PDFs (no selectable text) are attached as one image per page, up to 20 pages, instead of failing. The model needs image input to read them.
+- New app icon: a glowing green bolt on dark glass.
 
 ## [1.4.0] - 2026-11-12
 

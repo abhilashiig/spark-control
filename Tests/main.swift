@@ -133,7 +133,7 @@ func bash(_ script: String, env: [String: String] = [:], syntaxOnly: Bool = fals
 }
 for (name, s) in [("status", TensorFold.statusScript()), ("install", TensorFold.installScript()),
                   ("uninstall", TensorFold.uninstallScript(models: TensorFold.catalog)), ("download", TensorFold.downloadScript(q27, binary: "tf")),
-                  ("cancel", TensorFold.cancelScript(q27.id)), ("delete", TensorFold.deleteScript(q27)), ("key", TensorFold.apiKeyScript),
+                  ("cancel", TensorFold.cancelScript(q27)), ("delete", TensorFold.deleteScript(q27)), ("key", TensorFold.apiKeyScript),
                   ("stop", TensorFold.stopCommand), ("manual", TensorFold.manualSteps)] {
     let (code, out) = bash(s, syntaxOnly: true)
     check(code == 0, "\(name) script parses: \(out)")
@@ -233,15 +233,5 @@ try! Data(Benchmark.script.utf8).write(to: py)
 let pyCheck = bash("python3 -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())' \(py.path)", env: ["PATH": "/usr/bin:/bin:/opt/homebrew/bin"])
 try? FileManager.default.removeItem(at: py)
 check(pyCheck.0 == 0, "benchmark script is valid Python: \(pyCheck.1)")
-
-// Spark recipes
-let flashR = SparkRecipes.entry("qwen3.8-flash-next")!
-check(flashR.startCommand(port: 18301) == "cd ~/qwen3.8-Flash-DGX && ./flash serve default PORT=18301 && ./flash wait"
-      && SparkRecipes.entry("qwen3.8-27b")!.startCommand(port: 1).hasSuffix("PORT=1 ./start.sh"), "recipe start commands get the port")
-check(SparkRecipes.catalog.allSatisfy { $0.commit.count == 40 } && Set(SparkRecipes.catalog.map(\.key)).isDisjoint(with: tfIDs),
-      "recipes are pinned and their records don't clash with TensorFold models")
-check(bash(SparkRecipes.setupScript(flashR), syntaxOnly: true).0 == 0, "recipe setup script parses")
-let rst = TensorFold.parseStatus("RDIR|qwen3.8-flash-next|b0aa8b7\nRDIR|qwen3.8-27b|\nMODEL|recipe-qwen3.8-27b|running|5|› Running")
-check(rst.recipeHeads == ["qwen3.8-flash-next": "b0aa8b7"] && rst.models["recipe-qwen3.8-27b"]?.download == .running, "recipe status parses")
 
 print("All checks passed")

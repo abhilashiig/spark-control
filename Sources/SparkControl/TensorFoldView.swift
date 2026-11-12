@@ -29,10 +29,7 @@ extension AppState {
 
     func tfLoadSizes() async {
         for m in TensorFold.catalog where tfSizes[m.id] == nil {
-            if let size = await TensorFold.downloadSize(m.downloads) { tfSizes[m.id] = size }
-        }
-        for e in SparkRecipes.catalog where tfSizes[e.key] == nil {
-            if let size = await TensorFold.downloadSize(e.weights) { tfSizes[e.key] = size }
+            if let size = await TensorFold.downloadSize(m) { tfSizes[m.id] = size }
         }
     }
 
@@ -79,7 +76,7 @@ extension AppState {
     }
 
     func tfCancel(_ m: TensorFold.Model) async {
-        _ = await tfRun(TensorFold.cancelScript(m.id), timeout: 30)
+        _ = await tfRun(TensorFold.cancelScript(m), timeout: 30)
         event("Cancelled downloading \(m.name)")
         await tfRefresh()
     }
@@ -124,41 +121,6 @@ extension AppState {
     }
 }
 
-// MARK: Spark recipes
-
-extension AppState {
-    func recipeSetUp(_ e: SparkRecipes.Entry) async {
-        event("Setting up \(e.name) from \(e.repoName)")
-        let res = await tfRun(SparkRecipes.setupScript(e), timeout: 30)
-        if res?.code != 0 { event("Couldn't start the setup: \(res?.output ?? "Spark unreachable")") }
-        await tfRefresh()
-    }
-
-    func recipeCancel(_ e: SparkRecipes.Entry) async {
-        _ = await tfRun(TensorFold.cancelScript(e.key), timeout: 30)
-        event("Cancelled setting up \(e.name)")
-        await tfRefresh()
-    }
-
-    /// Also finds a model the user added by hand that runs the recipe's folder.
-    func recipeModelID(_ e: SparkRecipes.Entry) -> UUID? {
-        config.recipes.first { $0.sparkRecipe == e.id || $0.startCommand.contains(e.dir) }?.id
-    }
-
-    func recipeAdd(_ e: SparkRecipes.Entry) -> UUID? {
-        guard let device = config.device else { return nil }
-        let base = "\(e.name) (\(e.engine.split(separator: " ").first ?? ""))"
-        let name = ([base] + (2...9).map { "\(base) \($0)" }).first { n in !config.recipes.contains { $0.answers(to: n) } } ?? base
-        var r = Recipe(name: name, startCommand: e.startCommand(port: device.backendPort), stopCommand: e.stopCommand,
-                       upstreamModel: e.served)
-        r.port = device.backendPort
-        r.timeout = 1800
-        r.sparkRecipe = e.id
-        config.recipes.append(r)
-        return r.id
-    }
-}
-
 // MARK: Views
 
 struct TensorFoldView: View {
@@ -184,14 +146,6 @@ struct TensorFoldView: View {
             }
 
             Section {
-                ForEach(SparkRecipes.catalog) { e in RecipeRow(entry: e, selection: $selection) }
-            } header: {
-                Text("Spark Recipes")
-            } footer: {
-                Text("Community setups tuned for one GB10, each pinned to a tested commit. Set Up clones the repo into your home folder on the Spark and runs its own setup (Docker image build and weights, detached, so it keeps going if the Mac sleeps). A folder that's already there is used as it is.")
-            }
-
-            Section {
                 ForEach(TensorFold.catalog.filter { !$0.untested }) { m in
                     ModelRow(model: m, selection: $selection, deleting: $deleting)
                 }
@@ -212,7 +166,7 @@ struct TensorFoldView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Catalog")
+        .navigationTitle("TensorFold")
         .toolbar {
             Button { Task { await state.tfRefresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                 .disabled(state.route == nil)
@@ -366,7 +320,19 @@ private struct ModelRow: View {
         }
     }
 
-    private func progress(_ bytes: Int64, of size: Int64?) -> some View { SizeProgress(bytes: bytes, size: size) }
+    /// "12.4 GB of 41.8 GB" with a bar, or just the bytes so far while the full size is unknown.
+    @ViewBuilder private func progress(_ bytes: Int64, of size: Int64?) -> some View {
+        let have = bytes.formatted(.byteCount(style: .file))
+        if let size, size > 0 {
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(have) of \(size.formatted(.byteCount(style: .file)))").foregroundStyle(.secondary).monospacedDigit()
+                ProgressView(value: Double(min(bytes, size)), total: Double(size)).frame(width: 120)
+            }
+        } else {
+            ProgressView().controlSize(.small)
+            if bytes > 0 { Text(have).foregroundStyle(.secondary).monospacedDigit() }
+        }
+    }
 
     @ViewBuilder private func addOrOpen(_ noEngine: Bool) -> some View {
         if let id = state.tfRecipeID(model) {
@@ -381,93 +347,6 @@ private struct ModelRow: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(noEngine || adding)
-        }
-    }
-}
-
-/// "12.4 GB of 41.8 GB" with a bar, or just the bytes so far while the full size is unknown.
-private struct SizeProgress: View {
-    let bytes: Int64
-    let size: Int64?
-
-    var body: some View {
-        let have = bytes.formatted(.byteCount(style: .file))
-        if let size, size > 0 {
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(have) of \(size.formatted(.byteCount(style: .file)))").foregroundStyle(.secondary).monospacedDigit()
-                ProgressView(value: Double(min(bytes, size)), total: Double(size)).frame(width: 120)
-            }
-        } else {
-            ProgressView().controlSize(.small)
-            if bytes > 0 { Text(have).foregroundStyle(.secondary).monospacedDigit() }
-        }
-    }
-}
-
-private struct RecipeRow: View {
-    @Environment(AppState.self) private var state
-    let entry: SparkRecipes.Entry
-    @Binding var selection: Pane?
-
-    var body: some View {
-        let st = state.tf.models[entry.key] ?? .init()
-        let head = state.tf.recipeHeads[entry.id]
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(entry.name).font(.body.weight(.medium))
-                    Text(entry.engine).font(.caption).padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(.quaternary, in: .capsule)
-                }
-                Text(entry.note).font(.callout).foregroundStyle(.secondary)
-                Text(folderLine(head))
-                    .font(.caption.monospaced()).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
-                if st.download == .running || st.download == .failed, !st.message.isEmpty {
-                    Text(st.message)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(st.download == .failed ? Color.red : Color.secondary)
-                        .lineLimit(2)
-                }
-            }
-            Spacer()
-            actions(st, cloned: head != nil)
-        }
-        .padding(.vertical, 3)
-    }
-
-    private func folderLine(_ head: String?) -> String {
-        let pinned = entry.commit.prefix(7)
-        guard let head else { return "\(entry.repoName) @ \(pinned)" }
-        return head == entry.commit ? "~/\(entry.dir) @ \(pinned)" : "~/\(entry.dir) @ \(head.prefix(7)) (yours; tested at \(pinned))"
-    }
-
-    @ViewBuilder private func actions(_ st: TensorFold.ModelStatus, cloned: Bool) -> some View {
-        let size = state.tfSizes[entry.key]
-        let weightsHere = size.map { st.bytes > 0 && st.bytes >= $0 * 99 / 100 } ?? false
-        let offline = state.route == nil
-        switch st.download {
-        case .running:
-            SizeProgress(bytes: st.bytes, size: size)
-            Button("Cancel") { Task { await state.recipeCancel(entry) } }
-        default:
-            if weightsHere {
-                Label("On Spark", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-            } else if st.bytes > 0 {
-                SizeProgress(bytes: st.bytes, size: size)
-            } else if let size {
-                Text(size.formatted(.byteCount(style: .file))).foregroundStyle(.secondary).monospacedDigit()
-            }
-            if st.download != .done {
-                Button(st.download == .failed ? "Retry" : "Set Up") { Task { await state.recipeSetUp(entry) } }
-                    .disabled(offline)
-                    .help("Clones the repo if needed and runs \(entry.setup) on the Spark")
-            }
-            if let id = state.recipeModelID(entry) {
-                Button("Open") { selection = .model(id) }
-            } else if st.download == .done || (cloned && weightsHere) {
-                Button("Add Model") { if let id = state.recipeAdd(entry) { selection = .model(id) } }
-                    .buttonStyle(.borderedProminent)
-            }
         }
     }
 }

@@ -82,8 +82,6 @@ struct Recipe: Codable, Identifiable, Hashable {
     var rules: [ParamRule] = []
     /// Set for models added from the TensorFold catalog: the catalog id.
     var tensorfold: String?
-    /// Set for models added from a Spark recipe: the recipe id.
-    var sparkRecipe: String?
     /// Sent to the backend as a bearer token, replacing the client's.
     var backendKey: String?
 

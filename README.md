@@ -44,8 +44,4 @@ and the app installs your key. The password is passed to ssh through a pipe and 
   without downloading again), and "X of Y" with a bar for partial or running downloads.
   Each TensorFold model's page has a Context picker: TensorFold's default, the model's full trained window (the default
   for new models; 262k for Super VL), or YaRN ×2/×4 on the Qwen3.6 models, written into the start command's flags.
-- **Spark Recipes** (Catalog): community setups tuned for one GB10, used where they beat the stock engines on a model:
-  blazux's patched vLLM for Qwen3.8 Flash Next and MiaAI-Lab's patched TensorFold for Qwen3.8 27B, each pinned to a
-  tested commit. Set Up clones into `~/<repo>` on the Spark (an existing folder is used as it is) and runs the recipe's
-  own setup detached; Add Model serves it with the recipe's start and stop scripts on the Spark's port.
 - **Data**: `~/Library/Application Support/Spark Control/` (`config.json`, `usage.jsonl`, `chats.json`).

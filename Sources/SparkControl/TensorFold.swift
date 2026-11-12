@@ -154,8 +154,6 @@ enum TensorFold {
         var engine = Engine.none
         var freeBytes: Int64?
         var models: [String: ModelStatus] = [:]
-        /// Spark recipe id → the commit its folder is at, for folders that exist.
-        var recipeHeads: [String: String] = [:]
     }
 
     static func statusScript() -> String {
@@ -191,7 +189,7 @@ enum TensorFold {
         for m in catalog {
             s += "m \(SSH.quote(m.id)) " + m.downloads.map { SSH.quote($0.cacheName + "@" + $0.snapshot) }.joined(separator: " ") + "\n"
         }
-        return s + SparkRecipes.statusLines
+        return s
     }
 
     static func parseStatus(_ output: String) -> Status {
@@ -205,8 +203,6 @@ enum TensorFold {
                 case "user": st.engine = .user(path: f[2], version: f[3])
                 default: st.engine = .none
                 }
-            case "RDIR" where f.count >= 3 && !f[2].isEmpty:
-                st.recipeHeads[f[1]] = f[2]
             case "FREE" where f.count >= 2:
                 st.freeBytes = Int64(f[1].trimmingCharacters(in: .whitespaces))
             case "MODEL" where f.count >= 4:
@@ -308,11 +304,10 @@ enum TensorFold {
         """
     }
 
-    /// Stops a detached download or recipe setup by its record id.
-    static func cancelScript(_ id: String) -> String {
+    static func cancelScript(_ m: Model) -> String {
         """
-        D="\(dataDir)"; p=$(cat "$D/\(id).pid" 2>/dev/null) || exit 0
-        pkill -TERM -P "$p"; kill "$p" 2>/dev/null; rm -f "$D/\(id).pid"; echo "Cancelled" >> "$D/\(id).log"
+        D="\(dataDir)"; p=$(cat "$D/\(m.id).pid" 2>/dev/null) || exit 0
+        pkill -TERM -P "$p"; kill "$p" 2>/dev/null; rm -f "$D/\(m.id).pid"; echo "Download cancelled" >> "$D/\(m.id).log"
         """
     }
 
@@ -432,10 +427,10 @@ enum TensorFold {
 
     // MARK: Sizes
 
-    /// Download size from the Hugging Face API, summed over the repos (a model and its drafter).
-    static func downloadSize(_ repos: [Repo]) async -> Int64? {
+    /// Download size from the Hugging Face API, summed over the model and its drafter.
+    static func downloadSize(_ m: Model) async -> Int64? {
         var total: Int64 = 0
-        for r in repos {
+        for r in m.downloads {
             guard let url = URL(string: "https://huggingface.co/api/models/\(r.id)/revision/\(r.revision ?? "main")?blobs=true"),
                   let (data, resp) = try? await URLSession.shared.data(from: url),
                   (resp as? HTTPURLResponse)?.statusCode == 200,

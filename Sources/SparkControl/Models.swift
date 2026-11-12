@@ -246,3 +246,84 @@ enum Speed {
         return Double(completion - 1) / decodeTime
     }
 }
+
+// MARK: Tolerant decoding
+//
+// Synthesized Decodable requires every key even when the property has a default, so adding a field made existing
+// configs unreadable (the app then set them aside and started from the seed). These decoders fall back to each
+// property's default for missing keys. Add new stored properties here too.
+
+private extension KeyedDecodingContainer {
+    func value<T: Decodable>(_ key: Key, or fallback: T) throws -> T { try decodeIfPresent(T.self, forKey: key) ?? fallback }
+}
+
+extension Recipe {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Recipe(name: "", startCommand: "", stopCommand: "")
+        id = try c.value(.id, or: d.id)
+        name = try c.value(.name, or: d.name)
+        startCommand = try c.value(.startCommand, or: d.startCommand)
+        stopCommand = try c.value(.stopCommand, or: d.stopCommand)
+        upstreamModel = try c.value(.upstreamModel, or: d.upstreamModel)
+        priceIn = try c.value(.priceIn, or: d.priceIn)
+        priceOut = try c.value(.priceOut, or: d.priceOut)
+        priceCache = try c.decodeIfPresent(Double.self, forKey: .priceCache)
+        enabled = try c.value(.enabled, or: d.enabled)
+        port = try c.decodeIfPresent(Int.self, forKey: .port)
+        timeout = try c.value(.timeout, or: d.timeout)
+        rules = try c.value(.rules, or: d.rules)
+        tensorfold = try c.decodeIfPresent(String.self, forKey: .tensorfold)
+        vllm = try c.decodeIfPresent(String.self, forKey: .vllm)
+        memoryGB = try c.decodeIfPresent(Double.self, forKey: .memoryGB)
+        memoryMeasured = try c.value(.memoryMeasured, or: d.memoryMeasured)
+        backendKey = try c.decodeIfPresent(String.self, forKey: .backendKey)
+    }
+}
+
+extension ParamRule {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = ParamRule()
+        id = try c.value(.id, or: d.id)
+        key = try c.value(.key, or: d.key)
+        kind = try c.value(.kind, or: d.kind)
+        value = try c.value(.value, or: d.value)
+    }
+}
+
+extension Device {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Device()
+        user = try c.value(.user, or: d.user)
+        baseHost = try c.value(.baseHost, or: d.baseHost)
+        mode = try c.value(.mode, or: d.mode)
+        localOverride = try c.value(.localOverride, or: d.localOverride)
+        tailscaleOverride = try c.value(.tailscaleOverride, or: d.tailscaleOverride)
+        backendPort = try c.value(.backendPort, or: d.backendPort)
+    }
+}
+
+extension GatewaySettings {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = GatewaySettings()
+        port = try c.value(.port, or: d.port)
+        allowLAN = try c.value(.allowLAN, or: d.allowLAN)
+        apiKey = try c.value(.apiKey, or: d.apiKey)
+        autoSwap = try c.value(.autoSwap, or: d.autoSwap)
+        injectCost = try c.value(.injectCost, or: d.injectCost)
+        streamUsage = try c.value(.streamUsage, or: d.streamUsage)
+    }
+}
+
+extension Config {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        device = try c.decodeIfPresent(Device.self, forKey: .device)
+        recipes = try c.value(.recipes, or: [])
+        gateway = try c.value(.gateway, or: GatewaySettings())
+        lastActive = try c.decodeIfPresent(UUID.self, forKey: .lastActive)
+    }
+}

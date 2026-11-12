@@ -311,4 +311,15 @@ check(legacy.migrated(defaultPort: 18300).startCommand.contains("--name spark-vl
       && legacyTF.migrated(defaultPort: 18300).stopCommand == TensorFold.stopCommand(port: 18300),
       "models added earlier are migrated to stop only themselves")
 
+// Configs saved by older versions still load: missing keys take their defaults.
+let oldConfig = #"{"recipes":[{"id":"6F9A4C3E-1B2D-4E5F-8A7B-9C0D1E2F3A4B","name":"Old","startCommand":"s","stopCommand":"t","enabled":false,"rules":[]}],"gateway":{"port":18081}}"#
+let old = try? JSONDecoder().decode(Config.self, from: Data(oldConfig.utf8))
+check(old?.recipes.first?.name == "Old" && old?.recipes.first?.enabled == false && old?.recipes.first?.memoryMeasured == false
+      && old?.recipes.first?.timeout == 600 && old?.gateway.port == 18081 && old?.gateway.autoSwap == true,
+      "a config from an older version loads, with defaults for newer fields")
+var full = Config.seed
+full.recipes[0].memoryGB = 42
+full.recipes[0].memoryMeasured = true
+check((try? JSONDecoder().decode(Config.self, from: JSONEncoder().encode(full))) == full, "a saved config reads back unchanged")
+
 print("All checks passed")

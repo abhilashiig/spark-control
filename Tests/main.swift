@@ -322,4 +322,14 @@ full.recipes[0].memoryGB = 42
 full.recipes[0].memoryMeasured = true
 check((try? JSONDecoder().decode(Config.self, from: JSONEncoder().encode(full))) == full, "a saved config reads back unchanged")
 
+// Model list shared through the Spark
+let mine = Recipe(name: "Mine", startCommand: "m", stopCommand: "")
+let theirs = Recipe(name: "Theirs", startCommand: "t --context 65536", stopCommand: "")
+let shared = SharedModels(updated: Date(timeIntervalSince1970: 100), recipes: [theirs])
+check(shared.merged(into: [mine], local: Date(timeIntervalSince1970: 200)) == nil
+      && shared.merged(into: [mine], local: Date(timeIntervalSince1970: 50)) == [theirs]
+      && shared.merged(into: Config.seed.recipes + [mine, theirs], local: nil) == [theirs, mine],
+      "the newer list wins; a Mac's first sync keeps its own models but not the starter ones")
+check((try? JSONDecoder().decode(SharedModels.self, from: JSONEncoder().encode(shared)))?.recipes == [theirs], "the shared list reads back")
+
 print("All checks passed")

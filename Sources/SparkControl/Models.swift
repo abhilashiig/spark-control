@@ -106,9 +106,11 @@ struct Recipe: Codable, Identifiable, Hashable {
 }
 
 extension Recipe {
-    /// Catalog models added before several could run: stop only their own server or container.
+    /// Models saved by older versions: catalog models gain a drafter their entry now names, and those added before
+    /// several could run stop only their own server or container.
     func migrated(defaultPort: Int) -> Recipe {
         var r = self
+        r.startCommand = TensorFold.addingDrafter(to: r.startCommand, model: r.tensorfold)
         if r.tensorfold != nil, r.stopCommand == TensorFold.legacyStopCommand {
             r.stopCommand = TensorFold.stopCommand(port: r.port ?? defaultPort)
         }
@@ -144,6 +146,27 @@ struct Config: Codable, Equatable {
         Recipe(name: "Qwen3.5 Abliterated", startCommand: "qwen35-start", stopCommand: "qwen35-stop",
                upstreamModel: "qwen35-abl"),
     ])
+}
+
+/// The model list kept on the Spark, so every Mac running Spark Control sees the same models with the same
+/// settings (context, drafts, memory, prices, rules…). `updated` is when a Mac last changed it.
+struct SharedModels: Codable {
+    static let path = "$HOME/.config/spark-control/models.json"
+    var updated: Date
+    var recipes: [Recipe]
+
+    /// What a Mac's list becomes after reading the Spark's, given when this Mac last changed or synced its own
+    /// (`local`, nil before its first sync). Nil = keep this Mac's list (and push it when newer).
+    /// On a Mac's first sync, its own models the Spark doesn't have yet are kept beside the Spark's.
+    func merged(into mine: [Recipe], local: Date?) -> [Recipe]? {
+        if let local, local >= updated { return nil }
+        guard local == nil else { return recipes }
+        let seed = Config.seed.recipes
+        return recipes + mine.filter { r in
+            !seed.contains { $0.name == r.name && $0.startCommand == r.startCommand }
+                && !recipes.contains { $0.id == r.id || $0.apiID == r.apiID }
+        }
+    }
 }
 
 struct UsageRecord: Codable {

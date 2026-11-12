@@ -12,10 +12,14 @@ New entries go under **Unreleased**; a release renames that section to the versi
   it's measured on first start when not set, and for vLLM it sets the container's memory share (now about 50 GB
   per model instead of 85% of the Spark). New catalog models get their own port, vLLM models their own container,
   and TensorFold's stop command stops only its own server.
-- Models page: your models and every catalog model (TensorFold, vLLM and ComfyUI image models) in one list,
-  grouped Running, On Spark and Available to Download, with Text/Image filters and search. Start, stop,
-  download and open from the list; a downloaded catalog model starts in one click. The sidebar lists only
-  running models under it.
+- Your models and each one's settings (context, MTP drafts, memory, prices, parameter rules…) are kept on the
+  Spark in `~/.config/spark-control/models.json`, so every Mac running Spark Control sees the same list.
+  A Mac connecting for the first time takes the Spark's list and adds any models of its own; after that the
+  most recent change wins.
+- Models page: a table of every model on the Spark, showing engine, status, context, drafts, memory, size on
+  disk and port, with Text/Image filters and search. Start and stop from the table, double-click for a model's
+  settings, and a downloaded catalog model starts in one click. New models are downloaded from each engine's
+  page, linked below the table with a short guide to picking one. The sidebar lists only running models under it.
 - Spark page (sidebar → Activity): live memory, CPU, GPU, power and temperatures with five-minute history
   charts, memory per process (ComfyUI, vLLM, TensorFold…), per-core load, and storage with what the model
   caches and Docker images take. The menu bar shows memory, GPU load and temperature.

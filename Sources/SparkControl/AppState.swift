@@ -98,10 +98,7 @@ final class AppState {
 
     init() {
         var loaded = Store.loadConfig()
-        for i in loaded.recipes.indices {
-            loaded.recipes[i].startCommand = TensorFold.addingDrafter(to: loaded.recipes[i].startCommand, model: loaded.recipes[i].tensorfold)
-            loaded.recipes[i] = loaded.recipes[i].migrated(defaultPort: loaded.device?.backendPort ?? 18300)
-        }
+        loaded.recipes = loaded.recipes.map { $0.migrated(defaultPort: loaded.device?.backendPort ?? 18300) }
         config = loaded
         usage = Store.loadUsage()
         showSetup = loaded.device == nil
@@ -116,6 +113,7 @@ final class AppState {
             while true {
                 try? await Task.sleep(for: .seconds(15))
                 if route == nil { await selectRoute() }
+                if Date().timeIntervalSince(lastPull) > 60 { await pullModels() }
                 await refresh()
                 if Date().timeIntervalSince(spark.last?.date ?? .distantPast) > 10 { await sampleSpark() }
             }
@@ -170,6 +168,10 @@ final class AppState {
     private func configChanged(from old: Config) {
         guard config != old else { return }
         Store.save(config)
+        if config.recipes != old.recipes && !applyingShared {
+            modelsUpdated = Date()
+            pushModels()
+        }
         if config.gateway.port != old.gateway.port || config.gateway.allowLAN != old.gateway.allowLAN {
             gateway?.start(port: config.gateway.port, lan: config.gateway.allowLAN)
         }
@@ -202,6 +204,68 @@ final class AppState {
         if new != route {
             route = new
             event(new.map { "Connected via \($0.label) (\(d.host($0)))" } ?? "Spark is unreachable on both routes")
+            if new != nil { await pullModels() }
+        }
+    }
+
+    // MARK: Shared model list
+
+    @ObservationIgnored private var applyingShared = false
+    @ObservationIgnored private var pushTask: Task<Void, Never>?
+    @ObservationIgnored private var lastPull = Date.distantPast
+
+    /// When this Mac last changed its model list or took the Spark's. Nil until its first sync.
+    private var modelsUpdated: Date? {
+        get { UserDefaults.standard.object(forKey: "modelsUpdated") as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: "modelsUpdated") }
+    }
+
+    /// Takes the Spark's model list when it's newer than this Mac's, or saves this Mac's there when it's older or missing.
+    /// ponytail: last change wins by clock; two Macs editing within the same minute can overwrite each other.
+    func pullModels() async {
+        guard let target = sshTarget else { return }
+        lastPull = Date()
+        let res = await SSH.run(target, "cat \"\(SharedModels.path)\" 2>/dev/null || true", timeout: 20)
+        guard res.code == 0 else { return }
+        guard let start = res.output.firstIndex(of: "{") else {
+            if modelsUpdated == nil { modelsUpdated = Date() }
+            pushModels()
+            return
+        }
+        guard let shared = try? JSONDecoder().decode(SharedModels.self, from: Data(res.output[start...].utf8)) else {
+            event("The model list on the Spark (~/.config/spark-control/models.json) couldn't be read; keeping this Mac's")
+            return
+        }
+        guard let merged = shared.merged(into: config.recipes, local: modelsUpdated) else {
+            if let m = modelsUpdated, m > shared.updated { pushModels() }
+            return
+        }
+        let port = config.device?.backendPort ?? 18300
+        applyingShared = true
+        config.recipes = merged.map { $0.migrated(defaultPort: port) }
+        applyingShared = false
+        modelsUpdated = shared.updated
+        event("Loaded \(shared.recipes.count) models from the Spark")
+        if merged.count != shared.recipes.count {
+            modelsUpdated = Date()
+            pushModels()
+        }
+    }
+
+    /// Saves the model list on the Spark, a moment after the last change.
+    private func pushModels() {
+        pushTask?.cancel()
+        pushTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let target = sshTarget, let stamp = modelsUpdated else { return }
+            let e = JSONEncoder()
+            e.outputFormatting = [.prettyPrinted, .sortedKeys]
+            guard let data = try? e.encode(SharedModels(updated: stamp, recipes: config.recipes)) else { return }
+            let file = SharedModels.path
+            let cmd = "mkdir -p \"$(dirname \"\(file)\")\" && cat > \"\(file).tmp\" && mv \"\(file).tmp\" \"\(file)\""
+            // Detached: writing the list to ssh's stdin may block until ssh connects.
+            let res = await Task.detached { await SSH.run(target, cmd, timeout: 30, input: String(decoding: data, as: UTF8.self)) }.value
+            if res.code != 0 { event("Couldn't save the model list on the Spark: \(res.output.trimmingCharacters(in: .whitespacesAndNewlines))") }
         }
     }
 

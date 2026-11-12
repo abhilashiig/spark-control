@@ -9,7 +9,7 @@ swift build -c release --arch arm64
 APP="build/Spark Control.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/arm64-apple-macosx/release/SparkControl "$APP/Contents/MacOS/"
+cp "$(swift build -c release --arch arm64 --show-bin-path)/SparkControl" "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 codesign --force --sign - "$APP"

@@ -221,8 +221,9 @@ final class ChatStore {
 
     static let importTypes: [UTType] = [.image, .pdf, .plainText, .text, .sourceCode, .json, .commaSeparatedText, .xml, .yaml, .data]
 
-    /// Reads a file into an attachment: images are downscaled to JPEG, PDFs and text become text.
-    static func attachment(from url: URL) -> Result<ChatAttachment, AppError> {
+    /// Reads a file into attachments: images are downscaled to JPEG, PDFs and text become text,
+    /// and scanned PDFs (no text layer) become one image per page.
+    static func attachments(from url: URL) -> Result<[ChatAttachment], AppError> {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let name = url.lastPathComponent
@@ -231,20 +232,34 @@ final class ChatStore {
             guard let image = NSImage(contentsOf: url), let jpeg = jpeg(image, maxSide: 2048) else {
                 return .failure(AppError("Couldn't read the image \(name)."))
             }
-            return .success(ChatAttachment(name: name, kind: .image, mime: "image/jpeg", payload: jpeg.base64EncodedString()))
+            return .success([ChatAttachment(name: name, kind: .image, mime: "image/jpeg", payload: jpeg.base64EncodedString())])
         }
         if type?.conforms(to: .pdf) == true {
-            guard let text = PDFDocument(url: url)?.string, !text.isEmpty else {
-                return .failure(AppError("\(name) has no extractable text (scanned PDF?)."))
+            guard let pdf = PDFDocument(url: url) else { return .failure(AppError("Couldn't read the PDF \(name).")) }
+            if let text = pdf.string, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return .success([ChatAttachment(name: name, kind: .text, payload: text)])
             }
-            return .success(ChatAttachment(name: name, kind: .text, payload: text))
+            let maxPages = 20
+            guard pdf.pageCount <= maxPages else {
+                return .failure(AppError("\(name) is a scanned PDF with \(pdf.pageCount) pages; at most \(maxPages) can be attached as images."))
+            }
+            var pages: [ChatAttachment] = []
+            for i in 0..<pdf.pageCount {
+                guard let page = pdf.page(at: i),
+                      let jpeg = jpeg(page.thumbnail(of: NSSize(width: 2048, height: 2048), for: .mediaBox), maxSide: 2048) else {
+                    return .failure(AppError("Couldn't render page \(i + 1) of \(name)."))
+                }
+                let label = pdf.pageCount == 1 ? name : "\(name) p\(i + 1)"
+                pages.append(ChatAttachment(name: label, kind: .image, mime: "image/jpeg", payload: jpeg.base64EncodedString()))
+            }
+            return pages.isEmpty ? .failure(AppError("\(name) has no pages.")) : .success(pages)
         }
         guard let data = try? Data(contentsOf: url) else { return .failure(AppError("Couldn't read \(name).")) }
         guard data.count <= 4 << 20 else { return .failure(AppError("\(name) is larger than 4 MB.")) }
         guard let text = String(data: data, encoding: .utf8) else {
             return .failure(AppError("\(name) isn't a text, PDF or image file."))
         }
-        return .success(ChatAttachment(name: name, kind: .text, payload: text))
+        return .success([ChatAttachment(name: name, kind: .text, payload: text)])
     }
 
     private static func jpeg(_ image: NSImage, maxSide: CGFloat) -> Data? {
@@ -497,8 +512,8 @@ private struct Conversation: View {
     private func add(_ urls: [URL]) {
         var failures: [String] = []
         for url in urls {
-            switch ChatStore.attachment(from: url) {
-            case .success(let a): pending.append(a)
+            switch ChatStore.attachments(from: url) {
+            case .success(let a): pending += a
             case .failure(let e): failures.append(e.localizedDescription)
             }
         }

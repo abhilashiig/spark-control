@@ -54,6 +54,14 @@ final class AppState {
     var usage: [UsageRecord]
     var discovered: [String]?
     var discovering = false
+    var tf = TensorFold.Status()
+    /// Set while the TensorFold engine is being installed or removed; its output goes here too.
+    var tfBusy = false
+    var tfLog: [String] = []
+    var tfSizes: [String: Int64] = [:]
+    /// The benchmark in progress: which model, its output so far, and its pid on the Spark.
+    var bench: (recipe: UUID, lines: [String], pid: Int?, running: Bool)?
+    var benchResults = Store.loadBenchmarks()
     var gatewayError: String?
     var showSetup: Bool
     var launchAtLogin = SMAppService.mainApp.status == .enabled {
@@ -73,7 +81,10 @@ final class AppState {
     @ObservationIgnored private var debounce: Task<Void, Never>?
 
     init() {
-        let loaded = Store.loadConfig()
+        var loaded = Store.loadConfig()
+        for i in loaded.recipes.indices {
+            loaded.recipes[i].startCommand = TensorFold.addingDrafter(to: loaded.recipes[i].startCommand, model: loaded.recipes[i].tensorfold)
+        }
         config = loaded
         usage = Store.loadUsage()
         showSetup = loaded.device == nil
@@ -99,9 +110,9 @@ final class AppState {
     var sshTarget: String? { route.flatMap { r in config.device?.sshTarget(r) } }
     /// Where a model is served: its own port, or the Spark's default.
     func backendBase(for r: Recipe?) -> String? { route.flatMap { config.device?.backendBase($0, port: r?.port) } }
-    private func port(of r: Recipe) -> Int { r.port ?? config.device?.backendPort ?? 18300 }
+    func port(of r: Recipe) -> Int { r.port ?? config.device?.backendPort ?? 18300 }
     var apiBaseURL: String { "http://localhost:\(config.gateway.port)/v1" }
-    var isBusy: Bool { transition != nil || phase.busy }
+    var isBusy: Bool { transition != nil || phase.busy || bench?.running == true }
 
     func phase(for r: Recipe) -> Phase { r.id == activeID ? phase : .stopped }
 
@@ -194,7 +205,8 @@ final class AppState {
             ?? Array(Set([device.backendPort] + config.recipes.map(port(of:)))).sorted()
         var found: (port: Int, info: Probe.Backend)?
         for p in ports {
-            if let info = await Probe.backend(device.backendBase(route, port: p)) { found = (p, info); break }
+            let key = (activeRecipe.map { [$0] } ?? config.recipes).first { port(of: $0) == p && $0.backendKey != nil }?.backendKey
+            if let info = await Probe.backend(device.backendBase(route, port: p), key: key) { found = (p, info); break }
         }
         guard transition == nil else { return }
         guard let (foundPort, info) = found else {
@@ -226,12 +238,12 @@ final class AppState {
 
     func start(_ r: Recipe) { Task { try? await switchTo(r) } }
 
-    func stop() {
-        Task {
-            try? await runTransition { [self] in
-                guard activeID != nil || external != nil else { return }
-                try await doStop()
-            }
+    func stop() { Task { await stopAndWait() } }
+
+    func stopAndWait() async {
+        try? await runTransition { [self] in
+            guard activeID != nil || external != nil else { return }
+            try await doStop()
         }
     }
 
@@ -246,6 +258,9 @@ final class AppState {
     /// Called by the gateway before forwarding a request.
     func ensureRunning(_ r: Recipe) async throws {
         while let t = transition { _ = try? await t.value }
+        if let b = bench, b.running, b.recipe != r.id {
+            throw AppError("A benchmark is running on \(config.recipes.first { $0.id == b.recipe }?.name ?? "another model"). Try again when it finishes.")
+        }
         if activeID == r.id {
             if phase != .ready { await refresh() }
             if phase == .ready { return }
@@ -300,7 +315,7 @@ final class AppState {
         let deadline = Date().addingTimeInterval(r.timeout)
         while Date() < deadline {
             try? await Task.sleep(for: .seconds(2))
-            if let info = await Probe.backend(base), info.serves(r.upstreamModel) {
+            if let info = await Probe.backend(base, key: r.backendKey), info.serves(r.upstreamModel) {
                 learnModelID(r, info)
                 phase = .ready
                 event("\(r.name) is ready")
@@ -342,13 +357,36 @@ final class AppState {
         if res.code != 0 { event("Stop command exited with code \(res.code)") }
         // Wait for the port to free up so the next model can bind it.
         for _ in 0..<30 {
-            if await Probe.backend(base) == nil { break }
+            if await Probe.backend(base, key: r.backendKey) == nil { break }
             try? await Task.sleep(for: .seconds(2))
         }
         activeID = nil
         external = nil
         phase = .stopped
         event("\(r.name) stopped")
+    }
+
+    /// Stops the running model cleanly, then powers off the Spark. Returns an error message on failure.
+    /// Without a password it tries passwordless sudo and polkit; with one, it goes to `sudo -S` over stdin
+    /// and is never stored or put on a command line.
+    func shutdownSpark(password: String? = nil) async -> String? {
+        guard let target = sshTarget else { return "The Spark is unreachable." }
+        await stopAndWait()
+        event("Shutting down the Spark")
+        // --no-block queues the poweroff and returns, so ssh exits cleanly before the link drops.
+        let cmd = password == nil
+            ? "sudo -n systemctl poweroff --no-block 2>/dev/null || systemctl poweroff --no-block --no-ask-password"
+            : "sudo -S -p '' systemctl poweroff --no-block"
+        let res = await SSH.run(target, cmd, timeout: 20, input: password)
+        guard res.code == 0 else {
+            let out = res.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            event("Shutdown failed: \(out)")
+            return password == nil ? "The Spark needs your password to shut down." : "Shutdown failed. Check the password.\n\n\(out)"
+        }
+        activeID = nil
+        external = nil
+        phase = .offline
+        return nil
     }
 
     // MARK: Ollama

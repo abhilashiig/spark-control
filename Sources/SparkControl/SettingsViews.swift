@@ -14,6 +14,9 @@ struct SettingsView: View {
 
 private struct DeviceSettings: View {
     @Environment(AppState.self) private var state
+    @State private var confirmShutdown = false
+    @State private var shuttingDown = false
+    @State private var shutdownError: String?
 
     var body: some View {
         @Bindable var state = state
@@ -25,13 +28,54 @@ private struct DeviceSettings: View {
                 } header: {
                     Text("Routes")
                 }
+                Section {
+                    ForEach(Route.allCases) { r in
+                        let cmd = "ssh \(d.wrappedValue.sshTarget(r))"
+                        LabeledContent(r.label) {
+                            HStack {
+                                Text(cmd).font(.callout.monospaced()).textSelection(.enabled)
+                                CopyButton(text: cmd)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Terminal")
+                } footer: {
+                    Text("Uses this Mac's SSH key, so no password is asked once SSH shows a green check above.")
+                }
                 Section("Advanced") {
                     TextField("Local address", text: d.localOverride, prompt: Text(d.wrappedValue.base + ".local"))
                     TextField("Tailscale address", text: d.tailscaleOverride, prompt: Text(d.wrappedValue.base))
                     TextField("Model port", value: d.backendPort, format: .number.grouping(.never))
                 }
+                Section {
+                    LabeledContent("Power") {
+                        HStack {
+                            if shuttingDown { ProgressView().controlSize(.small) }
+                            Button("Shut Down Spark…", role: .destructive) { confirmShutdown = true }
+                                .disabled(state.sshTarget == nil || shuttingDown)
+                        }
+                    }
+                } footer: {
+                    Text("Stops the running model, then powers off the Spark. Asks for your Spark password if sudo needs one; it's never saved.")
+                }
             }
             .formStyle(.grouped)
+            .confirmationDialog("Shut down the Spark?", isPresented: $confirmShutdown) {
+                Button("Shut Down", role: .destructive) {
+                    shuttingDown = true
+                    Task {
+                        // Try without a password first; ask for one only if sudo needs it.
+                        shutdownError = await state.shutdownSpark()
+                        shuttingDown = false
+                    }
+                }
+            } message: {
+                Text("The running model is stopped first. You'll need to power the Spark back on by hand.")
+            }
+            .sheet(isPresented: Binding(get: { shutdownError != nil }, set: { if !$0 { shutdownError = nil } })) {
+                ShutdownPasswordSheet(target: state.sshTarget ?? "", error: shutdownError)
+            }
         } else {
             ContentUnavailableView {
                 Label("No Spark", systemImage: "server.rack")
@@ -258,6 +302,7 @@ private struct GatewaySettingsView: View {
 
 private struct GeneralSettings: View {
     @Environment(AppState.self) private var state
+    @State private var confirmClearBench = false
 
     var body: some View {
         @Bindable var state = state
@@ -266,8 +311,70 @@ private struct GeneralSettings: View {
             LabeledContent("Data") {
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([Store.configURL]) }
             }
+            LabeledContent("Benchmark results") {
+                Button("Clear…", role: .destructive) { confirmClearBench = true }
+                    .disabled(state.benchResults.values.allSatisfy(\.isEmpty))
+            }
         }
         .formStyle(.grouped)
+        .confirmationDialog("Clear all benchmark results?", isPresented: $confirmClearBench) {
+            Button("Clear", role: .destructive) { state.clearBenchmarks() }
+        } message: {
+            Text("Deletes the saved runs for every model on this Mac. Copies on the Spark in ~/spark-bench-results are kept.")
+        }
+    }
+}
+
+/// Asks for the Spark password, shuts down with `sudo -S`, then forgets it.
+private struct ShutdownPasswordSheet: View {
+    @Environment(AppState.self) private var state
+    @Environment(\.dismiss) private var dismiss
+    let target: String
+    @State var error: String?
+    @State private var password = ""
+    @State private var working = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Shut Down Spark").font(.headline)
+                Text(target).font(.callout.monospaced()).foregroundStyle(.secondary)
+            }
+            Text("Enter your Spark password for sudo. It's sent over SSH once and never saved.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            SecureField("Spark password", text: $password)
+                .textFieldStyle(.roundedBorder)
+                .disabled(working)
+                .onSubmit(shutdown)
+            if let error {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                if working { ProgressView().controlSize(.small) }
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Shut Down", role: .destructive, action: shutdown)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(password.isEmpty || working)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
+
+    private func shutdown() {
+        guard !password.isEmpty, !working else { return }
+        working = true
+        Task {
+            error = await state.shutdownSpark(password: password)
+            password = ""
+            working = false
+            if error == nil { dismiss() }
+        }
     }
 }
 

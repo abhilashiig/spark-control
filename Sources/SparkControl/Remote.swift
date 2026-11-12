@@ -28,7 +28,8 @@ enum SSH {
     static func interactive(_ command: String) -> String { "bash -ic \(quote(command))" }
 
     @discardableResult
-    static func run(_ target: String, _ remote: String, timeout: TimeInterval = 60,
+    /// `input` is written to the remote command's stdin (e.g. a password for `sudo -S`), never to the command line.
+    static func run(_ target: String, _ remote: String, timeout: TimeInterval = 60, input: String? = nil,
                     onLine: (@Sendable (String) -> Void)? = nil) async -> (code: Int32, output: String) {
         await withCheckedContinuation { cont in
             let p = Process()
@@ -37,7 +38,8 @@ enum SSH {
             let pipe = Pipe()
             p.standardOutput = pipe
             p.standardError = pipe
-            p.standardInput = FileHandle.nullDevice
+            let stdin = input.map { _ in Pipe() }
+            p.standardInput = stdin ?? FileHandle.nullDevice
             let lines = LineBuffer(onLine)
             pipe.fileHandleForReading.readabilityHandler = { h in lines.feed(h.availableData) }
             p.terminationHandler = { p in
@@ -49,6 +51,10 @@ enum SSH {
             do { try p.run() } catch {
                 cont.resume(returning: (-1, error.localizedDescription))
                 return
+            }
+            if let stdin, let input {
+                stdin.fileHandleForWriting.write(Data((input + "\n").utf8))
+                try? stdin.fileHandleForWriting.close()
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { if p.isRunning { p.terminate() } }
         }
@@ -173,14 +179,16 @@ enum Probe {
         }
     }
 
-    static func backend(_ base: String) async -> Backend? {
-        guard let listed = await ids(base + "/v1/models", "data", "id") else { return nil }
-        return Backend(loaded: await ids(base + "/api/ps", "models", "name"), listed: listed)
+    static func backend(_ base: String, key apiKey: String? = nil) async -> Backend? {
+        guard let listed = await ids(base + "/v1/models", "data", "id", apiKey) else { return nil }
+        return Backend(loaded: await ids(base + "/api/ps", "models", "name", apiKey), listed: listed)
     }
 
-    private static func ids(_ url: String, _ list: String, _ key: String) async -> [String]? {
-        guard let u = URL(string: url),
-              let (data, resp) = try? await session.data(from: u),
+    private static func ids(_ url: String, _ list: String, _ key: String, _ apiKey: String?) async -> [String]? {
+        guard let u = URL(string: url) else { return nil }
+        var req = URLRequest(url: u)
+        if let apiKey { req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization") }
+        guard let (data, resp) = try? await session.data(for: req),
               (resp as? HTTPURLResponse)?.statusCode == 200,
               let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let items = obj[list] as? [[String: Any]] else { return nil }

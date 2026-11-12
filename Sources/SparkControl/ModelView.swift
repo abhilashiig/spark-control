@@ -20,6 +20,12 @@ struct ModelView: View {
         Form {
             Section { ModelHeader(recipe: r.wrappedValue) }
 
+            if let m = TensorFold.model(r.wrappedValue.tensorfold) {
+                TensorFoldSection(recipe: r, model: m)
+            }
+
+            BenchmarkSection(recipe: r.wrappedValue)
+
             Section {
                 TextField("Name", text: r.name)
                 CodeField(title: "Start command", text: r.startCommand, prompt: "qwen-start")
@@ -183,5 +189,47 @@ private struct RulesEditor: View {
             }
         }
         Button("Add Rule") { rules.append(ParamRule()) }
+    }
+}
+
+/// Context window and drafts for TensorFold catalog models, kept in the start command's flags.
+private struct TensorFoldSection: View {
+    @Binding var recipe: Recipe
+    let model: TensorFold.Model
+
+    var body: some View {
+        let current = TensorFold.context(of: recipe.startCommand)
+        let options = TensorFold.contextOptions(model)
+        Section {
+            Picker("Context", selection: Binding { current } set: {
+                recipe.startCommand = TensorFold.withContext(recipe.startCommand, $0, model: model)
+            }) {
+                ForEach(options.contains(current) ? options : options + [current], id: \.self) {
+                    Text($0.label(model)).tag($0)
+                }
+            }
+            if let source = model.drafts {
+                Toggle(isOn: Binding { TensorFold.draftsOn(recipe.startCommand) } set: {
+                    recipe.startCommand = TensorFold.withDrafts(recipe.startCommand, $0)
+                }) {
+                    Text("Speculative drafts (\(source))")
+                    Text("Faster decoding with the same replies. Off decodes one token at a time, also without copy drafts.")
+                }
+            }
+        } header: {
+            Text("TensorFold")
+        } footer: {
+            Text(footer(current))
+        }
+    }
+
+    private func footer(_ c: TensorFold.Context) -> String {
+        var s = "Changes apply at the next start; the startup line in Logs shows the context and drafts in use."
+        s += " TensorFold runs as many requests at once as fit in memory at this window; if not even one fits, it refuses to start and Logs name the window that does."
+        if case .engineDefault = c { s += " TensorFold's default is 16k to 32k tokens, depending on the model." }
+        if case .yarn = c {
+            s += " YaRN changes replies at every length, not only long prompts: leave it off unless prompts go past \(model.window.formatted()) tokens. At 1M tokens a GB10 runs two requests at once, and a 1M-token prompt takes about 26 minutes to prefill."
+        }
+        return s
     }
 }

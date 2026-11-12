@@ -1,8 +1,8 @@
 # Spark Control
 
 Native macOS app that runs models on a DGX Spark and serves them through one
-OpenAI-compatible API at `http://localhost:18080/v1`. Nothing is installed on the Spark:
-the app starts and stops models over SSH and forwards requests to the Spark's port 18300.
+OpenAI-compatible API at `http://localhost:18080/v1`. Nothing is installed on the Spark unless you
+install TensorFold from the app: it starts and stops models over SSH and forwards requests to the Spark's port 18300.
 
 ## Build & run
 
@@ -34,4 +34,12 @@ and the app installs your key. The password is passed to ssh through a pipe and 
 - **Usage**: tokens split like Kilo (In excludes cached, Out excludes reasoning), cache hit rate, and for
   streamed requests time to first token, prefill and decode speed, over 4h / 24h / week / month / year / all.
 - **Chat**: built-in chat through the same gateway, with image, PDF and text file attachments.
+- **TensorFold** (sidebar → Catalog): installs TensorFold's pinned GB10 release into
+  `~/.local/share/spark-control/tensorfold` on the Spark (checksum, release signature and every file checked; no sudo),
+  or uses one you put on your `PATH`. Lists the models TensorFold has tested on one GB10, downloads each with the
+  drafter TensorFold names for it (detached, so it survives the Mac sleeping), and adds it as a model that serves with
+  `--drafter` and an API key the gateway sends for you. Deleting a model, or removing TensorFold, asks first and only
+  touches what the app downloaded.
+  Each TensorFold model's page has a Context picker: TensorFold's default, the model's full trained window (the default
+  for new models; 262k for Super VL), or YaRN ×2/×4 on the Qwen3.6 models, written into the start command's flags.
 - **Data**: `~/Library/Application Support/Spark Control/` (`config.json`, `usage.jsonl`, `chats.json`).

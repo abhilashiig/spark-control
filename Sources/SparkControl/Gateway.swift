@@ -218,6 +218,7 @@ final class Gateway: @unchecked Sendable {
         for (k, v) in req.headers where !Self.skipRequest.contains(k.lowercased()) {
             up.addValue(v, forHTTPHeaderField: k)
         }
+        if let k = recipe.backendKey { up.setValue("Bearer \(k)", forHTTPHeaderField: "Authorization") }
 
         var usage: Transform.Usage?
         var status = 0

@@ -80,6 +80,10 @@ struct Recipe: Codable, Identifiable, Hashable {
     var port: Int?
     var timeout = 600.0
     var rules: [ParamRule] = []
+    /// Set for models added from the TensorFold catalog: the catalog id.
+    var tensorfold: String?
+    /// Sent to the backend as a bearer token, replacing the client's.
+    var backendKey: String?
 
     /// The name clients put in the `model` field.
     var apiID: String {
@@ -193,6 +197,17 @@ enum Store {
     }
 
     static func resetUsage() { try? FileManager.default.removeItem(at: usageURL) }
+
+    static let benchURL = dir.appending(path: "benchmarks.json")
+
+    /// Benchmark runs per model id, newest last.
+    static func loadBenchmarks() -> [UUID: [Benchmark.Result]] {
+        (try? Data(contentsOf: benchURL)).flatMap { try? JSONDecoder().decode([UUID: [Benchmark.Result]].self, from: $0) } ?? [:]
+    }
+
+    static func save(_ b: [UUID: [Benchmark.Result]]) {
+        try? JSONEncoder().encode(b).write(to: benchURL, options: .atomic)
+    }
 }
 
 /// Speeds are only known for streamed requests (time to first token is measurable there).

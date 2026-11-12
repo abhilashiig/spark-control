@@ -250,7 +250,12 @@ struct UsageView: View {
                         .foregroundStyle(.secondary)
                         ForEach(rows) { r in
                             GridRow {
-                                Text(r.model).lineLimit(1)
+                                // Wrap long names instead of truncating; the numeric columns can't shrink.
+                                Text(r.model)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(minWidth: 160, alignment: .leading)
+                                    .textSelection(.enabled)
+                                    .help(r.model)
                                 Text(r.requests.formatted())
                                 Text(r.input.compact)
                                 Text(r.cached.compact)

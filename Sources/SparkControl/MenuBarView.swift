@@ -15,6 +15,12 @@ struct MenuBarView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    if let s = state.spark.last, Date().timeIntervalSince(s.date) < 60 {
+                        Text(String(format: "%.0f / %.0f GB", Double(s.memUsed) / 1e9, Double(s.memTotal) / 1e9)
+                             + (s.gpuUtil.map { String(format: " · GPU %.0f%%", $0) } ?? "")
+                             + (s.gpuTemp.map { String(format: " · %.0f °C", $0) } ?? ""))
+                            .font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
+                    }
                 }
                 Spacer()
                 RouteBadge(route: state.route)

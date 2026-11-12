@@ -266,4 +266,33 @@ check(cst.comfyVersion == "v0.45.0" && cst.comfyRunning && cst.models["comfy-z-i
 check(ComfyUI.catalog.allSatisfy { m in m.files.allSatisfy { f in f.url.contains(try! Regex("/resolve/[0-9a-f]{40}/")) && f.url.hasSuffix("/" + (f.path as NSString).lastPathComponent) } }
       && ComfyUI.startScript.contains("--listen 127.0.0.1") && ComfyUI.startScript.contains("TORCH_DISABLE_NATIVE_JIT=1 nohup") && !ComfyUI.catalog.contains { $0.template.isEmpty }, "ComfyUI models are pinned and the server stays on the Spark's loopback")
 
+// Spark monitor, from a GB10's real output
+let mon1 = SparkMonitor.parse("""
+MEM|127533224 91119260 16777212 16776892 
+CPU|cpu  98941 629 120915 22947236 19078 0 5465 0 0 0
+CPU|cpu0 5000 0 6000 1140000 900 0 200 0 0 0
+LOAD|0.98 0.59 0.38
+GPU|96, 80, 89.05, 2340
+PROC|29441|/home/abhi/.local/share/spark-control/comfyui/venv/bin/python /home/abhi/.local/share/spark-control/comfyui/ComfyUI/main.py --listen 127.0.0.1
+PROC|1000|python3 -m vllm.entrypoints.openai.api_server
+PROC|2000|VLLM::EngineCore vllm
+TZ|87600
+TZ|71100
+NVME|54850
+DISK|3936289308672 617997856768 3118262317056
+""")
+check(mon1.memTotal == 127533224 * 1024 && mon1.memUsed == (127533224 - 91119260) * 1024 && mon1.gpuTemp == 80 && mon1.power == 89.05
+      && mon1.zones == [87.6, 71.1] && mon1.nvmeTemp == 54.85 && mon1.diskFree == 3118262317056 && mon1.coreCount == 1,
+      "Spark monitor sample parses")
+check(mon1.processes.map(\.name) == ["ComfyUI", "vLLM"] && mon1.processes[1].bytes == 3000 * 1_048_576,
+      "GPU processes are named and an engine's processes are summed")
+var mon2 = mon1
+mon2.cpuTimes["cpu0"] = [5300, 0, 6100, 1140600, 900, 0, 0, 0, 0, 0].map { Int64($0) }
+mon2.cpuTimes["cpu0"]![6] = 200
+check(SparkMonitor.cpuPercent("cpu0", from: mon1, to: mon2) == 40, "CPU busy share comes from jiffy deltas")
+check(SparkMonitor.parse("GPU|[N/A], [N/A], [N/A], [N/A]").gpuUtil == nil, "missing GPU readings stay empty")
+let store = SparkMonitor.parseStorage("DU|Hugging Face cache|285788099522\nDU|ComfyUI|58777820794\nDOCKER|96.61GB")
+check(store.folders.count == 2 && store.folders[0].1 == 285788099522 && store.docker == "96.61GB", "storage parses")
+check(bash(SparkMonitor.script, syntaxOnly: true).0 == 0 && bash(SparkMonitor.storageScript, syntaxOnly: true).0 == 0, "monitor scripts parse")
+
 print("All checks passed")

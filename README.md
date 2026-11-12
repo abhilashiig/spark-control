@@ -57,4 +57,7 @@ and the app installs your key. The password is passed to ssh through a pipe and 
   starts ComfyUI on the Spark's loopback only, and opens it at `http://127.0.0.1:18188` on this Mac through an SSH
   tunnel. Then Templates → Image → "Z-Image-Turbo: Text to Image" → Run. Starting any model stops ComfyUI, since
   both need the GB10's memory.
+- **Spark** (sidebar → Activity): live memory, CPU, GPU, power and temperatures, read over SSH every 2 seconds
+  while the page is open (every 15 seconds otherwise, for the menu bar). Memory comes from `/proc/meminfo` because
+  the GB10 shares it between CPU and GPU, and per-process GPU memory from `nvidia-smi`.
 - **Data**: `~/Library/Application Support/Spark Control/` (`config.json`, `usage.jsonl`, `chats.json`).

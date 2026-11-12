@@ -60,6 +60,9 @@ final class AppState {
     var tfLog: [String] = []
     var tfSizes: [String: Int64] = [:]
     var comfyBusy = false
+    /// Spark readings, oldest first: every 2 s while the Spark page is open, every 15 s otherwise.
+    var spark: [SparkMonitor.Sample] = []
+    var sparkStorage: (folders: [(String, Int64)], docker: String?)?
     /// The SSH tunnel that brings ComfyUI's port to this Mac, and the Spark address it goes to.
     @ObservationIgnored var comfyTunnel: (process: Process, target: String)?
     /// The benchmark in progress: which model, its output so far, and its pid on the Spark.
@@ -103,6 +106,7 @@ final class AppState {
                 try? await Task.sleep(for: .seconds(15))
                 if route == nil { await selectRoute() }
                 await refresh()
+                if Date().timeIntervalSince(spark.last?.date ?? .distantPast) > 10 { await sampleSpark() }
             }
         }
     }

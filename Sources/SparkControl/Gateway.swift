@@ -279,7 +279,11 @@ final class Gateway: @unchecked Sendable {
             "id": r.apiID, "object": "model", "created": 0, "owned_by": "spark",
             "name": r.name,
             "status": s.running.contains(r.id) ? "running" : "stopped",
-            "pricing": ["input": r.priceIn, "output": r.priceOut, "cache_read": r.priceCache ?? r.priceIn, "unit": "USD per 1M tokens"],
+            // OpenRouter's format (USD per token, as strings), which Hermes and other clients read.
+            "pricing": ["prompt": String(r.priceIn / 1e6), "completion": String(r.priceOut / 1e6),
+                        "input_cache_read": String((r.priceCache ?? r.priceIn) / 1e6)],
+            "architecture": ["input_modalities": r.takesImages ? ["text", "image"] : ["text"], "output_modalities": ["text"]],
+            "supported_parameters": r.hasReasoning ? ["reasoning", "include_reasoning", "tools"] : ["tools"],
         ]
     }
 

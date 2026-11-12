@@ -30,6 +30,10 @@ and the app installs your key. The password is passed to ssh through a pipe and 
 - **API**: requests pass through untouched, except the model name is renamed to the backend ID, plus any
   per-model parameter rules you set. A request for a stopped model switches to it (configurable).
   Responses get `usage.cost` from the model's prices (toggle in Settings → API).
+- **Coding tools** (Connect → Coding Tools): adds a `spark-control` provider to Kilo Code (`~/.config/kilo/kilo.jsonc`,
+  through the OpenRouter SDK so it reads `usage.cost`), Pi (`~/.pi/agent/models.json`) and Hermes (`~/.hermes/config.yaml`)
+  with the enabled models, their prices, and the Reasoning and Image input switches from each model's page. Only that
+  provider is rewritten; the previous file is kept as `.spark-control.bak`.
 - **Ports**: each model can override the Spark port (default 18300).
 - **Usage**: tokens split like Kilo (In excludes cached, Out excludes reasoning), cache hit rate, and for
   streamed requests time to first token, prefill and decode speed, over 4h / 24h / week / month / year / all.

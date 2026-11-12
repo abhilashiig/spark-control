@@ -90,12 +90,26 @@ struct Recipe: Codable, Identifiable, Hashable {
     var memoryMeasured = false
     /// Sent to the backend as a bearer token, replacing the client's.
     var backendKey: String?
+    /// Whether it thinks before answering and accepts images. nil = guessed from its name and start command.
+    var reasoning: Bool?
+    var images: Bool?
 
     /// The name clients put in the `model` field.
     var apiID: String {
         name.lowercased()
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber && !".-_".contains($0) })
             .joined(separator: "-")
+    }
+
+    private var ids: String { (name + " " + upstreamModel).lowercased() }
+    // ponytail: name heuristics for common Spark models; the toggles on the model's page override them.
+    var hasReasoning: Bool {
+        reasoning ?? ids.contains(#/qwen3|nemotron|deepseek|gpt-oss|gemma-?\s?4|glm|kimi|think|laguna/#)
+    }
+    /// TensorFold only serves images with --vision; elsewhere, families that ship a vision encoder.
+    var takesImages: Bool {
+        images ?? (tensorfold != nil ? startCommand.contains("--vision")
+                   : ids.contains(#/qwen3\.[6-9]|gemma-?\s?4|[-\s]vl\b|vision/#))
     }
 
     /// Added with + but never given a start command: never saved or shared.
@@ -134,6 +148,8 @@ struct GatewaySettings: Codable, Equatable {
     var autoSwap = true
     var injectCost = true
     var streamUsage = true
+    /// Rewrite the Spark Control provider in coding tools that already have it whenever the models change.
+    var syncTools = true
 }
 
 struct Config: Codable, Equatable {
@@ -310,6 +326,8 @@ extension Recipe {
         memoryGB = try c.decodeIfPresent(Double.self, forKey: .memoryGB)
         memoryMeasured = try c.value(.memoryMeasured, or: d.memoryMeasured)
         backendKey = try c.decodeIfPresent(String.self, forKey: .backendKey)
+        reasoning = try c.decodeIfPresent(Bool.self, forKey: .reasoning)
+        images = try c.decodeIfPresent(Bool.self, forKey: .images)
     }
 }
 
@@ -347,6 +365,7 @@ extension GatewaySettings {
         autoSwap = try c.value(.autoSwap, or: d.autoSwap)
         injectCost = try c.value(.injectCost, or: d.injectCost)
         streamUsage = try c.value(.streamUsage, or: d.streamUsage)
+        syncTools = try c.value(.syncTools, or: d.syncTools)
     }
 }
 

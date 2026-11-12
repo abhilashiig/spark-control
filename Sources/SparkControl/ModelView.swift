@@ -61,10 +61,12 @@ struct ModelView: View {
                     }
                 }
                 CodeField(title: "Backend model ID", text: r.upstreamModel, prompt: "Detected on first start")
+                Toggle("Reasoning", isOn: Binding { r.wrappedValue.hasReasoning } set: { r.wrappedValue.reasoning = $0 })
+                Toggle("Image input", isOn: Binding { r.wrappedValue.takesImages } set: { r.wrappedValue.images = $0 })
             } header: {
                 Text("API")
             } footer: {
-                Text("Clients ask for “\(r.wrappedValue.apiID)” at \(state.apiBaseURL). It's renamed to the backend model ID before reaching the Spark.")
+                Text("Clients ask for “\(r.wrappedValue.apiID)” at \(state.apiBaseURL). It's renamed to the backend model ID before reaching the Spark. Reasoning and Image input are guessed from the model until you set them, and tell coding tools (Connect → Coding Tools) what the model can do.")
             }
 
             Section {

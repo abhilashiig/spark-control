@@ -4,5 +4,5 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 S=Sources/SparkControl
 mkdir -p .build
-swiftc -swift-version 5 -o .build/selfcheck Tests/main.swift $S/Transform.swift $S/Models.swift $S/Remote.swift $S/TensorFold.swift $S/VLLM.swift $S/ComfyUI.swift $S/SparkMonitor.swift $S/Benchmark.swift
+swiftc -swift-version 5 -o .build/selfcheck Tests/main.swift $S/Transform.swift $S/Models.swift $S/Remote.swift $S/TensorFold.swift $S/VLLM.swift $S/ComfyUI.swift $S/SparkMonitor.swift $S/Benchmark.swift $S/ClientTools.swift
 .build/selfcheck

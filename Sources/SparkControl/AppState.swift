@@ -57,6 +57,9 @@ final class AppState {
     var comfyLastUsed: Date?
     /// A model stopped to make room for another, shown until dismissed.
     var notice: String?
+    /// Bumped after writing a tool's config, so the Connect page re-reads its status.
+    var toolsChanged = Date()
+    @ObservationIgnored private var toolSync: Task<Void, Never>?
     /// A model is serving on the Spark that no recipe matches.
     var external: String?
     var logs: [LogLine] = []
@@ -169,6 +172,37 @@ final class AppState {
             gateway?.start(port: config.gateway.port, lan: config.gateway.allowLAN)
         }
         if config.device != old.device { networkChanged() }
+        if config.recipes != old.recipes || config.gateway.port != old.gateway.port || config.gateway.apiKey != old.gateway.apiKey {
+            syncTools()
+        }
+    }
+
+    var toolModels: [Recipe] { config.recipes.filter { $0.enabled && !$0.isBlank } }
+    var toolGateway: ClientTool.Gateway {
+        // Most clients refuse an empty key, so give them a harmless one when none is set.
+        .init(baseURL: apiBaseURL, apiKey: config.gateway.apiKey.isEmpty ? "sk-local" : config.gateway.apiKey)
+    }
+
+    /// Adds or updates the Spark Control provider in a coding tool's config.
+    func writeTool(_ tool: ClientTool) {
+        do {
+            try tool.write(models: toolModels, gateway: toolGateway)
+            event("Updated \(tool.name)'s config with \(toolModels.count) models")
+        } catch {
+            event("⚠︎ Couldn't update \(tool.name): \(error.localizedDescription)")
+        }
+        toolsChanged = Date()
+    }
+
+    /// Keeps tools that already list Spark Control on the current models, a moment after the last edit.
+    private func syncTools() {
+        guard config.gateway.syncTools else { return }
+        toolSync?.cancel()
+        toolSync = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            for t in ClientTool.allCases where t.status(models: toolModels, gateway: toolGateway) == .outdated { writeTool(t) }
+        }
     }
 
     private func networkChanged() {

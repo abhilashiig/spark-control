@@ -5,6 +5,13 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Added
+- Connect → Coding Tools adds Spark Control as a provider to Kilo Code, Pi and Hermes with one click, listing your enabled models with their prices and whether each reasons and takes images. Kilo Code is set up to show each request's cost. Tools you've added are kept up to date as models change (can be turned off); the previous config is kept as a `.spark-control.bak` file.
+- Each model's page has Reasoning and Image input switches, guessed from the model until you set them.
+
+### Changed
+- `/v1/models` lists prices in OpenRouter's format (USD per token) plus each model's input types and reasoning support, so clients like Hermes can price requests.
+
 ## [1.2.1] - 2026-11-12
 
 ### Changed

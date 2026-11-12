@@ -13,8 +13,7 @@ struct ConnectView: View {
 
     private var models: [Recipe] { state.config.recipes.filter(\.enabled) }
     private var model: Recipe? { models.first { $0.id == modelID } ?? state.activeRecipe ?? models.first }
-    /// Most clients refuse an empty key, so give them a harmless one when none is set.
-    private var key: String { state.config.gateway.apiKey.isEmpty ? "sk-local" : state.config.gateway.apiKey }
+    private var key: String { state.toolGateway.apiKey }
 
     var body: some View {
         Form {
@@ -52,6 +51,8 @@ struct ConnectView: View {
             } header: {
                 Text("Quick Start")
             }
+
+            ToolsSection()
 
             Section("All Models") {
                 if models.isEmpty {
@@ -129,6 +130,60 @@ private struct CopyRow: View {
         } label: {
             Text(title)
             if let note { Text(note) }
+        }
+    }
+}
+
+/// Adds Spark Control as a provider to coding tools installed on this Mac, with each model's prices and whether it
+/// reasons and takes images.
+private struct ToolsSection: View {
+    @Environment(AppState.self) private var state
+
+    var body: some View {
+        @Bindable var state = state
+        let models = state.toolModels, gateway = state.toolGateway
+        let _ = state.toolsChanged
+        Section {
+            ForEach(ClientTool.allCases) { tool in
+                let status = tool.status(models: models, gateway: gateway)
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        Text(label(status)).foregroundStyle(status == .upToDate ? Color.secondary : Color.primary)
+                        switch status {
+                        case .notAdded: Button("Add") { state.writeTool(tool) }
+                        case .outdated: Button("Update") { state.writeTool(tool) }
+                        case .upToDate:
+                            Button { NSWorkspace.shared.activateFileViewerSelecting([tool.file]) } label: {
+                                Image(systemName: "folder")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Show in Finder")
+                        default: EmptyView()
+                        }
+                    }
+                } label: {
+                    Text(tool.name)
+                    Text(tool.file.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                }
+            }
+            Toggle(isOn: $state.config.gateway.syncTools) {
+                Text("Keep models up to date")
+                Text("When you add, rename, enable or reprice a model, tools that already list Spark Control are updated.")
+            }
+        } header: {
+            Text("Coding Tools")
+        } footer: {
+            Text("Adds a “Spark Control” provider with your enabled models, their prices, and whether each reasons and takes images (set on each model's page). Kilo Code uses the OpenRouter SDK so it shows each request's cost. The previous file is kept beside it as .spark-control.bak. Restart the tool, or reload its window, to see the change.")
+        }
+    }
+
+    private func label(_ s: ClientTool.Status) -> String {
+        switch s {
+        case .notInstalled: "Not installed"
+        case .notAdded: "Not added"
+        case .upToDate: "Up to date"
+        case .outdated: "Models changed"
+        case .unreadable: "Config unreadable"
         }
     }
 }

@@ -333,4 +333,70 @@ check(shared.merged(into: [mine], local: Date(timeIntervalSince1970: 200)) == ni
       "the newer list wins; a Mac's first sync keeps its own models but not the starter ones or blank ones")
 check((try? JSONDecoder().decode(SharedModels.self, from: JSONEncoder().encode(shared)))?.recipes == [theirs], "the shared list reads back")
 
+// Coding tool configs
+let gw = ClientTool.Gateway(baseURL: "http://localhost:18080/v1", apiKey: "sk-local")
+var vl = Recipe(name: "Qwen3.8 27B", startCommand: "x", stopCommand: "", priceIn: 0.2, priceOut: 0.8)
+let textOnly = Recipe(name: "Nemotron Lightning", startCommand: "x", stopCommand: "")
+check(vl.hasReasoning && vl.takesImages && textOnly.hasReasoning && !textOnly.takesImages, "capabilities guessed from the name")
+check(!Recipe(name: "Qwen3.6", startCommand: "tensorfold serve", stopCommand: "", tensorfold: "q").takesImages
+      && Recipe(name: "Gemma", startCommand: "tensorfold serve --vision", stopCommand: "", tensorfold: "g").takesImages,
+      "TensorFold models take images only with --vision")
+vl.images = false
+check(!vl.takesImages, "the toggle overrides the guess")
+vl.images = nil
+
+let kiloIn = """
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  // a comment
+  "provider": { "other": { "name": "Other" }, "spark-control": { "name": "Old" } },
+  "model": "openrouter/x",
+}
+"""
+let kiloOut = try! ClientTool.kilo.apply(to: kiloIn, models: [vl, textOnly], gateway: gw)
+let kj = try! JSONSerialization.jsonObject(with: Data(kiloOut.utf8)) as! [String: Any]
+let kp = (kj["provider"] as! [String: Any])
+let sc = kp["spark-control"] as! [String: Any]
+let kvl = (sc["models"] as! [String: Any])["qwen3.8-27b"] as! [String: Any]
+check(kp["other"] != nil && kj["model"] as? String == "openrouter/x" && sc["npm"] as? String == "@openrouter/ai-sdk-provider"
+      && (sc["options"] as! [String: Any])["apiKey"] as? String == "sk-local"
+      && kvl["attachment"] as? Bool == true && kvl["reasoning"] as? Bool == true
+      && (kvl["cost"] as! [String: Any])["output"] as? Double == 0.8
+      && ((sc["models"] as! [String: Any])["nemotron-lightning"] as! [String: Any])["attachment"] as? Bool == false,
+      "Kilo: provider replaced via the OpenRouter SDK, the rest kept")
+check(try! ClientTool.kilo.apply(to: kiloOut, models: [vl, textOnly], gateway: gw) == kiloOut && ClientTool.kilo.isAdded(kiloOut),
+      "Kilo: applying twice changes nothing")
+
+let piOut = try! ClientTool.pi.apply(to: #"{"providers": {"aitopatom": {"baseUrl": "http://x"}}}"#, models: [vl], gateway: gw)
+let pp = (try! JSONSerialization.jsonObject(with: Data(piOut.utf8)) as! [String: Any])["providers"] as! [String: Any]
+let pm = ((pp["spark-control"] as! [String: Any])["models"] as! [[String: Any]])[0]
+check(pp["aitopatom"] != nil && pm["id"] as? String == "qwen3.8-27b" && pm["input"] as? [String] == ["text", "image"]
+      && (pm["cost"] as! [String: Any]).count == 4, "Pi: model with images, reasoning and all four cost rates")
+check(ClientTool.pi.isAdded(try! ClientTool.pi.apply(to: "", models: [], gateway: gw)), "Pi: a missing file gets created")
+
+let yaml = """
+# Hermes
+model:
+  default: "qwen"
+providers:
+  aitopatom:
+    name: AiTopAtom
+    models:
+      qwen: {}
+onboarding:
+  seen: true
+"""
+let y1 = try! ClientTool.hermes.apply(to: yaml, models: [vl], gateway: gw)
+check(y1.hasPrefix("# Hermes\nmodel:\n  default: \"qwen\"\nproviders:\n  spark-control:\n") && y1.contains("    aitopatom:") == false
+      && y1.contains("  aitopatom:\n    name: AiTopAtom") && y1.contains("      supports_vision: true") && y1.hasSuffix("onboarding:\n  seen: true"),
+      "Hermes: provider added under providers, everything else untouched")
+let y2 = try! ClientTool.hermes.apply(to: y1, models: [textOnly], gateway: gw)
+check(!y2.contains("qwen3.8-27b") && y2.contains("\"nemotron-lightning\":\n        supports_vision: false")
+      && y2.contains("  aitopatom:\n    name: AiTopAtom") && y2.hasSuffix("onboarding:\n  seen: true")
+      && y2.components(separatedBy: "spark-control:").count == 2, "Hermes: updating replaces only its own block")
+check(try! ClientTool.hermes.apply(to: y2, models: [textOnly], gateway: gw) == y2, "Hermes: applying twice changes nothing")
+check(try! ClientTool.hermes.apply(to: "model: x\n", models: [], gateway: gw) == "model: x\nproviders:\n  spark-control:\n    name: Spark Control\n    base_url: \"http://localhost:18080/v1\"\n    api_key: \"sk-local\"\n    api_mode: chat_completions\n    models: {}\n",
+      "Hermes: providers section created when missing")
+check((try? ClientTool.hermes.apply(to: "providers: {a: 1}\n", models: [], gateway: gw)) == nil, "Hermes: inline YAML is left alone")
+
 print("All checks passed")

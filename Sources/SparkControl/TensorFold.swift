@@ -434,9 +434,15 @@ enum TensorFold {
         fatalError("unreachable")
     }
 
-    /// SIGTERM so the server keeps its last turn, then SIGKILL if it hangs.
-    /// `[t]` keeps the pattern from matching the shell that runs it.
-    static let stopCommand = #"pkill -TERM -f '[t]ensorfold-native serve'; for i in $(seq 30); do pgrep -f '[t]ensorfold-native serve' >/dev/null || exit 0; sleep 1; done; pkill -KILL -f '[t]ensorfold-native serve'"#
+    /// SIGTERM so the server keeps its last turn, then SIGKILL if it hangs. Only the server on `port`, so other
+    /// TensorFold models keep running. `[t]` keeps the pattern from matching the shell that runs it.
+    static func stopCommand(port: Int) -> String {
+        let pat = "[t]ensorfold-native serve .*--port \(port)( |$)"
+        return "pkill -TERM -f '\(pat)'; for i in $(seq 30); do pgrep -f '\(pat)' >/dev/null || exit 0; sleep 1; done; pkill -KILL -f '\(pat)'"
+    }
+
+    /// What models added before several could run were given: it stops every TensorFold server.
+    static let legacyStopCommand = #"pkill -TERM -f '[t]ensorfold-native serve'; for i in $(seq 30); do pgrep -f '[t]ensorfold-native serve' >/dev/null || exit 0; sleep 1; done; pkill -KILL -f '[t]ensorfold-native serve'"#
 
     // MARK: Sizes
 

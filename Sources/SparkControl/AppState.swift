@@ -46,8 +46,17 @@ final class AppState {
     var config: Config { didSet { configChanged(from: oldValue) } }
     var route: Route?
     var checks: [Route: RouteCheck] = [:]
-    var phase = Phase.stopped
+    /// Each model that isn't stopped, by recipe id. Several can run at once when memory and ports allow.
+    var phases: [UUID: Phase] = [:]
+    /// Set when the Spark can't be reached at all.
+    var offline = false
+    /// The most recently started or used model: the default for chat and for requests that name none.
     var activeID: UUID?
+    /// When each running model last started or served a request: the least recently used stops first.
+    var lastUsed: [UUID: Date] = [:]
+    var comfyLastUsed: Date?
+    /// A model stopped to make room for another, shown until dismissed.
+    var notice: String?
     /// A model is serving on the Spark that no recipe matches.
     var external: String?
     var logs: [LogLine] = []
@@ -91,6 +100,7 @@ final class AppState {
         var loaded = Store.loadConfig()
         for i in loaded.recipes.indices {
             loaded.recipes[i].startCommand = TensorFold.addingDrafter(to: loaded.recipes[i].startCommand, model: loaded.recipes[i].tensorfold)
+            loaded.recipes[i] = loaded.recipes[i].migrated(defaultPort: loaded.device?.backendPort ?? 18300)
         }
         config = loaded
         usage = Store.loadUsage()
@@ -120,18 +130,31 @@ final class AppState {
     func backendBase(for r: Recipe?) -> String? { route.flatMap { config.device?.backendBase($0, port: r?.port) } }
     func port(of r: Recipe) -> Int { r.port ?? config.device?.backendPort ?? 18300 }
     var apiBaseURL: String { "http://localhost:\(config.gateway.port)/v1" }
-    var isBusy: Bool { transition != nil || phase.busy || bench?.running == true }
+    var isBusy: Bool { transition != nil || bench?.running == true }
 
-    func phase(for r: Recipe) -> Phase { r.id == activeID ? phase : .stopped }
+    func phase(for r: Recipe) -> Phase { phases[r.id] ?? .stopped }
+    var runningRecipes: [Recipe] { config.recipes.filter { phases[$0.id] == .ready } }
+
+    /// One phase for the whole Spark, for the menu bar: trouble first, then work in progress, then running.
+    var phase: Phase {
+        if offline { return .offline }
+        let all = Array(phases.values)
+        if let f = all.first(where: \.isFailure) { return f }
+        if let b = all.first(where: \.busy) { return b }
+        return all.contains(.ready) || external != nil ? .ready : .stopped
+    }
 
     var statusLine: String {
-        switch phase {
-        case .ready: activeRecipe.map { "\($0.name) is running" } ?? external.map { "Unknown model: \($0)" } ?? "Running"
-        case .starting: "Starting \(activeRecipe?.name ?? "model")…"
-        case .stopping: "Stopping \(activeRecipe?.name ?? "model")…"
-        case .stopped: "No model running"
-        default: phase.label
+        if offline { return Phase.offline.label }
+        if let (id, p) = phases.first(where: { $0.value.busy }), let r = config.recipes.first(where: { $0.id == id }) {
+            return (p == .starting ? "Starting " : "Stopping ") + r.name + "…"
         }
+        let names = runningRecipes.map(\.name) + (tf.comfyRunning ? ["ComfyUI"] : []) + (external.map { ["Unknown model: \($0)"] } ?? [])
+        if !names.isEmpty { return names.joined(separator: " + ") + (names.count == 1 ? " is running" : " are running") }
+        if let (id, p) = phases.first(where: { $0.value.isFailure }) {
+            return (config.recipes.first { $0.id == id }?.name ?? "Model") + ": " + p.label
+        }
+        return "No model running"
     }
 
     var menuSymbol: String {
@@ -201,83 +224,196 @@ final class AppState {
         }
     }
 
-    /// Reconciles state with what's actually serving on the Spark.
+    /// Reconciles state with what's actually serving on the Spark, port by port.
     func refresh() async {
         guard transition == nil else { return }
         guard let route, let device = config.device else {
-            if config.device != nil { phase = .offline }
+            offline = config.device != nil
             return
         }
-        // The active model's port, or every port a model could be on when we don't know what's running.
-        let ports = activeRecipe.map { [port(of: $0)] }
-            ?? Array(Set([device.backendPort] + config.recipes.map(port(of:)))).sorted()
-        var found: (port: Int, info: Probe.Backend)?
-        for p in ports {
-            let key = (activeRecipe.map { [$0] } ?? config.recipes).first { port(of: $0) == p && $0.backendKey != nil }?.backendKey
-            if let info = await Probe.backend(device.backendBase(route, port: p), key: key) { found = (p, info); break }
+        offline = false
+        var foundExternal: String?
+        for p in Array(Set([device.backendPort] + config.recipes.map(port(of:)))).sorted() {
+            let onPort = config.recipes.filter { port(of: $0) == p }
+            let key = (onPort.first { phases[$0.id] == .ready && $0.backendKey != nil } ?? onPort.first { $0.backendKey != nil })?.backendKey
+            let info = await Probe.backend(device.backendBase(route, port: p), key: key)
+            guard transition == nil else { return }
+            guard let info else {
+                for r in onPort where phases[r.id] == .ready { phases[r.id] = .failed("Not responding") }
+                continue
+            }
+            let match = onPort.first { phases[$0.id] == .ready && info.serves($0.upstreamModel) }
+                ?? onPort.first { $0.id == config.lastActive && info.serves($0.upstreamModel) }
+                ?? onPort.first { !$0.upstreamModel.isEmpty && info.serves($0.upstreamModel) }
+            for r in onPort where r.id != match?.id && phases[r.id] == .ready { phases[r.id] = nil }
+            if let match {
+                learnModelID(match, info)
+                if phases[match.id] != .ready {
+                    event("Detected \(match.name) running on the Spark")
+                    phases[match.id] = .ready
+                    lastUsed[match.id] = lastUsed[match.id] ?? Date()
+                    if activeID == nil { activeID = match.id }
+                }
+            } else if p == device.backendPort {
+                foundExternal = info.loaded?.first ?? info.listed.first ?? "unknown"
+            }
         }
-        guard transition == nil else { return }
-        guard let (foundPort, info) = found else {
-            if activeID != nil, phase == .ready { phase = .failed("Not responding") }
-            else if activeID == nil { phase = .stopped; external = nil }
-            return
-        }
-        if let r = activeRecipe, info.serves(r.upstreamModel) {
-            learnModelID(r, info)
-            phase = .ready
-            external = nil
-            return
-        }
-        let onPort = config.recipes.filter { port(of: $0) == foundPort }
-        let match = onPort.first { $0.id == config.lastActive && info.serves($0.upstreamModel) }
-            ?? onPort.first { !$0.upstreamModel.isEmpty && info.serves($0.upstreamModel) }
-        if let match {
-            if activeID != match.id { event("Detected \(match.name) running on the Spark") }
-            activeID = match.id
-            external = nil
-        } else {
-            activeID = nil
-            external = info.loaded?.first ?? info.listed.first ?? "unknown"
-        }
-        phase = .ready
+        external = foundExternal
+        if let a = activeID, phases[a] != .ready { activeID = runningRecipes.max { (lastUsed[$0.id] ?? .distantPast) < (lastUsed[$1.id] ?? .distantPast) }?.id }
     }
 
     // MARK: Lifecycle
 
     func start(_ r: Recipe) { Task { try? await switchTo(r) } }
 
-    func stop() { Task { await stopAndWait() } }
+    func stop(_ r: Recipe) { Task { await stopAndWait(r) } }
 
-    func stopAndWait() async {
+    /// Stops one model, or with nil every model this app knows is running (and an unknown one on the default port).
+    func stopAndWait(_ r: Recipe? = nil) async {
         try? await runTransition { [self] in
-            guard activeID != nil || external != nil else { return }
-            try await doStop()
+            if let r {
+                if phases[r.id] != nil { try await doStop(r) }
+                return
+            }
+            for x in config.recipes where phases[x.id] != nil { try? await doStop(x) }
+            if external != nil { try await doStopExternal() }
         }
     }
 
+    /// Starts a model, first stopping whatever it can't run beside (same port, or not enough memory).
     func switchTo(_ r: Recipe) async throws {
         try await runTransition { [self] in
-            if activeID == r.id, phase == .ready { return }
-            if activeID != nil || external != nil { try await doStop() }
+            if phases[r.id] == .ready { touch(r); return }
+            let before = try await makeRoom(for: r)
             try await doStart(r)
+            await measureMemory(r, availableBefore: before)
         }
     }
 
     /// Called by the gateway before forwarding a request.
     func ensureRunning(_ r: Recipe) async throws {
         while let t = transition { _ = try? await t.value }
-        if let b = bench, b.running, b.recipe != r.id {
+        if let b = bench, b.running, b.recipe != r.id, phases[r.id] != .ready {
             throw AppError("A benchmark is running on \(config.recipes.first { $0.id == b.recipe }?.name ?? "another model"). Try again when it finishes.")
         }
-        if activeID == r.id {
-            if phase != .ready { await refresh() }
-            if phase == .ready { return }
-        }
+        if phases[r.id] != nil, phases[r.id] != .ready { await refresh() }
+        if phases[r.id] == .ready { touch(r); return }
         guard config.gateway.autoSwap else {
             throw AppError("'\(r.apiID)' isn't running. Start it in Spark Control, or turn on automatic switching.")
         }
         try await switchTo(r)
-        if phase != .ready { throw AppError("'\(r.apiID)' failed to start: \(phase.label)") }
+        if phases[r.id] != .ready { throw AppError("'\(r.apiID)' failed to start: \(phase(for: r).label)") }
+    }
+
+    private func touch(_ r: Recipe) {
+        lastUsed[r.id] = Date()
+        activeID = r.id
+    }
+
+    // MARK: Memory
+
+    /// Kept free for DGX OS, Docker and the page cache when models share the Spark.
+    static let systemReserve: Int64 = 12_000_000_000
+
+    /// What a model needs to start: set on its page, measured on an earlier start, or vLLM's own memory setting.
+    func memoryNeed(_ r: Recipe) -> Int64? {
+        if let gb = r.memoryGB { return Int64(gb * 1e9) }
+        if r.vllm != nil, let f = VLLM.memoryFraction(of: r.startCommand) { return Int64(f * Double(sparkMemoryTotal)) }
+        return nil
+    }
+
+    /// From the catalog status or, fresher, the GPU processes the last Spark reading saw.
+    var comfyRunningNow: Bool { tf.comfyRunning || spark.last?.processes.contains { $0.name == "ComfyUI" } == true }
+
+    var sparkMemoryTotal: Int64 { spark.last?.memTotal ?? Int64(VLLM.gb10Memory) }
+
+    /// The first port from `base` no model uses, so catalog models can run side by side.
+    func freePort(from base: Int) -> Int {
+        let used = Set(config.recipes.map(port(of:)))
+        return (base...).first { !used.contains($0) } ?? base
+    }
+
+    /// Stops what can't run beside `r`: anything on its port, then least recently used models until its memory need
+    /// fits, or everything when the need isn't known yet. Returns the free memory just before it starts.
+    private func makeRoom(for r: Recipe) async throws -> Int64? {
+        var stopped: [String] = []
+        for o in runningRecipes where o.id != r.id && port(of: o) == port(of: r) {
+            try await doStop(o)
+            stopped.append("\(o.name) (same port \(port(of: r)))")
+        }
+        if external != nil, port(of: r) == config.device?.backendPort {
+            throw AppError("An unknown model (\(external ?? "?")) is using port \(port(of: r)). Stop it on the Spark first.")
+        }
+
+        guard let need = memoryNeed(r) else {
+            for o in runningRecipes where o.id != r.id { try await doStop(o); stopped.append(o.name) }
+            if comfyRunningNow { await stopComfyForRoom(); stopped.append("ComfyUI") }
+            warnStopped(stopped, for: r.name, why: "its memory need isn't known until it has run once")
+            await sampleSpark()
+            return spark.last?.memAvailable
+        }
+        try await freeMemory(need, for: r.name, keep: r.id, stopped: &stopped)
+        warnStopped(stopped, for: r.name, why: "it needs the memory")
+        return spark.last?.memAvailable
+    }
+
+    /// Makes room for ComfyUI under the same one-at-a-time lock as model starts. Returns what it stopped.
+    func makeRoomForComfy(_ need: Int64) async throws -> [String] {
+        let out = Box<[String]>([])
+        try await runTransition { [self] in
+            var stopped: [String] = []
+            try await freeMemory(need, for: "ComfyUI", keepComfy: true, stopped: &stopped)
+            out.value = stopped
+        }
+        return out.value
+    }
+
+    /// Stops least recently used models (ComfyUI included, unless it's the one starting) until `need` plus the
+    /// system reserve is free. `keep` is the model being started.
+    func freeMemory(_ need: Int64, for name: String, keep: UUID? = nil, keepComfy: Bool = false, stopped: inout [String]) async throws {
+        while true {
+            await sampleSpark()
+            let free = spark.last?.memAvailable ?? sparkMemoryTotal
+            if free >= need + Self.systemReserve { return }
+            var candidates: [(name: String, used: Date, stop: () async throws -> Void)] =
+                runningRecipes.filter { $0.id != keep }.map { o in (o.name, lastUsed[o.id] ?? .distantPast, { try await self.doStop(o) }) }
+            if comfyRunningNow && !keepComfy { candidates.append(("ComfyUI", comfyLastUsed ?? .distantPast, { await self.stopComfyForRoom() })) }
+            guard let victim = candidates.min(by: { $0.used < $1.used }) else {
+                warnStopped(stopped, for: name, why: "it needs more memory")
+                throw AppError(String(format: "%@ needs %.0f GB but only %.0f GB is free (keeping %.0f GB for the system). Lower its memory on its page, or stop something on the Spark.",
+                                      name, Double(need) / 1e9, Double(free) / 1e9, Double(Self.systemReserve) / 1e9))
+            }
+            try await victim.stop()
+            stopped.append(victim.name)
+            try? await Task.sleep(for: .seconds(3))
+        }
+    }
+
+    private func stopComfyForRoom() async {
+        guard let target = sshTarget else { return }
+        _ = await SSH.run(target, "bash -c \(SSH.quote(ComfyUI.stopCommand))", timeout: 30)
+        comfyCloseTunnel()
+        tf.comfyRunning = false
+    }
+
+    private func warnStopped(_ names: [String], for name: String, why: String) {
+        guard !names.isEmpty else { return }
+        notice = "Stopped \(names.joined(separator: ", ")) to start \(name): \(why)."
+        event("⚠︎ " + notice!)
+    }
+
+    /// Learns a model's memory need from the drop in free memory over its start, unless it was set on its page.
+    private func measureMemory(_ r: Recipe, availableBefore before: Int64?) async {
+        guard let before, r.vllm == nil, phases[r.id] == .ready, let i = config.recipes.firstIndex(where: { $0.id == r.id }),
+              config.recipes[i].memoryGB == nil || config.recipes[i].memoryMeasured else { return }
+        try? await Task.sleep(for: .seconds(3))
+        await sampleSpark()
+        guard let after = spark.last?.memAvailable, before - after > 1_000_000_000 else { return }
+        // ponytail: one reading after start; models that load lazily (Ollama) or grow later read low.
+        let gb = (Double(before - after) / 1e9 + 2).rounded(.up)
+        config.recipes[i].memoryGB = gb
+        config.recipes[i].memoryMeasured = true
+        event(String(format: "Measured %@ at about %.0f GB of memory", r.name, gb))
     }
 
     /// One start/stop at a time; everyone else waits for it.
@@ -293,30 +429,28 @@ final class AppState {
 
     private func doStart(_ r: Recipe) async throws {
         guard let target = sshTarget, let base = backendBase(for: r) else {
-            phase = .offline
+            offline = true
             throw AppError("The Spark is unreachable.")
         }
-        activeID = r.id
-        external = nil
-        phase = .starting
+        phases[r.id] = .starting
+        touch(r)
         config.lastActive = r.id
         event("Starting \(r.name)  $ \(r.startCommand)")
 
         // Detach the start command so a backgrounded server can't hold the SSH session open,
-        // then follow its output until it exits.
+        // then follow its output until it exits. One log per model, since several can start over time.
         // `;` (not `&&`) so only nohup is backgrounded and the SSH session returns at once.
-        // ComfyUI and a model can't share the GB10's memory, so starting a model stops ComfyUI.
-        if tf.comfyRunning { event("Stopping ComfyUI to free memory for \(r.name)") }
-        let launch = "\(ComfyUI.stopCommand); mkdir -p /tmp/spark-control; nohup \(SSH.interactive(r.startCommand + "; echo __SPARK_EXIT__$?")) > /tmp/spark-control/start.log 2>&1 < /dev/null & echo $!"
+        let log = "/tmp/spark-control/start-\(r.id.uuidString.prefix(8)).log"
+        let launch = "mkdir -p /tmp/spark-control; nohup \(SSH.interactive(r.startCommand + "; echo __SPARK_EXIT__$?")) > \(log) 2>&1 < /dev/null & echo $!"
         let res = await SSH.run(target, launch, timeout: 20)
         guard res.code == 0, let pid = res.output.split(separator: "\n").last.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }) else {
             let why = res.output.trimmingCharacters(in: .whitespacesAndNewlines)
-            phase = .failed("SSH failed" + (why.isEmpty ? "" : ": \(why)"))
-            throw AppError(phase.label)
+            phases[r.id] = .failed("SSH failed" + (why.isEmpty ? "" : ": \(why)"))
+            throw AppError(phase(for: r).label)
         }
         let exit = Box<Int32?>(nil)
         Task.detached { [weak self] in
-            await SSH.run(target, "tail -n +1 -f --pid=\(pid) /tmp/spark-control/start.log", timeout: r.timeout + 60) { line in
+            await SSH.run(target, "tail -n +1 -f --pid=\(pid) \(log)", timeout: r.timeout + 60) { line in
                 if line.hasPrefix("__SPARK_EXIT__") { exit.value = Int32(line.dropFirst(14)) ?? -1 }
                 else { self?.logFromBackground(line) }
             }
@@ -327,19 +461,19 @@ final class AppState {
             try? await Task.sleep(for: .seconds(2))
             if let info = await Probe.backend(base, key: r.backendKey), info.serves(r.upstreamModel) {
                 learnModelID(r, info)
-                phase = .ready
+                phases[r.id] = .ready
                 event("\(r.name) is ready")
                 return
             }
             if let code = exit.value, code != 0 {
-                phase = .failed("Start command exited with code \(code)")
-                event(phase.label)
-                throw AppError(phase.label)
+                phases[r.id] = .failed("Start command exited with code \(code)")
+                event(phase(for: r).label)
+                throw AppError(phase(for: r).label)
             }
         }
-        phase = .failed("Didn't become ready within \(Int(r.timeout))s")
-        event(phase.label)
-        throw AppError(phase.label)
+        phases[r.id] = .failed("Didn't become ready within \(Int(r.timeout))s")
+        event(phase(for: r).label)
+        throw AppError(phase(for: r).label)
     }
 
     /// Fills in a recipe's backend model ID the first time we see it serving.
@@ -350,16 +484,12 @@ final class AppState {
         event("Detected backend model ID: \(id)")
     }
 
-    private func doStop() async throws {
-        guard let target = sshTarget else {
-            phase = .offline
+    private func doStop(_ r: Recipe) async throws {
+        guard let target = sshTarget, let base = backendBase(for: r) else {
+            offline = true
             throw AppError("The Spark is unreachable.")
         }
-        guard let r = activeRecipe, let base = backendBase(for: r) else {
-            phase = .failed("An unknown model (\(external ?? "?")) is using port \(config.device?.backendPort ?? 0). Stop it on the Spark first.")
-            throw AppError(phase.label)
-        }
-        phase = .stopping
+        phases[r.id] = .stopping
         event("Stopping \(r.name)  $ \(r.stopCommand)")
         let res = await SSH.run(target, SSH.interactive(r.stopCommand), timeout: 180) { [weak self] line in
             self?.logFromBackground(line)
@@ -370,10 +500,14 @@ final class AppState {
             if await Probe.backend(base, key: r.backendKey) == nil { break }
             try? await Task.sleep(for: .seconds(2))
         }
-        activeID = nil
-        external = nil
-        phase = .stopped
+        phases[r.id] = nil
+        lastUsed[r.id] = nil
+        if activeID == r.id { activeID = runningRecipes.max { (lastUsed[$0.id] ?? .distantPast) < (lastUsed[$1.id] ?? .distantPast) }?.id }
         event("\(r.name) stopped")
+    }
+
+    private func doStopExternal() async throws {
+        throw AppError("An unknown model (\(external ?? "?")) is using port \(config.device?.backendPort ?? 0). Stop it on the Spark first.")
     }
 
     /// Stops the running model cleanly, then powers off the Spark. Returns an error message on failure.
@@ -393,9 +527,10 @@ final class AppState {
             event("Shutdown failed: \(out)")
             return password == nil ? "The Spark needs your password to shut down." : "Shutdown failed. Check the password.\n\n\(out)"
         }
+        phases = [:]
         activeID = nil
         external = nil
-        phase = .offline
+        offline = true
         return nil
     }
 
@@ -442,7 +577,7 @@ final class AppState {
 
     func gatewaySnapshot() -> GatewaySnapshot {
         GatewaySnapshot(settings: config.gateway, recipes: config.recipes.filter(\.enabled),
-                        active: activeRecipe, runningID: phase == .ready ? activeID : nil)
+                        active: activeRecipe, running: Set(runningRecipes.map(\.id)))
     }
 
     func beginRequest(method: String, path: String, model: String, body: Data) -> UUID {

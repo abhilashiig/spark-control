@@ -18,7 +18,14 @@ struct ModelView: View {
     var body: some View {
         let r = recipe
         Form {
+            if let n = state.notice { Section { NoticeBanner(text: n) } }
             Section { ModelHeader(recipe: r.wrappedValue) }
+
+            Section {
+                MemoryField(recipe: r)
+            } footer: {
+                Text(memoryFooter(r.wrappedValue))
+            }
 
             if let m = TensorFold.model(r.wrappedValue.tensorfold) {
                 TensorFoldSection(recipe: r, model: m)
@@ -126,9 +133,9 @@ private struct ModelHeader: View {
             if phase.busy {
                 ProgressView().controlSize(.small)
             } else if phase == .ready {
-                Button("Stop") { state.stop() }.controlSize(.large)
+                Button("Stop") { state.stop(recipe) }.controlSize(.large)
             } else {
-                Button(state.activeID != nil && state.activeID != recipe.id ? "Switch to This" : (phase.isFailure ? "Try Again" : "Start")) {
+                Button(phase.isFailure ? "Try Again" : "Start") {
                     state.start(recipe)
                 }
                 .buttonStyle(.borderedProminent)
@@ -139,6 +146,56 @@ private struct ModelHeader: View {
         .padding(.vertical, 4)
         .sheet(item: $keyTarget) { target in
             KeyLoginSheet(target: target) { state.start(recipe) }
+        }
+    }
+}
+
+extension ModelView {
+    func memoryFooter(_ r: Recipe) -> String {
+        var s = "Models run side by side when this fits in the Spark's free memory, keeping \(AppState.systemReserve / 1_000_000_000) GB for the system; otherwise the least recently used model stops first, with a warning."
+        if r.vllm != nil { s += " vLLM claims all of this at start, for weights and context." }
+        else if r.memoryGB == nil { s += " Empty means unknown: it's measured on the next start, and until then starting it stops everything else." }
+        else if r.memoryMeasured { s += " Measured on its last start." }
+        if r.tensorfold != nil { s += " TensorFold sizes its context pool to the memory that's free when it starts, so it measures large; --parallel 1 in the start command keeps it smaller." }
+        return s
+    }
+}
+
+/// Memory a model needs while running. For vLLM it's also the share of memory the container may take.
+private struct MemoryField: View {
+    @Environment(AppState.self) private var state
+    @Binding var recipe: Recipe
+
+    var body: some View {
+        let shown: Double? = recipe.memoryGB ?? (recipe.vllm != nil ? VLLM.memoryFraction(of: recipe.startCommand).map { ($0 * Double(state.sparkMemoryTotal) / 1e9).rounded() } : nil)
+        LabeledContent {
+            HStack(spacing: 4) {
+                TextField("Memory", value: Binding<Double?>(get: { shown }, set: { v in
+                    recipe.memoryGB = v
+                    recipe.memoryMeasured = false
+                    if let v, recipe.vllm != nil {
+                        recipe.startCommand = VLLM.withMemory(recipe.startCommand, v, total: Double(state.sparkMemoryTotal))
+                    }
+                }), format: .number, prompt: Text("Unknown"))
+                .labelsHidden().multilineTextAlignment(.trailing).frame(width: 90)
+                Text("GB").foregroundStyle(.secondary)
+            }
+        } label: {
+            Text("Memory needed")
+            if recipe.memoryMeasured { Text("Measured").font(.caption) }
+        }
+    }
+}
+
+struct NoticeBanner: View {
+    @Environment(AppState.self) private var state
+    let text: String
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(VizColor.warning)
+            Text(text).fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button { state.notice = nil } label: { Image(systemName: "xmark") }.buttonStyle(.borderless).help("Dismiss")
         }
     }
 }

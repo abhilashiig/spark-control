@@ -82,7 +82,7 @@ struct GatewaySnapshot {
     var settings: GatewaySettings
     var recipes: [Recipe]
     var active: Recipe?
-    var runningID: UUID?
+    var running: Set<UUID>
 }
 
 /// The OpenAI-compatible server clients talk to. Lives in the app; forwards to the Spark.
@@ -278,7 +278,7 @@ final class Gateway: @unchecked Sendable {
         [
             "id": r.apiID, "object": "model", "created": 0, "owned_by": "spark",
             "name": r.name,
-            "status": r.id == s.runningID ? "running" : "stopped",
+            "status": s.running.contains(r.id) ? "running" : "stopped",
             "pricing": ["input": r.priceIn, "output": r.priceOut, "cache_read": r.priceCache ?? r.priceIn, "unit": "USD per 1M tokens"],
         ]
     }

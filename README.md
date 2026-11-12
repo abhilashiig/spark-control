@@ -64,4 +64,9 @@ and the app installs your key. The password is passed to ssh through a pipe and 
   catalog models) and Available to Download (TensorFold, vLLM and ComfyUI catalogs), filterable by text or image
   and searchable. Start, Stop, Download and Open work from the list; a name opens that model's own page. The sidebar
   shows only running models.
+- **Several models at once**: starting a model stops only what it can't run beside: anything on the same port, then
+  the least recently used models (ComfyUI included) until its memory need fits with 12 GB left for the system.
+  A banner and Logs say what was stopped. Set **Memory needed** on a model's page, or leave it to be measured on
+  its first start (until then it runs alone). vLLM models take exactly their memory setting; TensorFold sizes its
+  context pool to the free memory, so it measures large unless started with `--parallel 1`.
 - **Data**: `~/Library/Application Support/Spark Control/` (`config.json`, `usage.jsonl`, `chats.json`).

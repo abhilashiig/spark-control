@@ -11,7 +11,7 @@ extension AppState {
         defer { bench?.running = false }
         func say(_ s: String) { bench?.lines.append(s) }
 
-        if activeID != r.id || phase != .ready {
+        if phase(for: r) != .ready {
             say("Starting \(r.name)…")
             do { try await switchTo(r) } catch {
                 say("Couldn't start \(r.name): \(error.localizedDescription)")

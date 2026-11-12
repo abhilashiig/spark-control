@@ -67,10 +67,10 @@ struct MenuBarView: View {
 
             Divider().padding(.horizontal, 10).padding(.vertical, 5)
 
-            if let active = state.activeRecipe, state.phase == .ready {
-                MenuRow(action: { state.stop() }) {
+            ForEach(state.runningRecipes) { r in
+                MenuRow(action: { state.stop(r) }) {
                     Image(systemName: "stop.circle").frame(width: 16)
-                    Text("Stop \(active.name)")
+                    Text("Stop \(r.name)")
                 }
                 .disabled(state.isBusy)
             }

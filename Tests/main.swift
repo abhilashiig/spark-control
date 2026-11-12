@@ -134,7 +134,7 @@ func bash(_ script: String, env: [String: String] = [:], syntaxOnly: Bool = fals
 for (name, s) in [("status", TensorFold.statusScript()), ("install", TensorFold.installScript()),
                   ("uninstall", TensorFold.uninstallScript(models: TensorFold.catalog)), ("download", TensorFold.downloadScript(q27, binary: "tf")),
                   ("cancel", TensorFold.cancelScript(q27.id)), ("delete", TensorFold.deleteScript(q27)), ("key", TensorFold.apiKeyScript),
-                  ("stop", TensorFold.stopCommand), ("manual", TensorFold.manualSteps)] {
+                  ("stop", TensorFold.stopCommand(port: 18300)), ("legacy stop", TensorFold.legacyStopCommand), ("manual", TensorFold.manualSteps)] {
     let (code, out) = bash(s, syntaxOnly: true)
     check(code == 0, "\(name) script parses: \(out)")
 }
@@ -245,7 +245,7 @@ check(VLLM.startCommand(vg, port: 1, name: "g").contains(#"'{"method":"mtp","mod
       "Gemma drafts from its assistant checkpoint")
 check(VLLM.catalog.allSatisfy { $0.repo.revision?.count == 40 } && Set(VLLM.catalog.map(\.key)).isDisjoint(with: tfIDs),
       "vLLM models are pinned and their records don't clash with TensorFold's")
-for (name, s) in [("vllm start", vqStart), ("vllm stop", VLLM.stopCommand), ("vllm pull", VLLM.pullScript), ("vllm remove", VLLM.removeScript),
+for (name, s) in [("vllm start", vqStart), ("vllm stop", VLLM.stopCommand("q")), ("tf stop", TensorFold.stopCommand(port: 18301)), ("vllm pull", VLLM.pullScript), ("vllm remove", VLLM.removeScript),
                   ("vllm download", VLLM.downloadScript(vg)), ("vllm delete", VLLM.deleteScript(vg))] {
     let (code, out) = bash(s, syntaxOnly: true)
     check(code == 0, "\(name) script parses: \(out)")
@@ -294,5 +294,21 @@ check(SparkMonitor.parse("GPU|[N/A], [N/A], [N/A], [N/A]").gpuUtil == nil, "miss
 let store = SparkMonitor.parseStorage("DU|Hugging Face cache|285788099522\nDU|ComfyUI|58777820794\nDOCKER|96.61GB")
 check(store.folders.count == 2 && store.folders[0].1 == 285788099522 && store.docker == "96.61GB", "storage parses")
 check(bash(SparkMonitor.script, syntaxOnly: true).0 == 0 && bash(SparkMonitor.storageScript, syntaxOnly: true).0 == 0, "monitor scripts parse")
+
+// Running side by side
+check(VLLM.memoryFraction(of: vqStart) == 0.38 && VLLM.memoryFraction(of: VLLM.withMemory(vqStart, 65)) == 0.5
+      && vqStart.contains("--name spark-vllm-qwen3.6-35b-a3b "), "vLLM takes its model's memory share and its own container")
+check(TensorFold.stopCommand(port: 18301).contains("--port 18301( |$)") && !TensorFold.stopCommand(port: 18301).contains("--port 18300"),
+      "TensorFold stops only the server on its port")
+check(bash("p='[t]ensorfold-native serve .*--port 18301( |$)'; echo 'tensorfold-native serve m --host 0.0.0.0 --port 18301 --name x' | grep -Eq \"$p\" && ! echo 'tensorfold-native serve m --port 183010 --name x' | grep -Eq \"$p\"").0 == 0,
+      "the port pattern matches its port and not a longer one")
+var legacy = Recipe(name: "Q", startCommand: "docker rm -f spark-vllm >/dev/null 2>&1; exec docker run --rm --name spark-vllm --gpus all", stopCommand: "x", upstreamModel: "q")
+legacy.vllm = "qwen3.6-35b-a3b"
+var legacyTF = Recipe(name: "T", startCommand: "tf serve", stopCommand: TensorFold.legacyStopCommand)
+legacyTF.tensorfold = "qwen3.8-27b"
+check(legacy.migrated(defaultPort: 18300).startCommand.contains("--name spark-vllm-q ")
+      && legacy.migrated(defaultPort: 18300).stopCommand == VLLM.stopCommand("q")
+      && legacyTF.migrated(defaultPort: 18300).stopCommand == TensorFold.stopCommand(port: 18300),
+      "models added earlier are migrated to stop only themselves")
 
 print("All checks passed")

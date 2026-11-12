@@ -84,6 +84,10 @@ struct Recipe: Codable, Identifiable, Hashable {
     var tensorfold: String?
     /// Set for models added from the vLLM catalog: the catalog id.
     var vllm: String?
+    /// Memory it needs while running, in GB: set on its page, or measured on a start (`memoryMeasured`).
+    /// Decides what else can run beside it.
+    var memoryGB: Double?
+    var memoryMeasured = false
     /// Sent to the backend as a bearer token, replacing the client's.
     var backendKey: String?
 
@@ -98,6 +102,23 @@ struct Recipe: Codable, Identifiable, Hashable {
         let m = model.lowercased()
         return m == apiID || m == name.lowercased()
             || (!upstreamModel.isEmpty && Transform.norm(m) == Transform.norm(upstreamModel))
+    }
+}
+
+extension Recipe {
+    /// Catalog models added before several could run: stop only their own server or container.
+    func migrated(defaultPort: Int) -> Recipe {
+        var r = self
+        if r.tensorfold != nil, r.stopCommand == TensorFold.legacyStopCommand {
+            r.stopCommand = TensorFold.stopCommand(port: r.port ?? defaultPort)
+        }
+        if r.vllm != nil, r.startCommand.contains("--name spark-vllm ") {
+            let c = VLLM.container(r.upstreamModel)
+            r.startCommand = r.startCommand.replacingOccurrences(of: "docker rm -f spark-vllm ", with: "docker rm -f \(c) ")
+                .replacingOccurrences(of: "--name spark-vllm ", with: "--name \(c) ")
+            r.stopCommand = VLLM.stopCommand(r.upstreamModel)
+        }
+        return r
     }
 }
 

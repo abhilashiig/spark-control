@@ -6,6 +6,12 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ## [Unreleased]
 
 ### Added
+- Several models can run at once. A model starts beside the running ones when its port is free and its memory
+  need fits in the Spark's free memory (keeping 12 GB for the system); otherwise the least recently used model,
+  ComfyUI included, stops first and a warning says what was stopped. Each model's page has a Memory needed field;
+  it's measured on first start when not set, and for vLLM it sets the container's memory share (now about 50 GB
+  per model instead of 85% of the Spark). New catalog models get their own port, vLLM models their own container,
+  and TensorFold's stop command stops only its own server.
 - Models page: your models and every catalog model (TensorFold, vLLM and ComfyUI image models) in one list,
   grouped Running, On Spark and Available to Download, with Text/Image filters and search. Start, stop,
   download and open from the list; a downloaded catalog model starts in one click. The sidebar lists only

@@ -51,7 +51,7 @@ extension AppState {
 
     /// Stops the serving model first when it's one of these, so nothing is deleted from under it.
     private func tfStopIfServing(_ ids: Set<String>) async {
-        if let id = activeRecipe.flatMap({ $0.tensorfold ?? $0.vllm.map { "vllm-" + $0 } }), ids.contains(id) { await stopAndWait() }
+        for r in runningRecipes where ids.contains(r.tensorfold ?? r.vllm.map { "vllm-" + $0 } ?? "") { await stopAndWait(r) }
     }
 
     func tfUninstall(deleteModels: Bool) async {
@@ -201,10 +201,21 @@ extension AppState {
         guard !comfyBusy, let target = sshTarget else { return }
         comfyBusy = true
         defer { comfyBusy = false }
+        comfyLastUsed = Date()
         if !tf.comfyRunning {
-            if let r = activeRecipe {
-                event("Stopping \(r.name) to free memory for ComfyUI")
-                await stopAndWait()
+            // ComfyUI loads a model when a workflow runs; plan for the one being opened, or the largest downloaded.
+            let models = ComfyUI.catalog.filter { m in template.map { $0 == m.template } ?? isOnSpark(.comfy(m)) }
+            // ponytail: 1.5× the files, from Z-Image-Turbo's 20.7 GB of files using 29.4 GB on a GB10.
+            let need = Int64(Double(models.map(\.size).max() ?? 20_000_000_000) * 1.5)
+            let stopped: [String]
+            do { stopped = try await makeRoomForComfy(need) } catch {
+                event(error.localizedDescription)
+                notice = error.localizedDescription
+                return
+            }
+            if !stopped.isEmpty {
+                notice = "Stopped \(stopped.joined(separator: ", ")) to start ComfyUI: it needs the memory."
+                event("⚠︎ " + notice!)
             }
             event("Starting ComfyUI")
             let res = await tfRun(ComfyUI.startScript, timeout: 200, stream: true)
@@ -253,9 +264,10 @@ extension AppState {
         let base = taken(m.name) ? "\(m.name) (vLLM)" : m.name
         let name = ([base] + (2...9).map { "\(base) \($0)" }).first { !taken($0) } ?? base
         let served = Recipe(name: name, startCommand: "", stopCommand: "").apiID
-        var r = Recipe(name: name, startCommand: VLLM.startCommand(m, port: device.backendPort, name: served),
-                       stopCommand: VLLM.stopCommand, upstreamModel: served)
-        r.port = device.backendPort
+        let port = freePort(from: device.backendPort)
+        var r = Recipe(name: name, startCommand: VLLM.startCommand(m, port: port, name: served, total: Double(sparkMemoryTotal)),
+                       stopCommand: VLLM.stopCommand(served), upstreamModel: served)
+        r.port = port
         // First start loads the weights and compiles kernels: vLLM's Spark guide measured 10-15 minutes.
         r.timeout = 2400
         r.vllm = m.id
@@ -268,9 +280,10 @@ extension AppState {
     func tfAddRecipe(_ m: TensorFold.Model) async -> UUID? {
         guard let binary = tf.engine.binary, let device = config.device, let key = await sparkAPIKey() else { return nil }
         let (name, served) = TensorFold.uniqueName(m) { x in config.recipes.contains { $0.answers(to: x) } }
-        var r = Recipe(name: name, startCommand: TensorFold.startCommand(m, binary: binary, port: device.backendPort, name: served),
-                       stopCommand: TensorFold.stopCommand, upstreamModel: served)
-        r.port = device.backendPort
+        let port = freePort(from: device.backendPort)
+        var r = Recipe(name: name, startCommand: TensorFold.startCommand(m, binary: binary, port: port, name: served),
+                       stopCommand: TensorFold.stopCommand(port: port), upstreamModel: served)
+        r.port = port
         r.timeout = 1800
         r.tensorfold = m.id
         r.backendKey = key

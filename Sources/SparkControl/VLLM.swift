@@ -7,8 +7,10 @@ enum VLLM {
     static let version = "0.33.0"
     /// vllm/vllm-openai:v0.33.0 (multi-arch; the Spark pulls the arm64 build). Bump with `version`.
     static let image = "vllm/vllm-openai@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e"
-    /// One container at a time: the GB10's memory holds one of these models.
-    static let container = "spark-vllm"
+    /// Each model runs in its own container, so several can run side by side.
+    static func container(_ served: String) -> String { "spark-vllm-" + served }
+    /// What vLLM's --gpu-memory-utilization is a fraction of on a GB10 (torch's 124,544 MiB).
+    static let gb10Memory = 130_594_021_376.0
 
     struct Model: Identifiable, Hashable {
         /// Also the served model name, after the `vllm-` record prefix is dropped.
@@ -24,6 +26,8 @@ enum VLLM {
         var window = 262_144
         /// Context new models start with, when the full window leaves too little room for the KV cache.
         var startWindow: Int?
+        /// Memory it may take, in GB: weights plus room for context. vLLM claims all of it at start.
+        var memoryGB: Double = 50
         var note: String
 
         /// Download records live in TensorFold's data folder, so they get a prefix no TensorFold model has.
@@ -50,11 +54,11 @@ enum VLLM {
               note: "NVIDIA NVFP4 with a 1M-token window; starts at 262k."),
         Model(id: "nemotron-3-super", name: "Nemotron 3 Super 120B-A12B",
               repo: .init(id: "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4", revision: "ff433f5493e25d631c9f12b5d55c674229923d02"),
-              parsers: nemotronParsers, flags: ["--trust-remote-code"], startWindow: 131_072,
+              parsers: nemotronParsers, flags: ["--trust-remote-code"], startWindow: 131_072, memoryGB: 105,
               note: "NVIDIA NVFP4, the model vLLM's own Spark guide serves (about 23 tok/s without drafts). 75 GiB of weights, so it starts at 131k."),
         Model(id: "gemma-4-26b-a4b", name: "Gemma 4 26B-A4B",
               repo: .init(id: "nvidia/Gemma-4-26B-A4B-NVFP4", revision: "a19cfe00be84568a6867111c9a68c9c44fdcffe6"),
-              drafter: .init(id: "google/gemma-4-26B-A4B-it-assistant"),
+              drafter: .init(id: "google/gemma-4-26B-A4B-it-assistant"), memoryGB: 45,
               note: "NVIDIA NVFP4 with Google's MTP assistant. Two drafted tokens measured 1.7–1.8× over none on a GB10, and beat four."),
     ]
 
@@ -80,7 +84,7 @@ enum VLLM {
     echo "› vLLM \(version) is ready"
     """
 
-    static let removeScript = "docker rm -f \(container) >/dev/null 2>&1; docker rmi \(image) && echo '› Removed the vLLM image'"
+    static let removeScript = "docker ps -aq --filter name=^spark-vllm | xargs -r docker rm -f >/dev/null 2>&1; docker rmi \(image) && echo '› Removed the vLLM image'"
 
     /// Downloads with the `hf` tool inside the vLLM image, so the Spark needs nothing else installed, as the
     /// Spark's user so the cache stays theirs (TensorFold and `hf` can still update or delete it). Detached
@@ -118,21 +122,33 @@ enum VLLM {
 
     /// Runs in the foreground so its log reaches Logs and a crash fails the start. Offline, so it serves only
     /// what's downloaded. vLLM, FlashInfer and Triton compile caches persist between starts.
-    static func startCommand(_ m: Model, port: Int, name: String) -> String {
-        var args = ["docker rm -f \(container) >/dev/null 2>&1;", "exec docker run --rm --name \(container)",
+    static func startCommand(_ m: Model, port: Int, name: String, total: Double = gb10Memory) -> String {
+        var args = ["docker rm -f \(container(name)) >/dev/null 2>&1;", "exec docker run --rm --name \(container(name))",
                     "--gpus all --ipc=host -p \(port):8000",
                     "-v \"\(TensorFold.hubDir):/root/.cache/huggingface/hub\"",
                     "-v \"$HOME/.cache/spark-control-vllm:/root/.cache\"",
                     "-e HF_HUB_OFFLINE=1", image,
                     m.repo.id] + (m.repo.revision.map { ["--revision", $0] } ?? [])
         args += ["--served-model-name", name, "--api-key", "\"$(cat \"\(TensorFold.dataDir)/api-key\")\"",
-                 "--gpu-memory-utilization 0.85", "--max-num-seqs 4", "--enable-prefix-caching"]
+                 "--max-num-seqs 4", "--enable-prefix-caching"]
         args += m.parsers + m.flags
-        let cmd = withContext(args.joined(separator: " "), m.startWindow ?? m.window)
+        let cmd = withMemory(withContext(args.joined(separator: " "), m.startWindow ?? m.window), m.memoryGB, total: total)
         return withDrafts(cmd, m.suggested, model: m)
     }
 
-    static let stopCommand = "docker stop -t 30 \(container) >/dev/null 2>&1; docker rm -f \(container) >/dev/null 2>&1; true"
+    static func stopCommand(_ served: String) -> String {
+        "docker stop -t 30 \(container(served)) >/dev/null 2>&1; docker rm -f \(container(served)) >/dev/null 2>&1; true"
+    }
+
+    /// The share of the Spark's memory the command lets vLLM take.
+    static func memoryFraction(of command: String) -> Double? {
+        flagValue("--gpu-memory-utilization", in: command).flatMap { Double($0) }
+    }
+
+    static func withMemory(_ command: String, _ gb: Double, total: Double = gb10Memory) -> String {
+        let f = min(0.95, max(0.05, gb * 1e9 / total))
+        return command.replacing(try! Regex(" --gpu-memory-utilization(=| +)[^ ]+"), with: "") + String(format: " --gpu-memory-utilization %.2f", f)
+    }
 
     // MARK: Flags
 

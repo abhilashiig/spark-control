@@ -23,6 +23,7 @@ struct ModelsView: View {
         let available = catalog.filter { !state.isOnSpark($0) }
 
         Form {
+            if let n = state.notice { Section { NoticeBanner(text: n) } }
             Section("Running") {
                 if running.isEmpty && !(state.tf.comfyRunning && kind != .text) {
                     Text("Nothing is running.").foregroundStyle(.secondary)
@@ -36,7 +37,7 @@ struct ModelsView: View {
             } header: {
                 Text("On Spark")
             } footer: {
-                Text("Your models and downloaded catalog models, ready to start. Starting a model stops the one running.")
+                Text("Your models and downloaded catalog models, ready to start. A model starts beside the running ones when its port is free and it fits in memory; otherwise the least recently used stops first, with a warning.")
             }
             if !available.isEmpty {
                 Section {
@@ -113,14 +114,14 @@ private struct RecipeRow: View {
                     EngineBadge(name: state.engineName(recipe))
                     if !recipe.enabled { Text("Off").font(.caption).foregroundStyle(.tertiary) }
                 }
-                Text(phase == .stopped ? "Port \(state.port(of: recipe)) · \(recipe.apiID)" : phase.label)
+                Text(phase == .stopped || phase == .ready ? detail : phase.label)
                     .font(.caption).foregroundStyle(phase.isFailure ? Color.red : Color.secondary).lineLimit(1)
             }
             Spacer()
             if phase.busy {
                 ProgressView().controlSize(.small)
             } else if phase == .ready {
-                Button("Stop") { state.stop() }
+                Button("Stop") { state.stop(recipe) }
             } else {
                 Button(phase.isFailure ? "Try Again" : "Start") { state.start(recipe) }
                     .buttonStyle(.borderedProminent)
@@ -130,6 +131,13 @@ private struct RecipeRow: View {
                 .buttonStyle(.borderless).help("Settings, benchmarks and details")
         }
         .padding(.vertical, 3)
+    }
+}
+
+extension RecipeRow {
+    var detail: String {
+        let mem = state.memoryNeed(recipe).map { String(format: " · %.0f GB", Double($0) / 1e9) } ?? " · memory unknown"
+        return (state.phase(for: recipe) == .ready ? "Running · " : "") + "Port \(state.port(of: recipe))" + mem
     }
 }
 

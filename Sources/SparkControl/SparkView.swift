@@ -192,7 +192,9 @@ private struct HistoryChart: View {
                 }
             }
             .chartYScale(domain: domain)
-            .chartXAxis { AxisMarks(values: .automatic(desiredCount: 5)) { AxisGridLine(); AxisValueLabel(format: .dateTime.hour().minute()) } }
+            .chartXScale(domain: (points.last?.0 ?? .now).addingTimeInterval(-300)...(points.last?.0 ?? .now))
+            .chartPlotStyle { $0.clipped() }
+            .chartXAxis { AxisMarks(values: .stride(by: .minute)) { AxisGridLine(); AxisValueLabel(format: .dateTime.hour().minute()) } }
             .chartYAxis { AxisMarks(position: .leading) { AxisGridLine(); AxisValueLabel() } }
             .chartXSelection(value: $hover)
             .frame(height: 130)

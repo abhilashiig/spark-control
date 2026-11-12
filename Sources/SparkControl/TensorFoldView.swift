@@ -389,6 +389,7 @@ struct ComfyView: View {
         Form {
             Section {
                 HStack(spacing: 12) {
+                    IconTile(symbol: "photo.on.rectangle.angled", tint: .pink, size: 40)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(state.tf.comfyVersion.map { "ComfyUI \($0)" } ?? "ComfyUI isn't installed").font(.headline)
                         Text(state.route == nil ? "The Spark is unreachable." : installed ? "Installed by Spark Control." : "Installs ComfyUI \(ComfyUI.version) with PyTorch for CUDA 13.0 in its own Python environment. About 10 GB, no sudo.")
@@ -463,7 +464,7 @@ private struct CatalogPage: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .formStyle(.grouped)
+            .page()
             .navigationTitle(title)
             .toolbar {
                 Button { Task { await state.tfRefresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
@@ -507,6 +508,7 @@ private struct EngineRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            IconTile(symbol: "square.stack.3d.up.fill", tint: .indigo, size: 40)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.headline)
                 Text(subtitle).font(.callout).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
@@ -710,6 +712,7 @@ private struct VLLMEngineRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            IconTile(symbol: "shippingbox.fill", tint: .teal, size: 40)
             VStack(alignment: .leading, spacing: 3) {
                 Text(state.tf.vllm == "ready" ? "vLLM \(VLLM.version)" : "vLLM isn't installed").font(.headline)
                 Text(subtitle).font(.callout).foregroundStyle(.secondary)

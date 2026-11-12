@@ -47,10 +47,20 @@ struct DiscoveredView: View {
 struct RequestsView: View {
     @Environment(AppState.self) private var state
     @State private var selected: RequestEntry.ID?
+    @State private var search = ""
+
+    private var shown: [RequestEntry] {
+        guard !search.isEmpty else { return state.requests }
+        return state.requests.filter { e in
+            [e.model, e.client, e.path, e.method, e.userAgent, e.error ?? "", String(e.status)]
+                .contains { $0.localizedCaseInsensitiveContains(search) }
+        }
+    }
 
     var body: some View {
+        let shown = shown
         VSplitView {
-            Table(state.requests, selection: $selected) {
+            Table(shown, selection: $selected) {
                 TableColumn("Time") { e in Text(e.date, format: .dateTime.hour().minute().second()) }.width(76)
                 TableColumn("Model", value: \.model)
                 TableColumn("Client", value: \.client)
@@ -87,8 +97,11 @@ struct RequestsView: View {
             if state.requests.isEmpty {
                 ContentUnavailableView("No Requests Yet", systemImage: "arrow.left.arrow.right",
                                        description: Text("Point your clients at \(state.apiBaseURL)"))
+            } else if shown.isEmpty {
+                ContentUnavailableView.search(text: search)
             }
         }
+        .searchable(text: $search, placement: .toolbar, prompt: "Search model, client, endpoint, status")
         .navigationTitle("Requests")
     }
 
@@ -320,7 +333,7 @@ struct UsageView: View {
                 Text("Costs are computed from each model's prices. Nothing is billed.")
             }
         }
-        .formStyle(.grouped)
+        .page()
         .navigationTitle("Usage")
         .toolbar {
             Picker("Period", selection: $period) {

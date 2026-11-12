@@ -23,27 +23,6 @@ extension AppState {
     }
 }
 
-// MARK: Palette
-
-extension Color {
-    init(light: UInt32, dark: UInt32) {
-        func ns(_ v: UInt32) -> NSColor {
-            NSColor(srgbRed: CGFloat(v >> 16 & 0xff) / 255, green: CGFloat(v >> 8 & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1)
-        }
-        self.init(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .vibrantDark]) != nil ? ns(dark) : ns(light) })
-    }
-}
-
-/// The validated categorical slots (light and dark steps), in fixed order, and the reserved status colours.
-enum VizColor {
-    static let series = [Color(light: 0x2a78d6, dark: 0x3987e5), Color(light: 0xeb6834, dark: 0xd95926),
-                         Color(light: 0x1baf7a, dark: 0x199e70), Color(light: 0xeda100, dark: 0xc98500),
-                         Color(light: 0xe87ba4, dark: 0xd55181)]
-    static let good = Color(light: 0x0ca30c, dark: 0x0ca30c)
-    static let warning = Color(light: 0xfab219, dark: 0xfab219)
-    static let critical = Color(light: 0xd03b3b, dark: 0xd03b3b)
-}
-
 // MARK: View
 
 struct SparkView: View {
@@ -71,12 +50,14 @@ struct SparkView: View {
                     StorageCard(sample: now)
                 }
                 .padding(20)
+                .animation(.smooth, value: samples.count)
             } else {
                 ContentUnavailableView(state.route == nil ? "Spark unreachable" : "Reading the Spark…",
                                        systemImage: "gauge.with.dots.needle.33percent")
                     .padding(.top, 80)
             }
         }
+        .background(Color.pageBackground)
         .navigationTitle("Spark")
         .task {
             await state.measureStorage()
@@ -90,17 +71,17 @@ struct SparkView: View {
     private func tiles(_ now: SparkMonitor.Sample, _ samples: [SparkMonitor.Sample]) -> some View {
         let cpu = samples.count > 1 ? SparkMonitor.cpuPercent("cpu", from: samples[samples.count - 2], to: now) : nil
         return HStack(spacing: 14) {
-            Tile(title: "Memory", value: String(format: "%.0f / %.0f GB", gb(now.memUsed), gb(now.memTotal)),
+            Tile(title: "Memory", symbol: "memorychip.fill", tint: .purple, value: String(format: "%.0f / %.0f GB", gb(now.memUsed), gb(now.memTotal)),
                  detail: String(format: "%.0f GB available", gb(now.memAvailable)),
                  fraction: Double(now.memUsed) / Double(max(1, now.memTotal)),
                  status: now.memAvailable < 12 << 30 ? .warning("Low") : nil)
-            Tile(title: "CPU", value: cpu.map { String(format: "%.0f%%", $0) } ?? "—",
+            Tile(title: "CPU", symbol: "cpu.fill", tint: .blue, value: cpu.map { String(format: "%.0f%%", $0) } ?? "—",
                  detail: "\(now.coreCount) cores · load " + (now.load.first.map { String(format: "%.2f", $0) } ?? "—"),
                  fraction: cpu.map { $0 / 100 })
-            Tile(title: "GPU", value: now.gpuUtil.map { String(format: "%.0f%%", $0) } ?? "—",
+            Tile(title: "GPU", symbol: "square.stack.3d.up.fill", tint: .green, value: now.gpuUtil.map { String(format: "%.0f%%", $0) } ?? "—",
                  detail: now.clock.map { String(format: "%.0f MHz", $0) } ?? "",
                  fraction: now.gpuUtil.map { $0 / 100 })
-            Tile(title: "GPU temperature", value: now.gpuTemp.map { String(format: "%.0f °C", $0) } ?? "—",
+            Tile(title: "GPU temperature", symbol: "thermometer.medium", tint: .orange, value: now.gpuTemp.map { String(format: "%.0f °C", $0) } ?? "—",
                  detail: now.power.map { String(format: "%.0f W", $0) } ?? "", status: now.gpuTemp.map(TempStatus.init))
         }
     }
@@ -128,46 +109,50 @@ enum TempStatus {
     var icon: String { switch self { case .good: "checkmark.circle.fill"; case .warning: "exclamationmark.triangle.fill"; case .critical: "flame.fill" } }
 }
 
-private struct Card<Content: View>: View {
-    let title: String
-    @ViewBuilder var content: Content
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline)
-            content
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
-    }
-}
-
 private struct Tile: View {
     let title: String
+    let symbol: String
+    let tint: Color
     let value: String
     let detail: String
     var fraction: Double? = nil
     var status: TempStatus? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(title).font(.caption).foregroundStyle(.secondary)
-                Spacer()
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                IconTile(symbol: symbol, tint: tint, size: 24)
+                Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
+                Spacer(minLength: 0)
                 if let status {
-                    Label(status.label, systemImage: status.icon).font(.caption2.weight(.medium))
+                    Label(status.label, systemImage: status.icon).font(.caption2.weight(.semibold))
                         .labelStyle(.titleAndIcon).foregroundStyle(status.color)
                 }
             }
-            Text(value).font(.title2.weight(.semibold)).monospacedDigit()
-            if let fraction {
-                ProgressView(value: min(max(fraction, 0), 1)).tint(VizColor.series[0])
-            }
-            Text(detail).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            Text(value).font(.system(.title, design: .rounded).weight(.bold)).monospacedDigit()
+                .minimumScaleFactor(0.6).lineLimit(1)
+                .contentTransition(.numericText())
+            if let fraction { Meter(fraction: fraction, tint: tint) }
+            Text(detail).font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+        .card(padding: 14)
+    }
+}
+
+/// A rounded gradient bar that eases between readings.
+private struct Meter: View {
+    let fraction: Double
+    let tint: Color
+    var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.secondary.opacity(0.15))
+                Capsule().fill(LinearGradient(colors: [tint.opacity(0.7), tint], startPoint: .leading, endPoint: .trailing))
+                    .frame(width: g.size.width * min(max(fraction, 0), 1))
+            }
+        }
+        .frame(height: 6)
+        .animation(.smooth, value: fraction)
     }
 }
 
@@ -181,17 +166,24 @@ private struct HistoryChart: View {
 
     var body: some View {
         let shown = hover.flatMap { h in points.min { abs($0.0.timeIntervalSince(h)) < abs($1.0.timeIntervalSince(h)) } } ?? points.last
-        Card(title: title) {
-            Text(shown.map { format($0.1) } ?? "—")
-                .font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                .padding(.top, -6)
+        Card {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(.headline)
+                Spacer()
+                Text(shown.map { format($0.1) } ?? "—").font(.subheadline.weight(.semibold)).monospacedDigit()
+                    .foregroundStyle(VizColor.series[0])
+                    .contentTransition(.numericText())
+            }
             Chart {
                 ForEach(points, id: \.0) { p in
                     AreaMark(x: .value("Time", p.0), y: .value(unit, p.1))
-                        .foregroundStyle(VizColor.series[0].opacity(0.15))
+                        .foregroundStyle(LinearGradient(colors: [VizColor.series[0].opacity(0.3), VizColor.series[0].opacity(0.02)],
+                                                        startPoint: .top, endPoint: .bottom))
+                        .interpolationMethod(.monotone)
                     LineMark(x: .value("Time", p.0), y: .value(unit, p.1))
                         .foregroundStyle(VizColor.series[0])
-                        .lineStyle(StrokeStyle(lineWidth: 2))
+                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+                        .interpolationMethod(.monotone)
                 }
                 if let hover, let shown {
                     RuleMark(x: .value("Time", hover)).foregroundStyle(.secondary.opacity(0.5))
@@ -218,7 +210,7 @@ private struct MemoryBreakdown: View {
 
     var body: some View {
         let parts = self.parts
-        Card(title: "Memory by process") {
+        Card(title: "Memory by Process") {
             GeometryReader { g in
                 HStack(spacing: 2) {
                     let usable = g.size.width - CGFloat(parts.count - 1) * 2
@@ -283,7 +275,7 @@ private struct CoresCard: View {
             let prev = samples[samples.count - 2]
             return (0..<now.coreCount).compactMap { i in SparkMonitor.cpuPercent("cpu\(i)", from: prev, to: now).map { (i, $0) } }
         }()
-        Card(title: "CPU cores") {
+        Card(title: "CPU Cores") {
             Chart(cores, id: \.0) { c in
                 BarMark(x: .value("Core", "\(c.0)"), y: .value("%", c.1), width: .ratio(0.7))
                     .foregroundStyle(VizColor.series[0])
@@ -338,7 +330,7 @@ private struct StorageCard: View {
                 Button { Task { await state.measureStorage() } } label: { Label("Measure", systemImage: "arrow.clockwise") }
                     .controlSize(.small)
             }
-            ProgressView(value: used).tint(used > 0.9 ? VizColor.critical : VizColor.series[0])
+            Meter(fraction: used, tint: used > 0.9 ? VizColor.critical : VizColor.series[0])
             if let st = state.sparkStorage {
                 FlowLegend(items: st.folders.map { ($0.0, String(format: "%.1f GB", gb($0.1)), Color.clear) }
                            + (st.docker.map { [("Docker images", $0, Color.clear)] } ?? []))

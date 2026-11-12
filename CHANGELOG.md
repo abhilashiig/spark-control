@@ -14,6 +14,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
   downloads Z-Image-Turbo onto the Spark, and opens ComfyUI in this Mac's browser through an SSH tunnel; it
   listens only on the Spark, so it isn't reachable from the network. Starting it stops the running model,
   and starting a model stops it.
+- ComfyUI starter models open straight to their workflow. Added Qwen-Image-Edit-2511 (about 31 GB) for editing
+  an image from an instruction.
 
 ## [1.0.0] - 2026-11-12
 

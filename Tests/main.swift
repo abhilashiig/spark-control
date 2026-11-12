@@ -263,7 +263,7 @@ for (name, s) in [("comfy install", ComfyUI.installScript), ("comfy remove", Com
 let cst = TensorFold.parseStatus("COMFY|v0.45.0|running\nMODEL|comfy-z-image-turbo|running|42|› x")
 check(cst.comfyVersion == "v0.45.0" && cst.comfyRunning && cst.models["comfy-z-image-turbo"]?.bytes == 42
       && TensorFold.parseStatus("COMFY||").comfyVersion == nil, "ComfyUI status parses")
-check(ComfyUI.catalog.allSatisfy { m in m.files.allSatisfy { $0.url.contains("/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/") } }
+check(ComfyUI.catalog.allSatisfy { m in m.files.allSatisfy { f in f.url.contains(try! Regex("/resolve/[0-9a-f]{40}/")) && f.url.hasSuffix("/" + (f.path as NSString).lastPathComponent) } }
       && ComfyUI.startScript.contains("--listen 127.0.0.1") && ComfyUI.startScript.contains("TORCH_DISABLE_NATIVE_JIT=1 nohup") && !ComfyUI.catalog.contains { $0.template.isEmpty }, "ComfyUI models are pinned and the server stays on the Spark's loopback")
 
 print("All checks passed")

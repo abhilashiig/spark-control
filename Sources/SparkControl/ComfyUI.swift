@@ -46,6 +46,24 @@ enum ComfyUI {
                   ],
                   // Checked in comfyui-workflow-templates 0.11.105: it loads exactly these three file names.
                   template: "image_z_image_turbo"),
+            Model(id: "qwen-image-edit-2511", name: "Qwen-Image-Edit-2511",
+                  note: "Edits an image you give it from an instruction (“make the jacket red”), with the 4-step Lightning LoRA for speed. Open loads its workflow: pick your image, type the edit and press Run. Apache 2.0; the text encoder comes from Comfy-Org's HunyuanVideo repackage.",
+                  files: [
+                      File(path: "diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors",
+                           url: "https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI/resolve/f68ace85e60b4a02a323e394253731947657b7d2/split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors",
+                           size: 20_533_762_817),
+                      File(path: "text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors",
+                           url: "https://huggingface.co/Comfy-Org/HunyuanVideo_1.5_repackaged/resolve/1405a2b738c29b890cf6d03fc038d8d3e92eeed7/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors",
+                           size: 9_384_670_680),
+                      File(path: "vae/qwen_image_vae.safetensors",
+                           url: "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/1f12b17be14c89b026c51a91d67c32f84bb047bc/split_files/vae/qwen_image_vae.safetensors",
+                           size: 253_806_246),
+                      File(path: "loras/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+                           url: "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/107d238d68b8387e32843d0b4a2e24ceb0d3ad86/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+                           size: 849_608_296),
+                  ],
+                  // Files, folders and URLs taken from this template in comfyui-workflow-templates 0.11.105.
+                  template: "image_qwen_image_edit_2511"),
         ]
     }()
 

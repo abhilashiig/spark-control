@@ -52,7 +52,8 @@ and the app installs your key. The password is passed to ssh through a pipe and 
   where nobody has published a sweep. The first start of a model can take 10–15 minutes.
 - **ComfyUI** (sidebar → Engines): image generation on the Spark. Install sets up ComfyUI (pinned release) with PyTorch
   for CUDA 13.0 in `~/.local/share/spark-control/comfyui`, following NVIDIA's DGX Spark playbook; no sudo. Starter
-  models (Z-Image-Turbo, about 20 GB) download straight onto the Spark. **Start and Open** stops the running model,
+  models download straight onto the Spark: Z-Image-Turbo (text to image, about 20 GB) and Qwen-Image-Edit-2511
+  (edits an image from an instruction, about 31 GB). **Start and Open** stops the running model,
   starts ComfyUI on the Spark's loopback only, and opens it at `http://127.0.0.1:18188` on this Mac through an SSH
   tunnel. Then Templates → Image → "Z-Image-Turbo: Text to Image" → Run. Starting any model stops ComfyUI, since
   both need the GB10's memory.

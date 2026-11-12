@@ -13,5 +13,6 @@ New entries go under **Unreleased**; a release renames that section to the versi
   4h / 24h / week / month / year / all.
 - Per-model Spark ports.
 - TensorFold catalog: install TensorFold, download tested models with their drafters, pick context length.
+- Catalog shows models already on the Spark and partial downloads, plus Spark recipes (patched vLLM and TensorFold setups per model).
 - Benchmarks.
 - Release DMGs built by GitHub Actions when a version tag is pushed.

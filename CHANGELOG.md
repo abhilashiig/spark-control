@@ -6,6 +6,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ## [Unreleased]
 
 ### Added
+- New app icon: an amber spark in a dial on midnight indigo.
 - Several models can run at once. A model starts beside the running ones when its port is free and its memory
   need fits in the Spark's free memory (keeping 12 GB for the system); otherwise the least recently used model,
   ComfyUI included, stops first and a warning says what was stopped. Each model's page has a Memory needed field;

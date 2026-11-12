@@ -5,7 +5,6 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 swift build -c release --arch arm64
-[ -f Resources/AppIcon.icns ] || swift scripts/make-icon.swift Resources/AppIcon.icns
 
 APP="build/Spark Control.app"
 rm -rf "$APP"

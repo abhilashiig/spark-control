@@ -5,6 +5,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-12
+
 ### Added
 - New app icon: an amber spark in a dial on midnight indigo.
 - Several models can run at once. A model starts beside the running ones when its port is free and its memory

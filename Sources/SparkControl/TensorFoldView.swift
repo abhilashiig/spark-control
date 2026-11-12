@@ -481,7 +481,7 @@ private struct CatalogPage: ViewModifier {
     }
 }
 
-private extension View {
+extension View {
     func catalogPage(_ title: String, deleting: Binding<CatalogItem?>) -> some View {
         modifier(CatalogPage(title: title, deleting: deleting))
     }
@@ -567,6 +567,15 @@ enum CatalogItem: Hashable, Identifiable {
         case .comfy(let m): m.note
         }
     }
+    var engine: String {
+        switch self {
+        case .tf: "TensorFold"
+        case .vllm: "vLLM"
+        case .comfy: "ComfyUI"
+        }
+    }
+    var isImage: Bool { if case .comfy = self { true } else { false } }
+
     /// What gets downloaded: Hugging Face repos, or files for ComfyUI.
     var sources: [String] {
         switch self {
@@ -577,18 +586,23 @@ enum CatalogItem: Hashable, Identifiable {
     }
 }
 
-private struct ModelRow: View {
+struct ModelRow: View {
     @Environment(AppState.self) private var state
     let item: CatalogItem
     @Binding var selection: Pane?
     @Binding var deleting: CatalogItem?
+    /// On the Models page: name the engine, and Start adds the model and starts it in one go.
+    var unified = false
     @State private var adding = false
 
     var body: some View {
         let st = state.tf.models[item.key] ?? .init()
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(item.name).font(.body.weight(.medium))
+                HStack(spacing: 6) {
+                    Text(item.name).font(.body.weight(.medium))
+                    if unified { EngineBadge(name: item.engine) }
+                }
                 Text(item.note).font(.callout).foregroundStyle(.secondary)
                 Text(item.sources.joined(separator: " + "))
                     .font(.caption.monospaced()).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
@@ -668,6 +682,17 @@ private struct ModelRow: View {
                 .help("Starts ComfyUI if needed and opens this model's workflow in the browser, ready for a prompt")
         } else if let id = state.catRecipeID(item) {
             Button("Open") { selection = .model(id) }
+        } else if unified {
+            Button("Start") {
+                adding = true
+                Task {
+                    if let id = await state.catAdd(item), let r = state.config.recipes.first(where: { $0.id == id }) { state.start(r) }
+                    adding = false
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(noEngine || adding || state.isBusy)
+            .help("Adds it to your models and starts it")
         } else {
             Button("Add Model") {
                 adding = true

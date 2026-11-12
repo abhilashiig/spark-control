@@ -17,6 +17,7 @@ enum Phase: Equatable {
         }
     }
     var busy: Bool { self == .starting || self == .stopping }
+    var isFailure: Bool { if case .failed = self { true } else { false } }
 }
 
 struct LogLine: Identifiable {

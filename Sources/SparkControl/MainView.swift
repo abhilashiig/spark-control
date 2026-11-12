@@ -1,12 +1,12 @@
 import SwiftUI
 
 enum Pane: Hashable {
-    case chat, model(UUID), connect, discovered, tensorfold, vllm, comfy, spark, requests, usage, logs
+    case chat, models, model(UUID), connect, discovered, tensorfold, vllm, comfy, spark, requests, usage, logs
 }
 
 struct MainView: View {
     @Environment(AppState.self) private var state
-    @State private var selection: Pane?
+    @State private var selection: Pane? = .models
 
     var body: some View {
         @Bindable var state = state
@@ -16,7 +16,9 @@ struct MainView: View {
                     Label("Chat", systemImage: "bubble.left.and.bubble.right").tag(Pane.chat)
                 }
                 Section("Models") {
-                    ForEach(state.config.recipes) { r in
+                    Label("All Models", systemImage: "square.grid.2x2").tag(Pane.models)
+                    // Only what's running (or starting, stopping, failed); the rest is on the Models page.
+                    ForEach(state.config.recipes.filter { state.phase(for: $0) != .stopped || selection == .model($0.id) }) { r in
                         HStack(spacing: 8) {
                             StatusDot(phase: state.phase(for: r))
                             Text(r.name.isEmpty ? "Untitled" : r.name)
@@ -60,6 +62,7 @@ struct MainView: View {
             case .model(let id) where state.config.recipes.contains { $0.id == id }:
                 ModelView(id: id, selection: $selection).id(id)
             case .chat: ChatView()
+            case .models: ModelsView(selection: $selection)
             case .connect: ConnectView()
             case .discovered: DiscoveredView(selection: $selection)
             case .tensorfold: TensorFoldView(selection: $selection)

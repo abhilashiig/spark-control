@@ -159,9 +159,6 @@ private struct CodeField: View {
     }
 }
 
-private extension Phase {
-    var isFailure: Bool { if case .failed = self { true } else { false } }
-}
 
 private struct RulesEditor: View {
     @Binding var rules: [ParamRule]

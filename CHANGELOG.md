@@ -6,6 +6,10 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ## [Unreleased]
 
 ### Added
+- Models page: your models and every catalog model (TensorFold, vLLM and ComfyUI image models) in one list,
+  grouped Running, On Spark and Available to Download, with Text/Image filters and search. Start, stop,
+  download and open from the list; a downloaded catalog model starts in one click. The sidebar lists only
+  running models under it.
 - Spark page (sidebar → Activity): live memory, CPU, GPU, power and temperatures with five-minute history
   charts, memory per process (ComfyUI, vLLM, TensorFold…), per-core load, and storage with what the model
   caches and Docker images take. The menu bar shows memory, GPU load and temperature.

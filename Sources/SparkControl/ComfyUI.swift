@@ -144,11 +144,14 @@ enum ComfyUI {
     // MARK: Server
 
     /// Starts the server detached, listening on the Spark's loopback only, and waits until it answers.
+    /// TORCH_DISABLE_NATIVE_JIT: PyTorch 2.14 routes some ops (the text encoder's matmul) to Triton kernels, and
+    /// Triton compiles a helper against Python.h, which DGX OS doesn't ship without `sudo apt install python3.12-dev`.
+    /// Switching that routing off uses the regular CUDA libraries instead (checked on a GB10 with torch 2.14.1+cu130).
     static let startScript = """
     C="\(dir)"; L="$C/server.log"
     pgrep -f '[s]park-control/comfyui/ComfyUI/main.py' >/dev/null && exit 0
     cd "$C/ComfyUI"
-    nohup "$C/venv/bin/python" "$C/ComfyUI/main.py" --listen 127.0.0.1 --port \(port) --disable-auto-launch > "$L" 2>&1 < /dev/null &
+    TORCH_DISABLE_NATIVE_JIT=1 nohup "$C/venv/bin/python" "$C/ComfyUI/main.py" --listen 127.0.0.1 --port \(port) --disable-auto-launch > "$L" 2>&1 < /dev/null &
     for i in $(seq 180); do
       curl -fs -o /dev/null http://127.0.0.1:\(port)/system_stats && { echo "› ComfyUI is ready"; exit 0; }
       kill -0 $! 2>/dev/null || { tail -20 "$L"; exit 1; }

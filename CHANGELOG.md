@@ -5,6 +5,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-12
+
 ### Added
 - Native macOS app that starts and stops models on a DGX Spark over SSH and serves them through one
   OpenAI-compatible API at `http://localhost:18080/v1`.

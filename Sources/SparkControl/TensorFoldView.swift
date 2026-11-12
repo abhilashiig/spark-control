@@ -196,8 +196,8 @@ extension AppState {
     }
 
     /// Starts ComfyUI if needed (stopping the running model first: both need the GB10's memory), then
-    /// opens it in the browser through the SSH tunnel.
-    func comfyOpen() async {
+    /// opens it in the browser through the SSH tunnel, on a template's workflow when given one.
+    func comfyOpen(template: String? = nil) async {
         guard !comfyBusy, let target = sshTarget else { return }
         comfyBusy = true
         defer { comfyBusy = false }
@@ -229,7 +229,7 @@ extension AppState {
                 return
             }
         }
-        NSWorkspace.shared.open(URL(string: "http://127.0.0.1:\(ComfyUI.localPort)")!)
+        NSWorkspace.shared.open(URL(string: "http://127.0.0.1:\(ComfyUI.localPort)/" + (template.map { "?template=\($0)" } ?? ""))!)
     }
 
     func comfyStop() async {
@@ -661,8 +661,11 @@ private struct ModelRow: View {
     }
 
     @ViewBuilder private func addOrOpen(_ noEngine: Bool) -> some View {
-        if case .comfy = item {
-            EmptyView()
+        if case .comfy(let m) = item {
+            Button("Open") { Task { await state.comfyOpen(template: m.template) } }
+                .buttonStyle(.borderedProminent)
+                .disabled(noEngine || state.comfyBusy || state.isBusy)
+                .help("Starts ComfyUI if needed and opens this model's workflow in the browser, ready for a prompt")
         } else if let id = state.catRecipeID(item) {
             Button("Open") { selection = .model(id) }
         } else {

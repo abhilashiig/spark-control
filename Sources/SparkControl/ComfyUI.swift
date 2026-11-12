@@ -28,6 +28,8 @@ enum ComfyUI {
         var name: String
         var note: String
         var files: [File]
+        /// The built-in ComfyUI template that uses these files; the frontend opens it from `?template=`.
+        var template: String
         var key: String { "comfy-" + id }
         var size: Int64 { files.reduce(0) { $0 + $1.size } }
     }
@@ -36,12 +38,14 @@ enum ComfyUI {
         let base = "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/"
         return [
             Model(id: "z-image-turbo", name: "Z-Image-Turbo",
-                  note: "The model NVIDIA's Spark playbook starts with. In ComfyUI, open Templates → Image → “Z-Image-Turbo: Text to Image”, type a prompt and Run.",
+                  note: "Fast text to image, the model NVIDIA's Spark playbook starts with. Open goes straight to its prompt: type and press Run.",
                   files: [
                       File(path: "diffusion_models/z_image_turbo_bf16.safetensors", url: base + "diffusion_models/z_image_turbo_bf16.safetensors", size: 12_309_866_400),
                       File(path: "text_encoders/qwen_3_4b.safetensors", url: base + "text_encoders/qwen_3_4b.safetensors", size: 8_044_982_048),
                       File(path: "vae/ae.safetensors", url: base + "vae/ae.safetensors", size: 335_304_388),
-                  ]),
+                  ],
+                  // Checked in comfyui-workflow-templates 0.11.105: it loads exactly these three file names.
+                  template: "image_z_image_turbo"),
         ]
     }()
 

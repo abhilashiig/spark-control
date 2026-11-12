@@ -123,3 +123,8 @@ extension Double {
 extension Int {
     var compact: String { formatted(.number.notation(.compactName)) }
 }
+
+extension Bundle {
+    /// CFBundleShortVersionString; the release workflow stamps it from the tag.
+    var appVersion: String { infoDictionary?["CFBundleShortVersionString"] as? String ?? "?" }
+}

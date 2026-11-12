@@ -101,6 +101,8 @@ struct MenuBarView: View {
             MenuRow(action: { NSApp.terminate(nil) }) {
                 Image(systemName: "power").frame(width: 16)
                 Text("Quit Spark Control")
+                Spacer()
+                Text("v" + Bundle.main.appVersion).font(.caption).foregroundStyle(.tertiary)
             }
         }
         .padding(.bottom, 6)

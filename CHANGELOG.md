@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Added
+- The app's version is shown in Settings → General and next to Quit in the menu bar.
+
 ### Changed
 - Commands to the Spark share one SSH connection instead of logging in each time: about 0.2 s per command instead of 0.6 s, and the Spark no longer records a new login every few seconds. It's reopened after a network change.
 

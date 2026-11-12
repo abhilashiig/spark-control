@@ -278,6 +278,7 @@ private struct GeneralSettings: View {
     var body: some View {
         @Bindable var state = state
         Form {
+            LabeledContent("Version", value: Bundle.main.appVersion)
             Toggle("Open at login", isOn: $state.launchAtLogin)
             LabeledContent("Data") {
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([Store.configURL]) }

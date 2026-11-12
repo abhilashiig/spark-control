@@ -168,7 +168,7 @@ final class AppState {
     private func configChanged(from old: Config) {
         guard config != old else { return }
         Store.save(config)
-        if config.recipes != old.recipes && !applyingShared {
+        if config.recipes.filter({ !$0.isBlank }) != old.recipes.filter({ !$0.isBlank }) && !applyingShared {
             modelsUpdated = Date()
             pushModels()
         }
@@ -237,7 +237,7 @@ final class AppState {
             return
         }
         guard let merged = shared.merged(into: config.recipes, local: modelsUpdated) else {
-            if let m = modelsUpdated, m > shared.updated { pushModels() }
+            if let m = modelsUpdated, m > shared.updated || shared.recipes.contains(where: \.isBlank) { pushModels() }
             return
         }
         let port = config.device?.backendPort ?? 18300
@@ -260,7 +260,7 @@ final class AppState {
             guard !Task.isCancelled, let target = sshTarget, let stamp = modelsUpdated else { return }
             let e = JSONEncoder()
             e.outputFormatting = [.prettyPrinted, .sortedKeys]
-            guard let data = try? e.encode(SharedModels(updated: stamp, recipes: config.recipes)) else { return }
+            guard let data = try? e.encode(SharedModels(updated: stamp, recipes: config.recipes.filter { !$0.isBlank })) else { return }
             let file = SharedModels.path
             let cmd = "mkdir -p \"$(dirname \"\(file)\")\" && cat > \"\(file).tmp\" && mv \"\(file).tmp\" \"\(file)\""
             // Detached: writing the list to ssh's stdin may block until ssh connects.

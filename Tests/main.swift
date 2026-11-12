@@ -328,8 +328,9 @@ let theirs = Recipe(name: "Theirs", startCommand: "t --context 65536", stopComma
 let shared = SharedModels(updated: Date(timeIntervalSince1970: 100), recipes: [theirs])
 check(shared.merged(into: [mine], local: Date(timeIntervalSince1970: 200)) == nil
       && shared.merged(into: [mine], local: Date(timeIntervalSince1970: 50)) == [theirs]
-      && shared.merged(into: Config.seed.recipes + [mine, theirs], local: nil) == [theirs, mine],
-      "the newer list wins; a Mac's first sync keeps its own models but not the starter ones")
+      && shared.merged(into: Config.seed.recipes + [mine, theirs, Recipe(name: "New Model", startCommand: " ", stopCommand: "")], local: nil) == [theirs, mine]
+      && SharedModels(updated: .now, recipes: [theirs, Recipe(name: "New Model", startCommand: "", stopCommand: "")]).merged(into: [], local: nil) == [theirs],
+      "the newer list wins; a Mac's first sync keeps its own models but not the starter ones or blank ones")
 check((try? JSONDecoder().decode(SharedModels.self, from: JSONEncoder().encode(shared)))?.recipes == [theirs], "the shared list reads back")
 
 print("All checks passed")

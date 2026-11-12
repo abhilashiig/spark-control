@@ -98,6 +98,9 @@ struct Recipe: Codable, Identifiable, Hashable {
             .joined(separator: "-")
     }
 
+    /// Added with + but never given a start command: never saved or shared.
+    var isBlank: Bool { startCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
     func answers(to model: String) -> Bool {
         let m = model.lowercased()
         return m == apiID || m == name.lowercased()
@@ -160,10 +163,11 @@ struct SharedModels: Codable {
     /// On a Mac's first sync, its own models the Spark doesn't have yet are kept beside the Spark's.
     func merged(into mine: [Recipe], local: Date?) -> [Recipe]? {
         if let local, local >= updated { return nil }
+        let recipes = recipes.filter { !$0.isBlank }
         guard local == nil else { return recipes }
         let seed = Config.seed.recipes
         return recipes + mine.filter { r in
-            !seed.contains { $0.name == r.name && $0.startCommand == r.startCommand }
+            !r.isBlank && !seed.contains { $0.name == r.name && $0.startCommand == r.startCommand }
                 && !recipes.contains { $0.id == r.id || $0.apiID == r.apiID }
         }
     }
@@ -212,13 +216,18 @@ enum Store {
 
     static func loadConfig() -> Config {
         guard let data = try? Data(contentsOf: configURL) else { return .seed }
-        if let c = try? JSONDecoder().decode(Config.self, from: data) { return c }
+        if var c = try? JSONDecoder().decode(Config.self, from: data) {
+            c.recipes.removeAll(where: \.isBlank)
+            return c
+        }
         // Never silently overwrite a config we couldn't read.
         try? FileManager.default.moveItem(at: configURL, to: dir.appending(path: "config.unreadable-\(Int(Date().timeIntervalSince1970)).json"))
         return .seed
     }
 
     static func save(_ c: Config) {
+        var c = c
+        c.recipes.removeAll(where: \.isBlank)
         let e = JSONEncoder()
         e.outputFormatting = [.prettyPrinted, .sortedKeys]
         try? e.encode(c).write(to: configURL, options: .atomic)

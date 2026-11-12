@@ -19,8 +19,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
   most recent change wins.
 - Models page: a table of every model on the Spark, showing engine, status, context, drafts, memory, size on
   disk and port, with Text/Image filters and search. Start and stop from the table, double-click for a model's
-  settings, and a downloaded catalog model starts in one click. New models are downloaded from each engine's
-  page, linked below the table with a short guide to picking one. The sidebar lists only running models under it.
+  settings (or click the ⓘ next to its name), and a downloaded catalog model starts in one click. New models are downloaded from each engine's
+  page, linked below the table with a short guide to picking one and to adding your own custom models. The sidebar lists only running models under it.
 - Spark page (sidebar → Activity): live memory, CPU, GPU, power and temperatures with five-minute history
   charts, memory per process (ComfyUI, vLLM, TensorFold…), per-core load, and storage with what the model
   caches and Docker images take. The menu bar shows memory, GPU load and temperature.
@@ -34,6 +34,14 @@ New entries go under **Unreleased**; a release renames that section to the versi
   and starting a model stops it.
 - ComfyUI starter models open straight to their workflow. Added Qwen-Image-Edit-2511 (about 31 GB) for editing
   an image from an instruction.
+
+### Changed
+- Shut Down Spark… moved from Settings to the foot of the sidebar, apart from everything else, still with a confirmation.
+- Connect is now the last item in the sidebar.
+
+### Fixed
+- A model added with + and left without a start command is no longer saved; it's dropped when you leave its page.
+
 
 ## [1.0.0] - 2026-11-12
 

@@ -30,6 +30,7 @@ struct ModelsView: View {
         VStack(spacing: 0) {
             if let n = state.notice { NoticeBanner(text: n).padding(12) }
             Table(entries, selection: $picked) {
+                TableColumn("") { e in actions(e) }.width(28)
                 TableColumn("Model") { e in name(e) }.width(min: 160, ideal: 220)
                 TableColumn("Engine") { e in EngineBadge(name: engine(e)) }.width(min: 70, ideal: 80)
                 TableColumn("Status") { e in status(e) }.width(min: 80, ideal: 110)
@@ -38,7 +39,6 @@ struct ModelsView: View {
                 TableColumn("Memory") { e in Text(memory(e)).monospacedDigit() }.width(min: 50, ideal: 70)
                 TableColumn("On Disk") { e in Text(disk(e)).monospacedDigit() }.width(min: 55, ideal: 75)
                 TableColumn("Port") { e in Text(port(e)).monospacedDigit() }.width(min: 45, ideal: 55)
-                TableColumn("") { e in actions(e) }.width(min: 70, ideal: 90)
             }
             .contextMenu(forSelectionType: Entry.ID.self) { ids in
                 if let e = ids.first.flatMap(entry) { menu(e) }
@@ -53,6 +53,7 @@ struct ModelsView: View {
             }
             Divider()
             AddModelsHelp(selection: $selection)
+                .layoutPriority(1)
         }
         .searchable(text: $search, placement: .toolbar, prompt: "Search models")
         .toolbar {
@@ -85,9 +86,13 @@ struct ModelsView: View {
     @ViewBuilder private func name(_ e: Entry) -> some View {
         switch e {
         case .recipe(let r):
-            Text(r.name.isEmpty ? "Untitled" : r.name).fontWeight(.medium)
-                .foregroundStyle(r.enabled ? .primary : .secondary)
-                .help("Double-click for its settings, benchmarks and details")
+            HStack(spacing: 6) {
+                Text(r.name.isEmpty ? "Untitled" : r.name).fontWeight(.medium)
+                    .foregroundStyle(r.enabled ? .primary : .secondary)
+                Button { selection = .model(r.id) } label: { Image(systemName: "info.circle") }
+                    .buttonStyle(.borderless)
+                    .help("Settings, benchmarks and details (or double-click the row)")
+            }
         case .catalog(let i):
             Text(i.name).help(i.note)
         }
@@ -174,20 +179,20 @@ struct ModelsView: View {
             if p.busy {
                 ProgressView().controlSize(.small)
             } else if p == .ready {
-                Button("Stop") { state.stop(r) }
+                IconButton(title: "Stop", symbol: "stop.fill") { state.stop(r) }
             } else {
-                Button(p.isFailure ? "Try Again" : "Start") { state.start(r) }
+                IconButton(title: p.isFailure ? "Try Again" : "Start", symbol: p.isFailure ? "arrow.clockwise" : "play.fill") { state.start(r) }
                     .disabled(!r.enabled || r.startCommand.isEmpty || state.route == nil || state.isBusy)
             }
         case .catalog(let i):
             if case .comfy(let m) = i {
-                Button("Open") { Task { await state.comfyOpen(template: m.template) } }
+                IconButton(title: "Open in ComfyUI", symbol: "arrow.up.forward.app") { Task { await state.comfyOpen(template: m.template) } }
                     .disabled(!state.engineReady(i) || state.comfyBusy || state.isBusy)
                     .help("Starts ComfyUI if needed and opens this model's workflow in the browser")
             } else if adding.contains(i.key) {
                 ProgressView().controlSize(.small)
             } else {
-                Button("Start") {
+                IconButton(title: "Add and start", symbol: "play.fill") {
                     adding.insert(i.key)
                     Task {
                         if let id = await state.catAdd(i), let r = state.config.recipes.first(where: { $0.id == id }) { state.start(r) }
@@ -195,7 +200,6 @@ struct ModelsView: View {
                     }
                 }
                 .disabled(!state.engineReady(i) || state.isBusy)
-                .help("Adds it to your models and starts it")
             }
         }
     }
@@ -238,7 +242,7 @@ private struct AddModelsHelp: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Get More Models").font(.headline)
-            Text("Spark Control starts and stops models on your DGX Spark over SSH and serves the running ones to this Mac through one OpenAI-compatible API. This list and each model's settings are kept on the Spark, so every Mac using it sees the same models. Download new models from an engine:")
+            Text("Spark Control starts and stops models on your DGX Spark over SSH and serves the running ones to this Mac through one OpenAI-compatible API. This list and each model's settings are kept on the Spark, so every Mac using it sees the same models. Download new models from an engine, or add your own:")
                 .font(.callout).foregroundStyle(.secondary)
             // No Grid or fixedSize here: either one beside the Table left the whole window blank on first launch.
             VStack(alignment: .leading, spacing: 6) {
@@ -251,16 +255,19 @@ private struct AddModelsHelp: View {
                 row("ComfyUI", "photo.on.rectangle.angled", .comfy,
                     "Image generation and editing, opened in your browser.")
             }
-            Text("Anything else: + in the toolbar adds a model with your own start and stop commands.")
-                .font(.caption).foregroundStyle(.secondary)
+            row("Custom", "plus.circle", nil,
+                "Anything else that serves an OpenAI-compatible API on the Spark (llama.cpp, SGLang, your own scripts), when a model or setting isn't in the catalogs. Give it a start and a stop command; they run in your Spark shell, so aliases work.")
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func row(_ title: String, _ symbol: String, _ pane: Pane, _ text: String) -> some View {
+    @Environment(AppState.self) private var state
+
+    /// `pane` nil = a custom model: adds one and opens its page.
+    private func row(_ title: String, _ symbol: String, _ pane: Pane?, _ text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Button { selection = pane } label: { Label(title, systemImage: symbol).frame(minWidth: 100, alignment: .leading) }
+            Button { selection = pane ?? .model(state.addRecipe()) } label: { Label(title, systemImage: symbol).frame(minWidth: 100, alignment: .leading) }
                 .buttonStyle(.link)
             Text(text).font(.callout).foregroundStyle(.secondary)
         }
@@ -285,6 +292,18 @@ extension AppState {
         if c.contains("vllm") || c.contains("flash serve") { return "vLLM" }
         if c.contains("tensorfold") { return "TensorFold" }
         return "Custom"
+    }
+}
+
+/// A table action: icon only, with its name as tooltip and for VoiceOver.
+private struct IconButton: View {
+    let title: String
+    let symbol: String
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) { Label(title, systemImage: symbol) }
+            .labelStyle(.iconOnly)
+            .help(title)
     }
 }
 

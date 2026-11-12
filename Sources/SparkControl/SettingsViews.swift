@@ -14,9 +14,6 @@ struct SettingsView: View {
 
 private struct DeviceSettings: View {
     @Environment(AppState.self) private var state
-    @State private var confirmShutdown = false
-    @State private var shuttingDown = false
-    @State private var shutdownError: String?
 
     var body: some View {
         @Bindable var state = state
@@ -48,34 +45,8 @@ private struct DeviceSettings: View {
                     TextField("Tailscale address", text: d.tailscaleOverride, prompt: Text(d.wrappedValue.base))
                     TextField("Model port", value: d.backendPort, format: .number.grouping(.never))
                 }
-                Section {
-                    LabeledContent("Power") {
-                        HStack {
-                            if shuttingDown { ProgressView().controlSize(.small) }
-                            Button("Shut Down Spark…", role: .destructive) { confirmShutdown = true }
-                                .disabled(state.sshTarget == nil || shuttingDown)
-                        }
-                    }
-                } footer: {
-                    Text("Stops the running model, then powers off the Spark. Asks for your Spark password if sudo needs one; it's never saved.")
-                }
             }
             .formStyle(.grouped)
-            .confirmationDialog("Shut down the Spark?", isPresented: $confirmShutdown) {
-                Button("Shut Down", role: .destructive) {
-                    shuttingDown = true
-                    Task {
-                        // Try without a password first; ask for one only if sudo needs it.
-                        shutdownError = await state.shutdownSpark()
-                        shuttingDown = false
-                    }
-                }
-            } message: {
-                Text("The running model is stopped first. You'll need to power the Spark back on by hand.")
-            }
-            .sheet(isPresented: Binding(get: { shutdownError != nil }, set: { if !$0 { shutdownError = nil } })) {
-                ShutdownPasswordSheet(target: state.sshTarget ?? "", error: shutdownError)
-            }
         } else {
             ContentUnavailableView {
                 Label("No Spark", systemImage: "server.rack")
@@ -321,6 +292,42 @@ private struct GeneralSettings: View {
             Button("Clear", role: .destructive) { state.clearBenchmarks() }
         } message: {
             Text("Deletes the saved runs for every model on this Mac. Copies on the Spark in ~/spark-bench-results are kept.")
+        }
+    }
+}
+
+/// Powers off the Spark after a confirmation: stops every model first, and asks for the Spark password only if
+/// sudo needs one (never saved). Sits at the foot of the sidebar, apart from everything else.
+struct ShutdownButton: View {
+    @Environment(AppState.self) private var state
+    @State private var confirm = false
+    @State private var working = false
+    @State private var error: String?
+
+    var body: some View {
+        HStack {
+            Button(role: .destructive) { confirm = true } label: {
+                Label("Shut Down Spark…", systemImage: "power")
+            }
+            .buttonStyle(.borderless)
+            .disabled(state.sshTarget == nil || working)
+            Spacer()
+            if working { ProgressView().controlSize(.small) }
+        }
+        .confirmationDialog("Shut down the Spark?", isPresented: $confirm) {
+            Button("Shut Down", role: .destructive) {
+                working = true
+                Task {
+                    // Try without a password first; ask for one only if sudo needs it.
+                    error = await state.shutdownSpark()
+                    working = false
+                }
+            }
+        } message: {
+            Text("Every running model is stopped first. You'll need to power the Spark back on by hand.")
+        }
+        .sheet(isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            ShutdownPasswordSheet(target: state.sshTarget ?? "", error: error)
         }
     }
 }

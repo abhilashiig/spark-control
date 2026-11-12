@@ -31,9 +31,6 @@ struct MainView: View {
                         .tag(Pane.model(r.id))
                     }
                 }
-                Section("API") {
-                    Label("Connect", systemImage: "link").tag(Pane.connect)
-                }
                 Section("Engines") {
                     Label("TensorFold", systemImage: "square.stack.3d.up").tag(Pane.tensorfold)
                     Label("vLLM", systemImage: "shippingbox").tag(Pane.vllm)
@@ -45,6 +42,9 @@ struct MainView: View {
                     Label("Requests", systemImage: "arrow.left.arrow.right").tag(Pane.requests)
                     Label("Usage", systemImage: "chart.bar.xaxis").tag(Pane.usage)
                     Label("Logs", systemImage: "text.alignleft").tag(Pane.logs)
+                }
+                Section("API") {
+                    Label("Connect", systemImage: "link").tag(Pane.connect)
                 }
             }
             .navigationSplitViewColumnWidth(min: 210, ideal: 230)
@@ -76,6 +76,10 @@ struct MainView: View {
             }
         }
         .sheet(isPresented: $state.showSetup) { DeviceSetupView() }
+        // A model added with + and left without a start command is dropped once you leave its page.
+        .onChange(of: selection) { old, _ in
+            if case .model(let id) = old { state.config.recipes.removeAll { $0.id == id && $0.isBlank } }
+        }
         .onAppear {
             if selection == nil { selection = state.config.recipes.first.map { .model($0.id) } }
         }
@@ -87,6 +91,10 @@ private struct ConnectionFooter: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Divider()
+            ShutdownButton()
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
             Divider()
             HStack(spacing: 10) {
                 Image(systemName: state.route?.symbol ?? "bolt.horizontal.circle")

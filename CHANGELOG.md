@@ -5,6 +5,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-13
+
 ### Added
 - Chat: paste images (⌘V), such as screenshots copied to the clipboard, or files copied in Finder, to attach them.
 

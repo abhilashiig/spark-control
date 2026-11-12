@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Added
+- Chat: paste images (⌘V), such as screenshots copied to the clipboard, or files copied in Finder, to attach them.
+
 ### Fixed
 - Models: the window no longer breaks (blank model list, sidebar pushed under the toolbar) when starting a model stops another one.
 - Spark charts: time labels no longer pile on top of each other and the charts always show the last five minutes instead of rescaling as readings arrive. The CPU Cores and Temperatures cards are now the same height.

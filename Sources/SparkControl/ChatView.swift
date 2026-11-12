@@ -292,7 +292,7 @@ final class ChatStore {
         return .success([ChatAttachment(name: name, kind: .text, payload: text)])
     }
 
-    private static func jpeg(_ image: NSImage, maxSide: CGFloat) -> Data? {
+    static func jpeg(_ image: NSImage, maxSide: CGFloat) -> Data? {
         guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
         let scale = min(1, maxSide / CGFloat(max(cg.width, cg.height)))
         let w = max(1, Int(CGFloat(cg.width) * scale)), h = max(1, Int(CGFloat(cg.height) * scale))
@@ -466,7 +466,7 @@ private struct Conversation: View {
                 .overlay {
                     if chat?.messages.isEmpty ?? true {
                         ContentUnavailableView("Start a Conversation", systemImage: "bubble.left.and.text.bubble.right",
-                                               description: Text("Drop images, PDFs or text files here to attach them."))
+                                               description: Text("Drop or paste images, PDFs or text files here to attach them."))
                     }
                 }
                 .onChange(of: chat?.messages.last?.content.count) { proxy.scrollTo("bottom", anchor: .bottom) }
@@ -504,6 +504,8 @@ private struct Conversation: View {
                 Button { importing = true } label: { Image(systemName: "paperclip").font(.system(size: 15)) }
                     .buttonStyle(.borderless)
                     .help("Attach Files")
+                    // ⌘V: images and copied files become attachments; anything else pastes as usual.
+                    .background { Button("Paste", action: paste).keyboardShortcut("v").opacity(0).frame(width: 0, height: 0) }
                 TextField("Message \(models.first(where: { $0.apiID == chat?.model })?.name ?? "the model")…",
                           text: $text, axis: .vertical)
                     .textFieldStyle(.plain)
@@ -553,6 +555,18 @@ private struct Conversation: View {
                    apiKey: state.toolGateway.apiKey)
         text = ""
         pending = []
+    }
+
+    private func paste() {
+        let pb = NSPasteboard.general
+        if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
+            add(urls)
+        } else if pb.string(forType: .string) == nil, let image = NSImage(pasteboard: pb) {
+            guard let jpeg = ChatStore.jpeg(image, maxSide: 2048) else { problem = "Couldn't read the pasted image."; return }
+            pending.append(ChatAttachment(name: "Pasted Image", kind: .image, mime: "image/jpeg", payload: jpeg.base64EncodedString()))
+        } else {
+            NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
+        }
     }
 
     private func add(_ urls: [URL]) {

@@ -1,0 +1,45 @@
+# Pushing a tag like v1.2.0 builds the app, packs it into a DMG and publishes a GitHub release
+# with that version's CHANGELOG.md section as its notes.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-check
+        run: ./Tests/run.sh
+
+      - name: Stamp version from tag
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          plutil -replace CFBundleShortVersionString -string "$V" Resources/Info.plist
+          plutil -replace CFBundleVersion -string "$GITHUB_RUN_NUMBER" Resources/Info.plist
+
+      - name: Build app
+        run: ./build-app.sh
+
+      - name: Make DMG
+        run: |
+          mkdir dmg
+          ditto "build/Spark Control.app" "dmg/Spark Control.app"
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Spark Control" -srcfolder dmg -format UDZO -ov "SparkControl-$GITHUB_REF_NAME.dmg"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          # Notes = the "## [V]" section of CHANGELOG.md, up to the next "## " heading.
+          awk -v v="$V" '/^## /{p = index($0, "[" v "]") > 0; next} p' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "CHANGELOG.md has no section for $V"; exit 1; }
+          gh release create "$GITHUB_REF_NAME" "SparkControl-$GITHUB_REF_NAME.dmg" --title "Spark Control $V" --notes-file notes.md

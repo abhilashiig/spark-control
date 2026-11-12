@@ -5,6 +5,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-12
+
 ### Added
 - The app's version is shown in Settings → General and next to Quit in the menu bar.
 

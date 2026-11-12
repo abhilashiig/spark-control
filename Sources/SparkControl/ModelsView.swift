@@ -30,7 +30,7 @@ struct ModelsView: View {
         VStack(spacing: 0) {
             if let n = state.notice { NoticeBanner(text: n).padding(12) }
             Table(entries, selection: $picked) {
-                TableColumn("") { e in actions(e) }.width(28)
+                TableColumn("") { e in actions(e) }.width(30)
                 TableColumn("Model") { e in name(e) }.width(min: 160, ideal: 220)
                 TableColumn("Engine") { e in EngineBadge(name: engine(e)) }.width(min: 70, ideal: 80)
                 TableColumn("Status") { e in status(e) }.width(min: 80, ideal: 110)
@@ -52,8 +52,9 @@ struct ModelsView: View {
                 }
             }
             Divider()
-            AddModelsHelp(selection: $selection)
-                .layoutPriority(1)
+            // Scrolls inside a capped height: sized to its text, it pushed the window's content past its edges.
+            ScrollView { AddModelsHelp(selection: $selection) }
+                .frame(height: 240)
         }
         .searchable(text: $search, placement: .toolbar, prompt: "Search models")
         .toolbar {
@@ -179,14 +180,14 @@ struct ModelsView: View {
             if p.busy {
                 ProgressView().controlSize(.small)
             } else if p == .ready {
-                IconButton(title: "Stop", symbol: "stop.fill") { state.stop(r) }
+                IconButton(title: "Stop", symbol: "stop.fill", color: .red) { state.stop(r) }
             } else {
-                IconButton(title: p.isFailure ? "Try Again" : "Start", symbol: p.isFailure ? "arrow.clockwise" : "play.fill") { state.start(r) }
+                IconButton(title: p.isFailure ? "Try Again" : "Start", symbol: p.isFailure ? "arrow.clockwise" : "play.fill", color: p.isFailure ? .orange : .green) { state.start(r) }
                     .disabled(!r.enabled || r.startCommand.isEmpty || state.route == nil || state.isBusy)
             }
         case .catalog(let i):
             if case .comfy(let m) = i {
-                IconButton(title: "Open in ComfyUI", symbol: "arrow.up.forward.app") { Task { await state.comfyOpen(template: m.template) } }
+                IconButton(title: "Open in ComfyUI", symbol: "arrow.up.forward", color: .accentColor) { Task { await state.comfyOpen(template: m.template) } }
                     .disabled(!state.engineReady(i) || state.comfyBusy || state.isBusy)
                     .help("Starts ComfyUI if needed and opens this model's workflow in the browser")
             } else if adding.contains(i.key) {
@@ -295,15 +296,28 @@ extension AppState {
     }
 }
 
-/// A table action: icon only, with its name as tooltip and for VoiceOver.
+/// A table action: a filled round icon (green to start, red to stop), its name as tooltip and for VoiceOver.
 private struct IconButton: View {
     let title: String
     let symbol: String
+    var color = Color.green
     let action: () -> Void
+    @Environment(\.isEnabled) private var enabled
+    @State private var hover = false
+
     var body: some View {
-        Button(action: action) { Label(title, systemImage: symbol) }
-            .labelStyle(.iconOnly)
-            .help(title)
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(enabled ? color.opacity(hover ? 1 : 0.85) : Color.secondary.opacity(0.3)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .accessibilityLabel(title)
+        .help(title)
     }
 }
 

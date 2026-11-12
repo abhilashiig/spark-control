@@ -5,6 +5,12 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Fixed
+- Models page: on a large or full-screen window the sidebar and page no longer get cut off at the top and bottom.
+
+### Changed
+- Models table: Start and Stop are round green and red buttons, so they read as buttons.
+
 ## [1.1.0] - 2026-11-12
 
 ### Added

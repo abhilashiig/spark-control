@@ -10,7 +10,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - SSH Keys page: lists every key that can log in to the Spark as you, with when and from where each last logged in, so you can remove any you don't recognise. This Mac's own key is marked and can't be removed, and a backup of the keys file is kept on the Spark.
 
 ### Fixed
-- SSH Keys: the page now loads in about a second instead of 20 or more, and no longer says "Spark unreachable" when loading took too long.
+- SSH Keys: keys show right away and each one's last login fills in a moment later, instead of the page loading for 20 seconds or more, and no longer says "Spark unreachable" when loading took too long.
 
 ## [1.7.0] - 2026-11-13
 

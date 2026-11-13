@@ -354,7 +354,8 @@ private struct StorageCard: View {
 struct SSHKeysView: View {
     @Environment(AppState.self) private var state
     @State private var keys: [SSHKeys.Key]?
-    @State private var logins: [String: SSHKeys.Login] = [:]
+    /// Loaded after the keys, as reading sshd's log takes a moment; nil until then.
+    @State private var logins: [String: SSHKeys.Login]?
     @State private var failed = false
     @State private var busy = false
     @State private var removing: SSHKeys.Key?
@@ -413,7 +414,9 @@ struct SSHKeysView: View {
                     Text("Restricted: \(k.options)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 }
                 // Spark Control logs in with a key, so an empty list means the log isn't readable, not that no key was used.
-                if !logins.isEmpty {
+                if logins == nil {
+                    Text("Checking last login…").font(.caption).foregroundStyle(.tertiary)
+                } else if let logins, !logins.isEmpty {
                     if let l = logins[k.fingerprint] {
                         Text("Last login \(l.date.formatted(.relative(presentation: .named))) from \(l.from)").font(.caption)
                     } else {
@@ -431,10 +434,12 @@ struct SSHKeysView: View {
 
     private func load() async {
         guard let target = state.sshTarget else { return }
-        let res = await SSH.run(target, "bash -c \(SSH.quote(SSHKeys.listScript))", timeout: 30)
+        let res = await SSH.run(target, SSHKeys.keysCommand, timeout: 15)
         failed = res.code != 0
         guard !failed else { return }
-        (keys, logins) = SSHKeys.parse(res.output)
+        keys = SSHKeys.keys(res.output)
+        let log = await SSH.run(target, "bash -c \(SSH.quote(SSHKeys.loginsScript))", timeout: 60)
+        logins = log.code == 0 ? SSHKeys.logins(log.output) : [:]
     }
 
     private func remove(_ k: SSHKeys.Key) async {

@@ -281,25 +281,22 @@ enum SSHKeys {
         var from: String
     }
 
-    static let marker = "--- logins ---"
-    /// The keys file, then per key fingerprint the time and address of its last login in 90 days of sshd's log
-    /// (nothing when the log isn't readable). Filtering by sshd's identifier uses the journal's index: ~1 s instead of
-    /// ~20 s scanning every message.
-    static let listScript = """
-    cat ~/.ssh/authorized_keys 2>/dev/null
-    echo '\(marker)'
+    static let keysCommand = "cat ~/.ssh/authorized_keys 2>/dev/null || true"
+    /// Per key fingerprint, the time and address of its last login in 90 days of sshd's log (nothing when the log
+    /// isn't readable). Filtering by sshd's identifier uses the journal's index: ~1 s instead of ~20 s scanning every message.
+    static let loginsScript = """
     journalctl -q -o short-unix --since -90days -t sshd -t sshd-session -g "Accepted publickey for $USER " 2>/dev/null | awk '{ last[$NF] = $1 " " $9 } END { for (k in last) print k, last[k] }'
     """
 
-    static func parse(_ output: String) -> (keys: [Key], logins: [String: Login]) {
-        let lines = output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        let cut = lines.firstIndex(of: marker) ?? lines.endIndex
+    static func keys(_ output: String) -> [Key] { output.split(separator: "\n").map(String.init).compactMap(key) }
+
+    static func logins(_ output: String) -> [String: Login] {
         var logins: [String: Login] = [:]
-        for l in lines[cut...].dropFirst() {
+        for l in output.split(separator: "\n") {
             let f = l.split(separator: " ").map(String.init)
             if f.count == 3, let t = Double(f[1]) { logins[f[0]] = Login(date: Date(timeIntervalSince1970: t), from: f[2]) }
         }
-        return (lines[..<cut].compactMap(key), logins)
+        return logins
     }
 
     static func key(_ line: String) -> Key? {

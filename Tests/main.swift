@@ -438,10 +438,8 @@ let keysOut = """
 ssh-ed25519 \(edKey) test@box
 
 from="10.0.0.0/8",no-pty ssh-ed25519 \(edKey.replacingOccurrences(of: "Dc", with: "Dd"))
-\(SSHKeys.marker)
-SHA256:imyUCfBXgOBOe/eaKRCXC94Z3QtVnWEjNYyhUGSdWio 1763038479.5 192.168.1.5
 """
-let parsedKeys = SSHKeys.parse(keysOut)
+let parsedKeys = (keys: SSHKeys.keys(keysOut), logins: SSHKeys.logins("SHA256:imyUCfBXgOBOe/eaKRCXC94Z3QtVnWEjNYyhUGSdWio 1763038479.5 192.168.1.5\n"))
 check(parsedKeys.keys.count == 2, "two keys, comments and blanks skipped")
 check(parsedKeys.keys[0].comment == "test@box" && parsedKeys.keys[0].options.isEmpty, "comment parsed")
 check(parsedKeys.keys[1].options == #"from="10.0.0.0/8",no-pty"# && parsedKeys.keys[1].comment.isEmpty, "options parsed")
@@ -451,12 +449,12 @@ check(parsedKeys.logins[parsedKeys.keys[0].fingerprint]?.from == "192.168.1.5", 
 let keysHome = FileManager.default.temporaryDirectory.appending(path: "selfcheck-\(getpid())")
 try! FileManager.default.createDirectory(at: keysHome.appending(path: ".ssh"), withIntermediateDirectories: true)
 let akURL = keysHome.appending(path: ".ssh/authorized_keys")
-try! keysOut.components(separatedBy: SSHKeys.marker)[0].write(to: akURL, atomically: true, encoding: .utf8)
+try! keysOut.write(to: akURL, atomically: true, encoding: .utf8)
 func removeKey(_ blob: String) -> Int32 { bash(SSHKeys.removeScript(blob), env: ["HOME": keysHome.path, "PATH": "/usr/bin:/bin"]).0 }
 check(removeKey(edKey) == 0, "remove script succeeds")
-let left = SSHKeys.parse(try! String(contentsOf: akURL, encoding: .utf8)).keys
+let left = SSHKeys.keys(try! String(contentsOf: akURL, encoding: .utf8))
 check(left.count == 1 && left[0].options.hasPrefix("from="), "only the chosen key is removed")
-check(removeKey(left[0].blob) == 0 && SSHKeys.parse(try! String(contentsOf: akURL, encoding: .utf8)).keys.isEmpty, "removing the last key works")
+check(removeKey(left[0].blob) == 0 && SSHKeys.keys(try! String(contentsOf: akURL, encoding: .utf8)).isEmpty, "removing the last key works")
 check(FileManager.default.fileExists(atPath: akURL.path + ".spark-control.bak"), "backup kept")
 try? FileManager.default.removeItem(at: keysHome)
 

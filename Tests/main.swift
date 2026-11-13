@@ -84,9 +84,9 @@ check(Transform.ollamaName(manifestPath: "/x/manifests/hf.co/mradermacher/Laguna
 check(Transform.norm("qwen35-abl:latest") == "qwen35-abl", ":latest normalized")
 
 // Routes
-let d = Device(baseHost: "aitopatom-049b.local")
-check(d.host(.tailscale) == "aitopatom-049b", "tailscale never has .local")
-check(d.host(.local) == "aitopatom-049b.local", "local adds .local")
+let d = Device(baseHost: "spark-1a2b.local")
+check(d.host(.tailscale) == "spark-1a2b", "tailscale never has .local")
+check(d.host(.local) == "spark-1a2b.local", "local adds .local")
 check(Probe.isTailscale("100.101.12.3") && !Probe.isTailscale("192.168.1.20"), "tailscale IP range")
 let idleOllama = Probe.Backend(loaded: [], listed: ["laguna", "qwen35-abl"])
 check(!idleOllama.serves("laguna") && !idleOllama.serves(""), "an idle Ollama serves none of its pulled models")
@@ -107,7 +107,7 @@ check(Speed.prefill(prompt: 20_000, cached: 19_200, ttft: 0.4) == 2000, "prefill
 check(Speed.prefill(prompt: 100, cached: 100, ttft: 0.2) == nil && Speed.decode(completion: 1, decodeTime: 1) == nil, "no speed without work")
 
 // Per-model port
-check(d.backendBase(.local) == "http://aitopatom-049b.local:18300" && d.backendBase(.tailscale, port: 8000) == "http://aitopatom-049b:8000", "per-model port")
+check(d.backendBase(.local) == "http://spark-1a2b.local:18300" && d.backendBase(.tailscale, port: 8000) == "http://spark-1a2b:8000", "per-model port")
 
 // TensorFold catalog and commands
 let tfIDs = TensorFold.catalog.map(\.id)
@@ -371,10 +371,10 @@ check(kp["other"] != nil && kj["model"] as? String == "openrouter/x" && sc["npm"
 check(try! ClientTool.kilo.apply(to: kiloOut, models: [vl, textOnly], gateway: gw) == kiloOut && ClientTool.kilo.isAdded(kiloOut),
       "Kilo: applying twice changes nothing")
 
-let piOut = try! ClientTool.pi.apply(to: #"{"providers": {"aitopatom": {"baseUrl": "http://x"}}}"#, models: [vl], gateway: gw)
+let piOut = try! ClientTool.pi.apply(to: #"{"providers": {"homelab": {"baseUrl": "http://x"}}}"#, models: [vl], gateway: gw)
 let pp = (try! JSONSerialization.jsonObject(with: Data(piOut.utf8)) as! [String: Any])["providers"] as! [String: Any]
 let pm = ((pp["spark-control"] as! [String: Any])["models"] as! [[String: Any]])[0]
-check(pp["aitopatom"] != nil && pm["id"] as? String == "qwen3.8-27b" && pm["input"] as? [String] == ["text", "image"]
+check(pp["homelab"] != nil && pm["id"] as? String == "qwen3.8-27b" && pm["input"] as? [String] == ["text", "image"]
       && (pm["cost"] as! [String: Any]).count == 4, "Pi: model with images, reasoning and all four cost rates")
 check(ClientTool.pi.isAdded(try! ClientTool.pi.apply(to: "", models: [], gateway: gw)), "Pi: a missing file gets created")
 
@@ -383,20 +383,20 @@ let yaml = """
 model:
   default: "qwen"
 providers:
-  aitopatom:
-    name: AiTopAtom
+  homelab:
+    name: Homelab
     models:
       qwen: {}
 onboarding:
   seen: true
 """
 let y1 = try! ClientTool.hermes.apply(to: yaml, models: [vl], gateway: gw)
-check(y1.hasPrefix("# Hermes\nmodel:\n  default: \"qwen\"\nproviders:\n  spark-control:\n") && y1.contains("    aitopatom:") == false
-      && y1.contains("  aitopatom:\n    name: AiTopAtom") && y1.contains("      supports_vision: true") && y1.hasSuffix("onboarding:\n  seen: true"),
+check(y1.hasPrefix("# Hermes\nmodel:\n  default: \"qwen\"\nproviders:\n  spark-control:\n") && y1.contains("    homelab:") == false
+      && y1.contains("  homelab:\n    name: Homelab") && y1.contains("      supports_vision: true") && y1.hasSuffix("onboarding:\n  seen: true"),
       "Hermes: provider added under providers, everything else untouched")
 let y2 = try! ClientTool.hermes.apply(to: y1, models: [textOnly], gateway: gw)
 check(!y2.contains("qwen3.8-27b") && y2.contains("\"nemotron-lightning\":\n        supports_vision: false")
-      && y2.contains("  aitopatom:\n    name: AiTopAtom") && y2.hasSuffix("onboarding:\n  seen: true")
+      && y2.contains("  homelab:\n    name: Homelab") && y2.hasSuffix("onboarding:\n  seen: true")
       && y2.components(separatedBy: "spark-control:").count == 2, "Hermes: updating replaces only its own block")
 check(try! ClientTool.hermes.apply(to: y2, models: [textOnly], gateway: gw) == y2, "Hermes: applying twice changes nothing")
 check(try! ClientTool.hermes.apply(to: "model: x\n", models: [], gateway: gw) == "model: x\nproviders:\n  spark-control:\n    name: Spark Control\n    base_url: \"http://localhost:18080/v1\"\n    api_key: \"sk-local\"\n    api_mode: chat_completions\n    extra_headers:\n      X-Spark-Client: \"Hermes\"\n    models: {}\n",

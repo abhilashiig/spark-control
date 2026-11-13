@@ -6,7 +6,13 @@ enum Pane: Hashable {
 
 struct MainView: View {
     @Environment(AppState.self) private var state
-    @State private var selection: Pane? = .models
+    /// `open -a "Spark Control" --args -startPage terminal` opens on that page (how the README's screenshots are taken).
+    @State private var selection: Pane? = {
+        let pages: [String: Pane] = ["chat": .chat, "models": .models, "tensorfold": .tensorfold, "vllm": .vllm, "ollama": .discovered,
+                                     "comfyui": .comfy, "spark": .spark, "sshkeys": .sshKeys, "terminal": .terminal,
+                                     "requests": .requests, "usage": .usage, "logs": .logs, "connect": .connect]
+        return UserDefaults.standard.string(forKey: "startPage").flatMap { pages[$0.lowercased()] } ?? .models
+    }()
 
     var body: some View {
         @Bindable var state = state

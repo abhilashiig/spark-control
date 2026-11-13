@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Changed
+- First-run setup no longer comes filled in with an example hostname and user; enter your own Spark's.
+
 ## [1.9.0] - 2026-11-13
 
 ### Added

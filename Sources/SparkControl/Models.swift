@@ -21,8 +21,8 @@ enum Route: String, Codable, CaseIterable, Identifiable {
 }
 
 struct Device: Codable, Equatable {
-    var user = "abhi"
-    var baseHost = "aitopatom-049b"
+    var user = ""
+    var baseHost = ""
     var mode = RouteMode.auto
     var localOverride = ""
     var tailscaleOverride = ""

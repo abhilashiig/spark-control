@@ -64,8 +64,8 @@ struct DeviceFields: View {
 
     var body: some View {
         Section {
-            TextField("User", text: $device.user)
-            TextField("Hostname", text: $device.baseHost, prompt: Text("aitopatom-049b"))
+            TextField("User", text: $device.user, prompt: Text("Your login on the Spark"))
+            TextField("Hostname", text: $device.baseHost, prompt: Text("spark-1a2b"))
             Picker("Connect using", selection: $device.mode) {
                 ForEach(RouteMode.allCases) { Text($0.label).tag($0) }
             }

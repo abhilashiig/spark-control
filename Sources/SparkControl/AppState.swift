@@ -83,6 +83,8 @@ final class AppState {
     /// Shells on the Spark, open on the Terminal page.
     var terminalTabs: [TerminalTab] = []
     var terminalSelection: UUID?
+    /// The tab waiting for "Close this tab?".
+    var terminalClosing: TerminalTab?
     /// The benchmark in progress: which model, its output so far, and its pid on the Spark.
     var bench: (recipe: UUID, lines: [String], pid: Int?, running: Bool)?
     var benchResults = Store.loadBenchmarks()

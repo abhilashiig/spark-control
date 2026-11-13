@@ -9,14 +9,20 @@ final class TerminalTab: NSObject, Identifiable, LocalProcessTerminalViewDelegat
     let id = UUID()
     var title: String
     var ended = false
-    @ObservationIgnored let view = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 500))
+    @ObservationIgnored let view = ShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 500))
     @ObservationIgnored var onExit: ((TerminalTab) -> Void)?
+
+    static let fontKey = "terminalFontSize"
+    static var font: NSFont {
+        let size = UserDefaults.standard.double(forKey: fontKey)
+        return .monospacedSystemFont(ofSize: size > 0 ? size : 13, weight: .regular)
+    }
 
     init(target: String) {
         title = target
         super.init()
         view.processDelegate = self
-        view.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        view.font = Self.font
         view.optionAsMetaKey = false  // as in Terminal.app: Option types special characters
         TerminalTheme.current.apply(to: view)
         let agent = ProcessInfo.processInfo.environment["SSH_AUTH_SOCK"].map { ["SSH_AUTH_SOCK=\($0)"] } ?? []
@@ -37,13 +43,62 @@ final class TerminalTab: NSObject, Identifiable, LocalProcessTerminalViewDelegat
     }
 }
 
+/// SwiftTerm's view plus the Terminal.app shortcuts, which it handles only while it has the keyboard.
+final class ShellView: LocalProcessTerminalView {
+    var onShortcut: ((NSEvent) -> Bool)?
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if window?.firstResponder === self, onShortcut?(event) == true { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
 extension AppState {
     func newTerminal() {
         guard let target = sshTarget else { return }
         let t = TerminalTab(target: target)
         t.onExit = { [weak self] in self?.closeTerminal($0) }
+        t.view.onShortcut = { [weak self, weak t] e in
+            guard let self, let t else { return false }
+            return self.terminalShortcut(e, in: t)
+        }
         terminalTabs.append(t)
         terminalSelection = t.id
+    }
+
+    /// Asks first unless the session already ended: closing ends anything still running in it.
+    func requestCloseTerminal(_ t: TerminalTab) {
+        if t.ended { closeTerminal(t) } else { terminalClosing = t }
+    }
+
+    /// ⌘T new tab, ⌘W close, ⌘1–9 / ⌘⇧[ ] / ⌃Tab switch tabs, ⌘K clear, ⌘+ ⌘− ⌘0 text size.
+    func terminalShortcut(_ e: NSEvent, in t: TerminalTab) -> Bool {
+        let mods = e.modifierFlags.intersection([.command, .shift, .control, .option])
+        let key = e.charactersIgnoringModifiers ?? ""
+        let i = terminalTabs.firstIndex { $0 === t } ?? 0
+        let n = terminalTabs.count
+        func select(_ j: Int) { terminalSelection = terminalTabs[(j + n) % n].id }
+        func resize(_ size: Double?) {
+            let now = TerminalTab.font.pointSize
+            UserDefaults.standard.set(size.map { min(max(now + $0, 9), 32) } ?? 13, forKey: TerminalTab.fontKey)
+            terminalTabs.forEach { $0.view.font = TerminalTab.font }
+        }
+        switch (mods, key) {
+        case (.command, "t"): newTerminal()
+        case (.command, "w"): requestCloseTerminal(t)
+        case (.command, "k"):
+            t.view.feed(text: "\u{1b}[3J")  // drop the scrollback here, then let the shell clear and redraw its prompt
+            t.view.send(txt: "\u{0c}")
+        case ([.command, .shift], "]"), ([.command, .shift], "}"), (.control, "\t"): select(i + 1)
+        case ([.command, .shift], "["), ([.command, .shift], "{"), ([.control, .shift], "\t"), ([.control, .shift], "\u{19}"): select(i - 1)
+        case (.command, "9"): select(n - 1)
+        case (.command, _) where key.count == 1 && ("1"..."8").contains(key):
+            if let j = Int(key), j <= n { select(j - 1) }
+        case (.command, "="), (.command, "+"), ([.command, .shift], "="), ([.command, .shift], "+"): resize(1)
+        case (.command, "-"): resize(-1)
+        case (.command, "0"): resize(nil)
+        default: return false
+        }
+        return true
     }
 
     func closeTerminal(_ t: TerminalTab) {
@@ -61,7 +116,6 @@ private extension Array {
 
 struct TerminalPage: View {
     @Environment(AppState.self) private var state
-    @State private var closing: TerminalTab?
     @AppStorage(TerminalTheme.key) private var themeName = TerminalTheme.all[0].name
     @Environment(\.colorScheme) private var colorScheme
 
@@ -74,7 +128,8 @@ struct TerminalPage: View {
             if let tab = state.terminalTabs.first(where: { $0.id == state.terminalSelection }) {
                 TerminalHost(tab: tab).id(tab.id)
                     .padding(.leading, 6).padding(.vertical, 4)
-                    .background(Color(nsColor: TerminalTheme.named(themeName).backgroundColor))
+                    // The view form: a plain colour background would extend under the sidebar and toolbar glass and tint them.
+                    .background { Color(nsColor: TerminalTheme.named(themeName).backgroundColor) }
             } else if state.sshTarget == nil {
                 ContentUnavailableView("Spark unreachable", systemImage: "terminal")
             } else {
@@ -103,8 +158,8 @@ struct TerminalPage: View {
         // System follows light and dark mode; every theme change applies to all tabs.
         .onChange(of: themeName) { restyle() }
         .onChange(of: colorScheme) { restyle() }
-        .confirmationDialog("Close this tab?", isPresented: Binding(get: { closing != nil }, set: { if !$0 { closing = nil } })) {
-            Button("Close", role: .destructive) { if let t = closing { state.closeTerminal(t) } }
+        .confirmationDialog("Close this tab?", isPresented: Binding(get: { state.terminalClosing != nil }, set: { if !$0 { state.terminalClosing = nil } })) {
+            Button("Close", role: .destructive) { if let t = state.terminalClosing { state.closeTerminal(t) } }
         } message: {
             Text("Its connection to the Spark ends, along with anything still running in it.")
         }
@@ -121,11 +176,11 @@ struct TerminalPage: View {
                 ForEach(state.terminalTabs) { t in
                     let selected = t.id == state.terminalSelection
                     HStack(spacing: 6) {
-                        Button { t.ended ? state.closeTerminal(t) : (closing = t) } label: {
+                        Button { state.requestCloseTerminal(t) } label: {
                             Image(systemName: "xmark").font(.caption2.weight(.bold))
                         }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
-                        .help("Close tab")
+                        .help("Close tab (⌘W)")
                         Text(t.title).lineLimit(1).truncationMode(.middle)
                             .foregroundStyle(t.ended ? .secondary : .primary)
                     }

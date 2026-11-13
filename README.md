@@ -36,6 +36,8 @@ pick a model, press play, and point your tools at `http://localhost:18080/v1`.
 - **Per-model settings:** context window, speculative decoding, memory, and rules that fill in or override
   request parameters (say, a default temperature).
 
+<img src="docs/screenshots/tensorfold.png" width="860" alt="The TensorFold page: install the engine and download models tested on one GB10">
+
 ### 💬 Chat
 
 <img src="docs/screenshots/chat.png" width="860" alt="The Chat page with a list of conversations">
@@ -52,6 +54,9 @@ Chats get a title automatically, and you can edit and resend any message.
 - Only apps on your Mac can reach it, unless you choose to allow other devices.
 
 ### 📊 See what's happening
+
+<img src="docs/screenshots/spark.png" width="860" alt="The Spark page: live memory, CPU, GPU and temperature charts">
+
 - **Spark:** live CPU, GPU, memory, power and temperatures, plus disk usage.
   The **DGX Dashboard** button opens NVIDIA's dashboard with no manual tunnel.
 - **Requests:** every API call with its model, app, tokens, speed and errors, searchable.
@@ -59,7 +64,12 @@ Chats get a title automatically, and you can edit and resend any message.
 - **Benchmark** a model on the Spark: prefill and decode speed across context lengths and batch sizes.
 - A **menu bar icon** shows what's running and lets you stop a model or copy the API URL.
 
+<img src="docs/screenshots/usage.png" width="860" alt="The Usage page: cost, requests, cache hit rate, speed and a per-model breakdown">
+
 ### 🖥️ Work on the Spark
+
+<img src="docs/screenshots/terminal.png" width="860" alt="The Terminal page: a shell on the Spark showing nvidia-smi, in the Solarized Light theme">
+
 - **Terminal:** real shells on the Spark in tabs, with colour, mouse and resizing, so vim, htop and tmux
   just work. Five colour themes and the shortcuts you know from Terminal.app (⌘T, ⌘W, ⌘K, ⌘1–9, ⌘+ ⌘−).
 - **SSH Keys:** see every key that can log in to your Spark, when and from where each last did, and

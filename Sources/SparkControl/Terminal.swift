@@ -19,14 +19,14 @@ final class TerminalTab: NSObject, Identifiable, LocalProcessTerminalViewDelegat
     }
 
     init(target: String) {
-        title = target
+        title = Demo.on ? "spark" : target
         super.init()
         view.processDelegate = self
         view.font = Self.font
         view.optionAsMetaKey = false  // as in Terminal.app: Option types special characters
         TerminalTheme.current.apply(to: view)
         let agent = ProcessInfo.processInfo.environment["SSH_AUTH_SOCK"].map { ["SSH_AUTH_SOCK=\($0)"] } ?? []
-        view.startProcess(executable: "/usr/bin/ssh", args: SSH.shellArguments(target),
+        view.startProcess(executable: "/usr/bin/ssh", args: SSH.shellArguments(target) + (Demo.on ? [#"clear; nvidia-smi; PS1='spark:~$ ' exec bash --norc -i"#] : []),
                           environment: Terminal.getEnvironmentVariables(termName: "xterm-256color") + agent)
     }
 
@@ -154,7 +154,8 @@ struct TerminalPage: View {
                 .help("New tab (⌘T)")
                 .disabled(state.sshTarget == nil)
         }
-        .onAppear { if state.terminalTabs.isEmpty { state.newTerminal() } }
+        // Opens the first shell once the Spark is reachable, which may be after the page appears (e.g. at launch).
+        .task(id: state.sshTarget) { if state.terminalTabs.isEmpty { state.newTerminal() } }
         // System follows light and dark mode; every theme change applies to all tabs.
         .onChange(of: themeName) { restyle() }
         .onChange(of: colorScheme) { restyle() }

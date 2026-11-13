@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Fixed
+- Terminal: opening the page while the app was still connecting to the Spark no longer leaves it empty; the first shell opens as soon as the Spark is reachable.
+
 ### Changed
 - First-run setup no longer comes filled in with an example hostname and user; enter your own Spark's.
 

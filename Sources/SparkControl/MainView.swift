@@ -4,6 +4,13 @@ enum Pane: Hashable {
     case chat, models, model(UUID), connect, discovered, tensorfold, vllm, comfy, spark, sshKeys, terminal, requests, usage, logs
 }
 
+/// `--args -demo YES`: the mode the README's screenshots are taken in. Full screen, a generic hostname, and
+/// Terminal tabs that show nvidia-smi under a plain prompt, so no screenshot shows the Spark's real name,
+/// login, addresses or login banner.
+enum Demo {
+    static let on = UserDefaults.standard.bool(forKey: "demo")
+}
+
 struct MainView: View {
     @Environment(AppState.self) private var state
     /// `open -a "Spark Control" --args -startPage terminal` opens on that page (how the README's screenshots are taken).
@@ -87,6 +94,18 @@ struct MainView: View {
             }
         }
         .sheet(isPresented: $state.showSetup) { DeviceSetupView() }
+        .onAppear {
+            guard Demo.on else { return }
+            Task { @MainActor in  // the window may not exist yet on first appear
+                for _ in 0..<20 {
+                    try? await Task.sleep(for: .milliseconds(300))
+                    if let w = NSApp.windows.first(where: { $0.canBecomeMain && $0.isVisible }) {
+                        if !w.styleMask.contains(.fullScreen) { w.toggleFullScreen(nil) }
+                        return
+                    }
+                }
+            }
+        }
         // A model added with + and left without a start command is dropped once you leave its page.
         .onChange(of: selection) { old, _ in
             if case .model(let id) = old { state.config.recipes.removeAll { $0.id == id && $0.isBlank } }
@@ -119,7 +138,7 @@ private struct ConnectionFooter: View {
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(state.route?.label ?? "Spark Unreachable").font(.callout.weight(.semibold))
-                Text(state.route.flatMap { r in state.config.device?.host(r) } ?? "Check Settings")
+                Text(Demo.on ? "spark.local" : state.route.flatMap { r in state.config.device?.host(r) } ?? "Check Settings")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

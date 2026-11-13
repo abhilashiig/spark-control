@@ -80,6 +80,9 @@ final class AppState {
     @ObservationIgnored var comfyTunnel: (process: Process, target: String)?
     /// The SSH tunnel to NVIDIA's DGX Dashboard (port 11000 on the Spark).
     @ObservationIgnored var dashboardTunnel: (process: Process, target: String)?
+    /// Shells on the Spark, open on the Terminal page.
+    var terminalTabs: [TerminalTab] = []
+    var terminalSelection: UUID?
     /// The benchmark in progress: which model, its output so far, and its pid on the Spark.
     var bench: (recipe: UUID, lines: [String], pid: Int?, running: Bool)?
     var benchResults = Store.loadBenchmarks()

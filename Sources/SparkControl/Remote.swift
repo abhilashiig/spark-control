@@ -328,3 +328,11 @@ enum SSHKeys {
         })
     }
 }
+
+extension SSH {
+    /// A login shell for the Terminal page. Its own connection rather than the shared one (a network change closes
+    /// that), and unlike commands it may prompt, e.g. for a password when no key works.
+    static func shellArguments(_ target: String) -> [String] {
+        ["-t", "-o", "ConnectTimeout=6", "-o", "ServerAliveInterval=15", "-o", "StrictHostKeyChecking=accept-new", target]
+    }
+}

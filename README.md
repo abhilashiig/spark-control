@@ -64,6 +64,12 @@ and the app installs your key. The password is passed to ssh through a pipe and 
 - **Spark** (sidebar → Activity): live memory, CPU, GPU, power and temperatures, read over SSH every 2 seconds
   while the page is open (every 15 seconds otherwise, for the menu bar). Memory comes from `/proc/meminfo` because
   the GB10 shares it between CPU and GPU, and per-process GPU memory from `nvidia-smi`.
+  The DGX Dashboard button opens NVIDIA's dashboard (port 11000 on the Spark) through an SSH tunnel.
+- **SSH Keys** (sidebar → Activity): the keys in the Spark's `~/.ssh/authorized_keys`, each with its last login from
+  sshd's log, and Remove (this Mac's keys can't be removed; a backup is kept as `authorized_keys.spark-control.bak`).
+- **Terminal** (sidebar → Activity): shells on the Spark in tabs (⌘T), emulated by
+  [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) as xterm-256color, so vim, htop and tmux work. Each tab
+  is its own `ssh -t` and stays open while you use other pages; `exit` closes it.
 - **Models** (sidebar, the app's start page): every model in one list. Running, On Spark (your models and downloaded
   catalog models) and Available to Download (TensorFold, vLLM and ComfyUI catalogs), filterable by text or image
   and searchable. Start, Stop, Download and Open work from the list; a name opens that model's own page. The sidebar

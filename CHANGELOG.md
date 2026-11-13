@@ -8,6 +8,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ### Added
 - Spark: a DGX Dashboard button opens NVIDIA's DGX Dashboard in your browser through an SSH tunnel, so you don't have to set one up yourself.
 - SSH Keys page: lists every key that can log in to the Spark as you, with when and from where each last logged in, so you can remove any you don't recognise. This Mac's own key is marked and can't be removed, and a backup of the keys file is kept on the Spark.
+- Terminal page: shells on the Spark in tabs (⌘T for a new one), with full colour, mouse and resizing so tools like vim, htop and tmux work. Tabs stay open while you use other pages.
 
 ### Fixed
 - SSH Keys: keys show right away and each one's last login fills in a moment later, instead of the page loading for 20 seconds or more, and no longer says "Spark unreachable" when loading took too long.

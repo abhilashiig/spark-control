@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Added
+- Spark: a DGX Dashboard button opens NVIDIA's DGX Dashboard in your browser through an SSH tunnel, so you don't have to set one up yourself.
+
 ## [1.7.0] - 2026-11-13
 
 ### Added

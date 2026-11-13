@@ -225,21 +225,8 @@ extension AppState {
                 return
             }
         }
-        if comfyTunnel?.target != target || comfyTunnel?.process.isRunning != true {
-            comfyCloseTunnel()
-            guard let p = SSH.forward(target, local: ComfyUI.localPort, remote: ComfyUI.port) else {
-                event("Couldn't open the tunnel to ComfyUI")
-                return
-            }
-            comfyTunnel = (p, target)
-            try? await Task.sleep(for: .seconds(1.5))
-            // A tunnel left by an earlier run of the app still holds the port; use it if ComfyUI answers there.
-            let answers = (try? await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(ComfyUI.localPort)/system_stats")!)) != nil
-            guard p.isRunning || answers else {
-                event("The tunnel to ComfyUI closed: is port \(ComfyUI.localPort) on this Mac in use?")
-                return
-            }
-        }
+        guard await tunnel(\.comfyTunnel, to: target, local: ComfyUI.localPort, remote: ComfyUI.port,
+                           name: "ComfyUI", probe: "/system_stats") else { return }
         NSWorkspace.shared.open(URL(string: "http://127.0.0.1:\(ComfyUI.localPort)/" + (template.map { "?template=\($0)" } ?? ""))!)
     }
 
@@ -251,6 +238,35 @@ extension AppState {
         comfyCloseTunnel()
         event("ComfyUI stopped")
         await tfRefresh()
+    }
+
+    /// Keeps an SSH tunnel from `local` on this Mac to `remote` on the Spark open in `slot`; false (with an event) if it can't.
+    func tunnel(_ slot: ReferenceWritableKeyPath<AppState, (process: Process, target: String)?>, to target: String,
+                local: Int, remote: Int, name: String, probe: String) async -> Bool {
+        if self[keyPath: slot]?.target == target, self[keyPath: slot]?.process.isRunning == true { return true }
+        self[keyPath: slot]?.process.terminate()
+        self[keyPath: slot] = nil
+        guard let p = SSH.forward(target, local: local, remote: remote) else {
+            event("Couldn't open the tunnel to \(name)")
+            return false
+        }
+        self[keyPath: slot] = (p, target)
+        try? await Task.sleep(for: .seconds(1.5))
+        // A tunnel left by an earlier run of the app (or one of your own) may hold the port; use it if the service answers there.
+        let answers = (try? await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(local)\(probe)")!)) != nil
+        guard p.isRunning || answers else {
+            event("The tunnel to \(name) closed: is port \(local) on this Mac in use?")
+            return false
+        }
+        return true
+    }
+
+    /// Opens NVIDIA's DGX Dashboard, which listens only on the Spark itself, in the browser through an SSH tunnel.
+    func openDashboard() async {
+        guard let target = sshTarget,
+              await tunnel(\.dashboardTunnel, to: target, local: 11000, remote: 11000, name: "DGX Dashboard", probe: "/")
+        else { return }
+        NSWorkspace.shared.open(URL(string: "http://127.0.0.1:11000/")!)
     }
 
     func comfyCloseTunnel() {

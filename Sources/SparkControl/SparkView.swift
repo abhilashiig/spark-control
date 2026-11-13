@@ -60,6 +60,11 @@ struct SparkView: View {
         }
         .background(Color.pageBackground)
         .navigationTitle("Spark")
+        .toolbar {
+            Button { Task { await state.openDashboard() } } label: { Label("DGX Dashboard", systemImage: "safari") }
+                .help("Open NVIDIA's DGX Dashboard in your browser, through an SSH tunnel")
+                .disabled(state.route == nil)
+        }
         .task {
             await state.measureStorage()
             while !Task.isCancelled {

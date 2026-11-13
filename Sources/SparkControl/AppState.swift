@@ -78,6 +78,8 @@ final class AppState {
     var sparkStorage: (folders: [(String, Int64)], docker: String?)?
     /// The SSH tunnel that brings ComfyUI's port to this Mac, and the Spark address it goes to.
     @ObservationIgnored var comfyTunnel: (process: Process, target: String)?
+    /// The SSH tunnel to NVIDIA's DGX Dashboard (port 11000 on the Spark).
+    @ObservationIgnored var dashboardTunnel: (process: Process, target: String)?
     /// The benchmark in progress: which model, its output so far, and its pid on the Spark.
     var bench: (recipe: UUID, lines: [String], pid: Int?, running: Bool)?
     var benchResults = Store.loadBenchmarks()

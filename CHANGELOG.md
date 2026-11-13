@@ -5,6 +5,14 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-13
+
+### Added
+- Terminal: the usual Terminal.app shortcuts while a shell has the keyboard: ⌘T new tab, ⌘W close tab, ⌘1–9, ⌘⇧[ ⌘⇧] and ⌃Tab to switch tabs, ⌘K to clear, and ⌘+ ⌘− ⌘0 for text size (remembered). Copy, paste and Select All work as before.
+
+### Fixed
+- Terminal: a colour theme no longer tints the sidebar and the rest of the window.
+
 ## [1.8.0] - 2026-11-13
 
 ### Added

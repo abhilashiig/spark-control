@@ -69,7 +69,7 @@ and the app installs your key. The password is passed to ssh through a pipe and 
   sshd's log, and Remove (this Mac's keys can't be removed; a backup is kept as `authorized_keys.spark-control.bak`).
 - **Terminal** (sidebar → Activity): shells on the Spark in tabs (⌘T), emulated by
   [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) as xterm-256color, so vim, htop and tmux work. Each tab
-  is its own `ssh -t` and stays open while you use other pages; `exit` closes it.
+  is its own `ssh -t` and stays open while you use other pages; `exit` closes it. Colour themes are in the toolbar.
 - **Models** (sidebar, the app's start page): every model in one list. Running, On Spark (your models and downloaded
   catalog models) and Available to Download (TensorFold, vLLM and ComfyUI catalogs), filterable by text or image
   and searchable. Start, Stop, Download and Open work from the list; a name opens that model's own page. The sidebar

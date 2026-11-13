@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Pane: Hashable {
-    case chat, models, model(UUID), connect, discovered, tensorfold, vllm, comfy, spark, requests, usage, logs
+    case chat, models, model(UUID), connect, discovered, tensorfold, vllm, comfy, spark, sshKeys, requests, usage, logs
 }
 
 struct MainView: View {
@@ -40,6 +40,7 @@ struct MainView: View {
                 }
                 Section("Activity") {
                     SidebarLabel("Spark", "gauge.with.dots.needle.67percent", .orange).tag(Pane.spark)
+                    SidebarLabel("SSH Keys", "key.fill", .yellow).tag(Pane.sshKeys)
                     SidebarLabel("Requests", "arrow.left.arrow.right", .blue).tag(Pane.requests)
                     SidebarLabel("Usage", "chart.bar.xaxis", .green).tag(Pane.usage)
                     SidebarLabel("Logs", "text.alignleft", .gray).tag(Pane.logs)
@@ -70,6 +71,7 @@ struct MainView: View {
             case .vllm: VLLMView(selection: $selection)
             case .comfy: ComfyView(selection: $selection)
             case .spark: SparkView()
+            case .sshKeys: SSHKeysView()
             case .requests: RequestsView()
             case .usage: UsageView()
             case .logs: LogsView()

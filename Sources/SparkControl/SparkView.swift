@@ -347,3 +347,99 @@ private struct StorageCard: View {
         }
     }
 }
+
+// MARK: SSH keys
+
+/// The keys that can log in to the Spark as you, with each one's last login, so unknown ones can be removed.
+struct SSHKeysView: View {
+    @Environment(AppState.self) private var state
+    @State private var keys: [SSHKeys.Key]?
+    @State private var logins: [String: SSHKeys.Login] = [:]
+    @State private var failed = false
+    @State private var busy = false
+    @State private var removing: SSHKeys.Key?
+    private let mine = SSHKeys.localFingerprints()
+
+    var body: some View {
+        Form {
+            Section {
+                Text("Each key below can log in to the Spark as you, without a password. Remove any key you don't recognise. A copy of the file from before each removal is kept as ~/.ssh/authorized_keys.spark-control.bak on the Spark.")
+                    .foregroundStyle(.secondary)
+            }
+            if let keys {
+                Section("\(keys.count) authorized key\(keys.count == 1 ? "" : "s")") {
+                    if keys.isEmpty { Text("No keys.").foregroundStyle(.secondary) }
+                    ForEach(keys) { row($0) }
+                }
+            } else if failed || state.sshTarget == nil {
+                ContentUnavailableView("Spark unreachable", systemImage: "key.slash")
+            } else {
+                ProgressView().frame(maxWidth: .infinity)
+            }
+        }
+        .page()
+        .navigationTitle("SSH Keys")
+        .toolbar {
+            Button { Task { await load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                .disabled(state.sshTarget == nil || busy)
+        }
+        .task(id: state.sshTarget) { await load() }
+        .confirmationDialog("Remove “\(removing.map(name) ?? "")”?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+            Button("Remove Key", role: .destructive) { if let k = removing { Task { await remove(k) } } }
+        } message: {
+            Text("Whoever holds this key can no longer log in to the Spark as you. Sessions already open stay open until they end.")
+        }
+    }
+
+    private func name(_ k: SSHKeys.Key) -> String { k.comment.isEmpty ? "Unnamed key" : k.comment }
+
+    private func row(_ k: SSHKeys.Key) -> some View {
+        let isMine = mine.contains(k.fingerprint)
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "key.fill").foregroundStyle(isMine ? Color.brand : .secondary).padding(.top, 2)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(name(k)).font(.headline)
+                    if isMine {
+                        Text("This Mac").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(Color.brand.opacity(0.15), in: Capsule()).foregroundStyle(Color.brand)
+                    }
+                }
+                Text("\(k.type)  \(k.fingerprint)").font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+                if !k.options.isEmpty {
+                    Text("Restricted: \(k.options)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                // Spark Control logs in with a key, so an empty list means the log isn't readable, not that no key was used.
+                if !logins.isEmpty {
+                    if let l = logins[k.fingerprint] {
+                        Text("Last login \(l.date.formatted(.relative(presentation: .named))) from \(l.from)").font(.caption)
+                    } else {
+                        Text("No logins in the last 90 days").font(.caption).foregroundStyle(.orange)
+                    }
+                }
+            }
+            Spacer()
+            Button("Remove", role: .destructive) { removing = k }
+                .disabled(isMine || busy)
+                .help(isMine ? "This Mac's key: removing it would disconnect Spark Control from the Spark." : "Remove this key from the Spark")
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func load() async {
+        guard let target = state.sshTarget else { return }
+        let res = await SSH.run(target, "bash -c \(SSH.quote(SSHKeys.listScript))", timeout: 30)
+        failed = res.code != 0
+        guard !failed else { return }
+        (keys, logins) = SSHKeys.parse(res.output)
+    }
+
+    private func remove(_ k: SSHKeys.Key) async {
+        guard let target = state.sshTarget, !mine.contains(k.fingerprint) else { return }
+        busy = true
+        defer { busy = false }
+        let res = await SSH.run(target, "bash -c \(SSH.quote(SSHKeys.removeScript(k.blob)))", timeout: 20)
+        state.event(res.code == 0 ? "Removed SSH key \(name(k)) (\(k.fingerprint)) from the Spark" : "Couldn't remove SSH key \(name(k)): \(res.output)")
+        await load()
+    }
+}

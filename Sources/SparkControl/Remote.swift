@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import CryptoKit
 
 final class Box<T>: @unchecked Sendable {
     private let lock = NSLock()
@@ -256,5 +257,76 @@ enum Probe {
         if ip.lowercased().hasPrefix("fd7a:115c:a1e0") { return true }
         let p = ip.split(separator: ".").compactMap { Int($0) }
         return p.count == 4 && p[0] == 100 && (64...127).contains(p[1])
+    }
+}
+
+/// The SSH keys allowed to log in to the Spark as you (~/.ssh/authorized_keys), and the last login of each.
+enum SSHKeys {
+    struct Key: Identifiable, Hashable {
+        var type: String
+        var blob: String
+        var comment: String
+        /// Restrictions written before the key, like from="…" or command="…".
+        var options: String
+        var id: String { blob }
+        /// As sshd logs it and `ssh-keygen -l` prints it.
+        var fingerprint: String {
+            guard let d = Data(base64Encoded: blob) else { return "?" }
+            return "SHA256:" + Data(SHA256.hash(data: d)).base64EncodedString().replacingOccurrences(of: "=", with: "")
+        }
+    }
+
+    struct Login: Hashable {
+        var date: Date
+        var from: String
+    }
+
+    static let marker = "--- logins ---"
+    /// The keys file, then per key fingerprint the time and address of its last login in 90 days of sshd's log
+    /// (nothing when the log isn't readable).
+    static let listScript = """
+    cat ~/.ssh/authorized_keys 2>/dev/null
+    echo '\(marker)'
+    journalctl -q -o short-unix --since -90days -g "Accepted publickey for $USER " 2>/dev/null | awk '{ last[$NF] = $1 " " $9 } END { for (k in last) print k, last[k] }'
+    """
+
+    static func parse(_ output: String) -> (keys: [Key], logins: [String: Login]) {
+        let lines = output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let cut = lines.firstIndex(of: marker) ?? lines.endIndex
+        var logins: [String: Login] = [:]
+        for l in lines[cut...].dropFirst() {
+            let f = l.split(separator: " ").map(String.init)
+            if f.count == 3, let t = Double(f[1]) { logins[f[0]] = Login(date: Date(timeIntervalSince1970: t), from: f[2]) }
+        }
+        return (lines[..<cut].compactMap(key), logins)
+    }
+
+    static func key(_ line: String) -> Key? {
+        let t = line.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty, !t.hasPrefix("#") else { return nil }
+        let tokens = t.split(separator: " ").map(String.init)
+        guard let i = tokens.indices.dropLast().first(where: { i in
+            ["ssh-", "ecdsa-", "sk-"].contains { tokens[i].hasPrefix($0) } && Data(base64Encoded: tokens[i + 1]) != nil
+        }) else { return nil }
+        return Key(type: tokens[i], blob: tokens[i + 1], comment: tokens[(i + 2)...].joined(separator: " "),
+                   options: tokens[..<i].joined(separator: " "))
+    }
+
+    /// Drops the line holding `blob` from authorized_keys, keeping the previous file as authorized_keys.spark-control.bak.
+    static func removeScript(_ blob: String) -> String {
+        """
+        set -e; f="$HOME/.ssh/authorized_keys"; cp -p "$f" "$f.spark-control.bak"
+        { grep -vF -- \(SSH.quote(blob)) "$f" || [ $? -eq 1 ]; } > "$f.tmp"
+        chmod 600 "$f.tmp"; mv "$f.tmp" "$f"
+        """
+    }
+
+    /// Fingerprints of this Mac's public keys in ~/.ssh: the ones Spark Control logs in with.
+    static func localFingerprints() -> Set<String> {
+        let dir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".ssh")
+        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        return Set(files.filter { $0.pathExtension == "pub" }.compactMap { url in
+            (try? String(contentsOf: url, encoding: .utf8)).flatMap(key)?.fingerprint
+        })
     }
 }

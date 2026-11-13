@@ -283,11 +283,12 @@ enum SSHKeys {
 
     static let marker = "--- logins ---"
     /// The keys file, then per key fingerprint the time and address of its last login in 90 days of sshd's log
-    /// (nothing when the log isn't readable).
+    /// (nothing when the log isn't readable). Filtering by sshd's identifier uses the journal's index: ~1 s instead of
+    /// ~20 s scanning every message.
     static let listScript = """
     cat ~/.ssh/authorized_keys 2>/dev/null
     echo '\(marker)'
-    journalctl -q -o short-unix --since -90days -g "Accepted publickey for $USER " 2>/dev/null | awk '{ last[$NF] = $1 " " $9 } END { for (k in last) print k, last[k] }'
+    journalctl -q -o short-unix --since -90days -t sshd -t sshd-session -g "Accepted publickey for $USER " 2>/dev/null | awk '{ last[$NF] = $1 " " $9 } END { for (k in last) print k, last[k] }'
     """
 
     static func parse(_ output: String) -> (keys: [Key], logins: [String: Login]) {

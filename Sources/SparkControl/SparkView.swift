@@ -371,8 +371,11 @@ struct SSHKeysView: View {
                     if keys.isEmpty { Text("No keys.").foregroundStyle(.secondary) }
                     ForEach(keys) { row($0) }
                 }
-            } else if failed || state.sshTarget == nil {
+            } else if state.sshTarget == nil {
                 ContentUnavailableView("Spark unreachable", systemImage: "key.slash")
+            } else if failed {
+                ContentUnavailableView("Couldn't read the keys", systemImage: "key.slash",
+                                       description: Text("The Spark didn't answer in time. Try Refresh."))
             } else {
                 ProgressView().frame(maxWidth: .infinity)
             }

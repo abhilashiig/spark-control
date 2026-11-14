@@ -55,6 +55,16 @@ extension AppState {
         await tfRefresh()
     }
 
+    func tfAddJPEG() async {
+        guard !tfBusy else { return }
+        tfBusy = true
+        tfLog = []
+        defer { tfBusy = false }
+        let res = await tfRun(TensorFold.jpegScript, timeout: 300, stream: true)
+        event(res?.code == 0 ? "Added JPEG support to TensorFold; restart image models to use it" : "Adding JPEG support to TensorFold failed")
+        await tfRefresh()
+    }
+
     func tfRollback() async {
         guard !tfBusy else { return }
         tfBusy = true
@@ -558,6 +568,10 @@ private struct EngineRow: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(state.route == nil)
                 case .managed(let v):
+                    if !state.tf.jpeg {
+                        Button("Add JPEG Support") { Task { await state.tfAddJPEG() } }
+                            .disabled(state.route == nil)
+                    }
                     if let p = state.tf.previous {
                         Button("Switch Back to \(p)") { Task { await state.tfRollback() } }
                             .disabled(state.route == nil)
@@ -596,7 +610,8 @@ private struct EngineRow: View {
         if state.route == nil { return "The Spark is unreachable." }
         switch state.tf.engine {
         case .none: return "Install TensorFold \(state.tfTarget) for the GB10, or set it up yourself."
-        case .managed: return "Installed by Spark Control."
+        case .managed: return state.tf.jpeg ? "Installed by Spark Control."
+            : "Installed by Spark Control. Image models refuse JPEG until libjpeg-turbo \(TensorFold.jpegVersion) is added."
         case .user(let path, _): return path
         }
     }

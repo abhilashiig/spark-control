@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Fixed
+- TensorFold: image models no longer refuse JPEG images with "libturbojpeg.so.0 is required". Installing or updating TensorFold now adds the libjpeg-turbo 3.1.4.1 library it needs, checked against its published SHA-256 and kept inside the engine's folder, with no sudo needed. If TensorFold is already installed, use Add JPEG Support on the TensorFold page.
+
 ## [1.9.2] - 2026-11-14
 
 ### Fixed

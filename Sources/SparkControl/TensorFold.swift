@@ -159,6 +159,8 @@ enum TensorFold {
         /// ComfyUI's installed release (nil when it isn't installed) and whether its server runs.
         var comfyVersion: String?
         var comfyRunning = false
+        /// The managed engine has libjpeg-turbo in its lib/, so --vision serves JPEG images.
+        var jpeg = false
     }
 
     static func statusScript() -> String {
@@ -168,6 +170,7 @@ enum TensorFold {
         elif p=$(command -v tensorfold-native); then echo "ENGINE|user|$p|$("$p" --version 2>&1 | head -1)"
         else echo "ENGINE|none||"; fi
         P="\(engineDir)/previous"; [ -L "$P" ] && echo "PREV|$(cat "$P/VERSION" 2>/dev/null)"
+        [ -f "\(engineDir)/current/lib/libturbojpeg.so.0" ] && echo "JPEG|1"
         d="$H"; [ -d "$d" ] || d="$HOME"
         echo "FREE|$(df -Pk "$d" | awk 'NR==2{print $4 * 1024}')"
         m() {
@@ -209,6 +212,8 @@ enum TensorFold {
                 case "user": st.engine = .user(path: f[2], version: f[3])
                 default: st.engine = .none
                 }
+            case "JPEG":
+                st.jpeg = true
             case "PREV" where f.count >= 2 && !f[1].isEmpty:
                 st.previous = f[1].trimmingCharacters(in: .whitespaces)
             case "COMFY" where f.count >= 3:
@@ -243,6 +248,7 @@ enum TensorFold {
         V=\(v); A=\(archive(v)); E="\(engineDir)"
         say() { echo "› $*"; }
         fail() { echo "✗ $*"; exit 1; }
+        \(jpegFunction)
         say "Checking the Spark"
         [ "$(uname -m)" = aarch64 ] || fail "This machine's CPU is $(uname -m); the GB10 release needs aarch64."
         g=$(getconf GNU_LIBC_VERSION | awk '{print $2}')
@@ -268,12 +274,47 @@ enum TensorFold {
         say "Unpacking"
         tar -xzf "$A.tar.gz"
         (cd "$A" && sha256sum --quiet -c SHA256SUMS)
+        add_jpeg "$A"
         say "Checking TensorFold $V runs"
         "$A/bin/tensorfold-native" --version || fail "TensorFold $V doesn't run on this Spark; the installed version is unchanged."
         \(activateScript)
         say "Installed TensorFold $V"
         """
     }
+
+    // MARK: JPEG
+
+    /// TensorFold decodes JPEG only with libjpeg-turbo 3.1.4.1, doesn't ship it, and looks in lib/ beside bin/
+    /// (docs/vision.md, "JPEG input"). Without it --vision serves PNG and WebP but refuses every JPEG.
+    static let jpegVersion = "3.1.4.1"
+    static let jpegDeb = "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/\(jpegVersion)/libjpeg-turbo-official_\(jpegVersion)_arm64.deb"
+    /// The release asset's digest on GitHub.
+    static let jpegSHA256 = "d3f9d7ddd998758e1850b37153a7904bdcdeb8cf54a782c772780b0bc50dd553"
+
+    /// `add_jpeg DIR` unpacks libturbojpeg.so.0 into DIR/lib without installing the package. Needs $T, say and fail.
+    static let jpegFunction = """
+    add_jpeg() {
+      command -v dpkg-deb >/dev/null || fail "dpkg-deb is missing; it unpacks libjpeg-turbo."
+      say "Downloading libjpeg-turbo \(jpegVersion) for JPEG images"
+      curl -fsSL -o "$T/jpeg.deb" "\(jpegDeb)"
+      echo "\(jpegSHA256)  $T/jpeg.deb" | sha256sum --quiet -c
+      rm -rf "$T/jpeg"; dpkg-deb -x "$T/jpeg.deb" "$T/jpeg"
+      f=$(find "$T/jpeg" -name 'libturbojpeg.so.0*' -type f | head -1)
+      [ -n "$f" ] || fail "libturbojpeg.so.0 isn't in the libjpeg-turbo package."
+      mkdir -p "$1/lib"; cp "$f" "$1/lib/libturbojpeg.so.0"
+    }
+    """
+
+    /// Adds libjpeg-turbo to an engine installed before Spark Control did that.
+    static let jpegScript = """
+    set -euo pipefail
+    say() { echo "› $*"; }
+    fail() { echo "✗ $*"; exit 1; }
+    T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+    \(jpegFunction)
+    add_jpeg "$(readlink -f "\(engineDir)/current")"
+    say "JPEG images work once the model is restarted"
+    """
 
     /// Moves the unpacked "$A" in as "$E/$V" and points `current` at it. The version it replaces becomes
     /// `previous`; any older one is deleted. Needs $V, $A and $E.

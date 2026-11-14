@@ -135,7 +135,7 @@ func bash(_ script: String, env: [String: String] = [:], syntaxOnly: Bool = fals
     p.waitUntilExit()
     return (p.terminationStatus, String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
 }
-for (name, s) in [("status", TensorFold.statusScript()), ("install", TensorFold.installScript()),
+for (name, s) in [("status", TensorFold.statusScript()), ("install", TensorFold.installScript()), ("jpeg", TensorFold.jpegScript),
                   ("uninstall", TensorFold.uninstallScript(models: TensorFold.catalog)), ("download", TensorFold.downloadScript(q27, binary: "tf")),
                   ("cancel", TensorFold.cancelScript(q27.id)), ("delete", TensorFold.deleteScript(q27)), ("key", TensorFold.apiKeyScript),
                   ("stop", TensorFold.stopCommand(port: 18300)), ("legacy stop", TensorFold.legacyStopCommand), ("manual", TensorFold.manualSteps)] {
@@ -177,6 +177,9 @@ func fakeInstall(_ v: String) -> Int32 {
 }
 func upStatus() -> TensorFold.Status { TensorFold.parseStatus(bash(TensorFold.statusScript(), env: ["HOME": up.path, "PATH": "/usr/bin:/bin"]).1) }
 check(fakeInstall("1.2.6") == 0 && upStatus().engine == .managed(version: "1.2.6") && upStatus().previous == nil, "first install has nothing to switch back to")
+check(!upStatus().jpeg && bash(#"mkdir -p "$HOME/.local/share/spark-control/tensorfold/current/lib" && touch "$_/libturbojpeg.so.0""#,
+      env: ["HOME": up.path, "PATH": "/usr/bin:/bin"]).0 == 0 && upStatus().jpeg, "status sees libjpeg-turbo beside the engine")
+check(TensorFold.installScript().contains("add_jpeg \"$A\"\n"), "install adds libjpeg-turbo before switching")
 check(fakeInstall("1.2.7") == 0 && fakeInstall("1.3.0") == 0 && upStatus().engine == .managed(version: "1.3.0") && upStatus().previous == "1.2.7",
       "update keeps the version it replaced")
 let engineDir = up.appending(path: ".local/share/spark-control/tensorfold").path

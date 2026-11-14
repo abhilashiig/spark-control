@@ -38,14 +38,30 @@ extension AppState {
         }
     }
 
-    func tfInstall() async {
+    /// The version Install and Update offer: GitHub's newest stable release when it's newer than the pinned one.
+    var tfTarget: String {
+        tfLatest.flatMap { TensorFold.isNewer($0, than: TensorFold.version) ? $0 : nil } ?? TensorFold.version
+    }
+
+    func tfInstall(_ v: String = TensorFold.version) async {
         guard !tfBusy else { return }
         tfBusy = true
         tfLog = []
         defer { tfBusy = false }
-        event("Installing TensorFold \(TensorFold.version) on the Spark")
-        let res = await tfRun(TensorFold.installScript(), timeout: 900, stream: true)
-        event(res?.code == 0 ? "TensorFold \(TensorFold.version) installed" : "TensorFold install failed")
+        event("Installing TensorFold \(v) on the Spark")
+        let res = await tfRun(TensorFold.installScript(v), timeout: 900, stream: true)
+        event(res?.code == 0 ? "TensorFold \(v) installed" + (runningRecipes.contains { $0.tensorfold != nil } ? "; running models switch to it when restarted" : "")
+                             : "TensorFold \(v) install failed; the installed version is unchanged")
+        await tfRefresh()
+    }
+
+    func tfRollback() async {
+        guard !tfBusy else { return }
+        tfBusy = true
+        tfLog = []
+        defer { tfBusy = false }
+        let res = await tfRun(TensorFold.rollbackScript, timeout: 60, stream: true)
+        event(res?.code == 0 ? "Switched TensorFold back to \(tf.previous ?? "the previous version")" : "Switching TensorFold back failed")
         await tfRefresh()
     }
 
@@ -353,6 +369,7 @@ struct TensorFoldView: View {
             }
         }
         .catalogPage("TensorFold", deleting: $deleting)
+        .task { if state.tfLatest == nil { state.tfLatest = await TensorFold.latestStable() } }
         .sheet(isPresented: $removing) { RemoveEngineSheet() }
         .sheet(isPresented: $manual) { ManualSetupSheet() }
     }
@@ -521,6 +538,7 @@ private struct EngineRow: View {
     @Environment(AppState.self) private var state
     @Binding var removing: Bool
     @Binding var manual: Bool
+    @State private var updating: String?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -536,12 +554,16 @@ private struct EngineRow: View {
                 switch state.tf.engine {
                 case .none:
                     Button("Set Up Manually…") { manual = true }
-                    Button("Install") { Task { await state.tfInstall() } }
+                    Button("Install") { Task { await state.tfInstall(state.tfTarget) } }
                         .buttonStyle(.borderedProminent)
                         .disabled(state.route == nil)
                 case .managed(let v):
-                    if v != TensorFold.version {
-                        Button("Update to \(TensorFold.version)") { Task { await state.tfInstall() } }
+                    if let p = state.tf.previous {
+                        Button("Switch Back to \(p)") { Task { await state.tfRollback() } }
+                            .disabled(state.route == nil)
+                    }
+                    if TensorFold.isNewer(state.tfTarget, than: v) || TensorFold.semver(v) == nil && v != state.tfTarget {
+                        Button("Update to \(state.tfTarget)…") { updating = state.tfTarget }
                             .disabled(state.route == nil)
                     }
                     Button("Remove…", role: .destructive) { removing = true }
@@ -552,6 +574,14 @@ private struct EngineRow: View {
             }
         }
         .padding(.vertical, 2)
+        .alert("Update TensorFold to \(updating ?? "")?", isPresented: Binding { updating != nil } set: { if !$0 { updating = nil } },
+               presenting: updating) { v in
+            Button("Update") { Task { await state.tfInstall(v) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { v in
+            Text("The release is checked against TensorFold's signing key and test-run before it replaces the installed version, which is kept so you can switch back. Running models keep their version until restarted."
+                 + (v == TensorFold.version ? "" : " Spark Control's model list was tested with \(TensorFold.version)."))
+        }
     }
 
     private var title: String {
@@ -565,7 +595,7 @@ private struct EngineRow: View {
     private var subtitle: String {
         if state.route == nil { return "The Spark is unreachable." }
         switch state.tf.engine {
-        case .none: return "Install TensorFold \(TensorFold.version) for the GB10, or set it up yourself."
+        case .none: return "Install TensorFold \(state.tfTarget) for the GB10, or set it up yourself."
         case .managed: return "Installed by Spark Control."
         case .user(let path, _): return path
         }

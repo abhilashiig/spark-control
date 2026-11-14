@@ -161,6 +161,31 @@ check(st.models["qwen3.5-2b"]?.download == .done && st.models["kolibri-1"]?.down
       && st.models["kolibri-1"]?.message == "error: 404" && st.models["qwen3.8-27b"]?.download == TensorFold.Download.none,
       "download states from markers")
 check(st.models["gemma-4-31b"]?.download == .running && st.models["gemma-4-31b"]?.message == "› downloading 41%", "running download shows its last progress line")
+// Updates: only a newer plain X.Y.Z counts; each install keeps the version it replaced, rollback swaps them.
+check(TensorFold.isNewer("1.2.10", than: "1.2.9") && TensorFold.isNewer("2.0.0", than: "1.9.9") && !TensorFold.isNewer("1.2.6", than: "1.2.6")
+      && !TensorFold.isNewer("1.2.5", than: "1.2.6") && !TensorFold.isNewer("1.3.0-rc1", than: "1.2.6") && TensorFold.semver("1.3") == nil,
+      "version comparison")
+check(bash(TensorFold.installScript("1.3.0"), syntaxOnly: true).0 == 0 && TensorFold.installScript("1.3.0").contains("V=1.3.0; A=tensorfold-1.3.0-linux-aarch64") && TensorFold.installScript("1.3.0").contains("download/v1.3.0\n"),
+      "install script takes a version")
+let up = FileManager.default.temporaryDirectory.appending(path: "tf-update-\(getpid())")
+func fakeInstall(_ v: String) -> Int32 {
+    bash("""
+    set -euo pipefail; mkdir -p "$HOME"; cd "$HOME"; E="\(TensorFold.engineDir)"; mkdir -p "$E"; V=\(v); A=pkg-$V
+    mkdir -p "$A/bin"; echo $V > "$A/VERSION"; printf '#!/bin/sh\\necho %s\\n' $V > "$A/bin/tensorfold-native"; chmod +x "$A/bin/tensorfold-native"
+    \(TensorFold.activateScript)
+    """, env: ["HOME": up.path, "PATH": "/usr/bin:/bin"]).0
+}
+func upStatus() -> TensorFold.Status { TensorFold.parseStatus(bash(TensorFold.statusScript(), env: ["HOME": up.path, "PATH": "/usr/bin:/bin"]).1) }
+check(fakeInstall("1.2.6") == 0 && upStatus().engine == .managed(version: "1.2.6") && upStatus().previous == nil, "first install has nothing to switch back to")
+check(fakeInstall("1.2.7") == 0 && fakeInstall("1.3.0") == 0 && upStatus().engine == .managed(version: "1.3.0") && upStatus().previous == "1.2.7",
+      "update keeps the version it replaced")
+let engineDir = up.appending(path: ".local/share/spark-control/tensorfold").path
+check((try? FileManager.default.contentsOfDirectory(atPath: engineDir).sorted()) == ["1.2.7", "1.3.0", "current", "previous"], "older versions are deleted")
+check(bash(TensorFold.rollbackScript, env: ["HOME": up.path, "PATH": "/usr/bin:/bin"]).0 == 0 && upStatus().engine == .managed(version: "1.2.7")
+      && upStatus().previous == "1.3.0", "switching back swaps current and previous")
+check(fakeInstall("1.2.7") == 0 && upStatus().previous == "1.3.0", "reinstalling the current version keeps previous")
+try? FileManager.default.removeItem(at: up)
+
 check(TensorFold.parseStatus("ENGINE|user|/opt/tf/bin/tensorfold-native|tensorfold 1.2.6\n").engine == .user(path: "/opt/tf/bin/tensorfold-native", version: "tensorfold 1.2.6"),
       "user install detected")
 

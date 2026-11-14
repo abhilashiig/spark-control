@@ -5,6 +5,10 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Added
+- TensorFold: when a newer stable TensorFold release is out, the engine row offers to update to it. The update is checked against TensorFold's signing key and test-run on the Spark before it replaces the installed version; if anything fails, the installed version stays as it was. Running models keep their version until restarted.
+- TensorFold: after an update, Switch Back returns to the version you had before.
+
 ### Fixed
 - Terminal: opening the page while the app was still connecting to the Spark no longer leaves it empty; the first shell opens as soon as the Spark is reachable.
 

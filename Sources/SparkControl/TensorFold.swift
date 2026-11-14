@@ -7,9 +7,10 @@ enum TensorFold {
     /// The release the catalog below was taken from. Bump both together.
     static let version = "1.2.6"
     static let platform = "linux-aarch64"
-    static var archive: String { "tensorfold-\(version)-\(platform)" }
-    static var releaseURL: String { "https://github.com/ashhart/TensorFold/releases/download/v\(version)" }
-    /// From packaging/runtime-trust.json. It signs each release's .sha256 file.
+    static func archive(_ v: String = version) -> String { "tensorfold-\(v)-\(platform)" }
+    static func releaseURL(_ v: String = version) -> String { "https://github.com/ashhart/TensorFold/releases/download/v\(v)" }
+    /// From packaging/runtime-trust.json. It signs each release's .sha256 file, newer releases included, so
+    /// an update this key didn't sign fails before anything on the Spark changes.
     static let publicKey = """
     -----BEGIN PUBLIC KEY-----
     MCowBQYDK2VwAyEA80FFo6a9/NXHNX9zBV3/2tM9AbC//mShbseG74mkkGw=
@@ -148,6 +149,8 @@ enum TensorFold {
 
     struct Status: Equatable {
         var engine = Engine.none
+        /// The managed version an update replaced, kept so it can be switched back to.
+        var previous: String?
         var freeBytes: Int64?
         var models: [String: ModelStatus] = [:]
         /// vLLM's image: "ready", "none" (Docker but no image), "nodocker", or nil before the first check.
@@ -163,6 +166,7 @@ enum TensorFold {
         if [ -x "$E" ]; then echo "ENGINE|managed||$(cat "$(dirname "$E")/../VERSION" 2>/dev/null)"
         elif p=$(command -v tensorfold-native); then echo "ENGINE|user|$p|$("$p" --version 2>&1 | head -1)"
         else echo "ENGINE|none||"; fi
+        P="\(engineDir)/previous"; [ -L "$P" ] && echo "PREV|$(cat "$P/VERSION" 2>/dev/null)"
         d="$H"; [ -d "$d" ] || d="$HOME"
         echo "FREE|$(df -Pk "$d" | awk 'NR==2{print $4 * 1024}')"
         m() {
@@ -204,6 +208,8 @@ enum TensorFold {
                 case "user": st.engine = .user(path: f[2], version: f[3])
                 default: st.engine = .none
                 }
+            case "PREV" where f.count >= 2 && !f[1].isEmpty:
+                st.previous = f[1].trimmingCharacters(in: .whitespaces)
             case "COMFY" where f.count >= 3:
                 st.comfyVersion = f[1].isEmpty ? nil : f[1]
                 st.comfyRunning = f[2] == "running"
@@ -227,12 +233,13 @@ enum TensorFold {
 
     // MARK: Install
 
-    /// Checks the Spark, downloads the pinned release, verifies its checksum, the release signature over
-    /// that checksum and every unpacked file, then switches `current` to it.
-    static func installScript() -> String {
+    /// Checks the Spark, downloads the release, verifies its checksum, the release signature over that
+    /// checksum and every unpacked file, checks the new engine runs, then switches `current` to it. Until
+    /// that switch the installed version is untouched; after it, that version is kept as `previous`.
+    static func installScript(_ v: String = version) -> String {
         """
         set -euo pipefail
-        V=\(version); A=\(archive); E="\(engineDir)"
+        V=\(v); A=\(archive(v)); E="\(engineDir)"
         say() { echo "› $*"; }
         fail() { echo "✗ $*"; exit 1; }
         say "Checking the Spark"
@@ -248,7 +255,7 @@ enum TensorFold {
         [ "$(df -Pk "$E" | awk 'NR==2{print $4}')" -gt 1048576 ] || fail "Less than 1 GB free in $HOME."
         T=$(mktemp -d); trap 'rm -rf "$T"' EXIT; cd "$T"
         say "Downloading TensorFold $V"
-        U=\(releaseURL)
+        U=\(releaseURL(v))
         curl -fsSL --remote-name-all "$U/$A.tar.gz" "$U/$A.tar.gz.sha256" "$U/$A.tar.gz.sha256.sig"
         say "Verifying checksum and release signature"
         sha256sum -c "$A.tar.gz.sha256"
@@ -260,10 +267,53 @@ enum TensorFold {
         say "Unpacking"
         tar -xzf "$A.tar.gz"
         (cd "$A" && sha256sum --quiet -c SHA256SUMS)
-        rm -rf "$E/$V"; mv "$A" "$E/$V"; ln -sfn "$V" "$E/current"
-        "$E/current/bin/tensorfold-native" --version
+        say "Checking TensorFold $V runs"
+        "$A/bin/tensorfold-native" --version || fail "TensorFold $V doesn't run on this Spark; the installed version is unchanged."
+        \(activateScript)
         say "Installed TensorFold $V"
         """
+    }
+
+    /// Moves the unpacked "$A" in as "$E/$V" and points `current` at it. The version it replaces becomes
+    /// `previous`; any older one is deleted. Needs $V, $A and $E.
+    static let activateScript = """
+    old=$(readlink "$E/current" 2>/dev/null || true)
+    rm -rf "$E/$V"; mv "$A" "$E/$V"; ln -sfn "$V" "$E/current"
+    [ -n "$old" ] && [ "$old" != "$V" ] && [ -d "$E/$old" ] && ln -sfn "$old" "$E/previous"
+    keep=$(readlink "$E/previous" 2>/dev/null || true)
+    for d in "$E"/*; do [ -L "$d" ] || [ "$d" = "$E/$V" ] || [ "$d" = "$E/$keep" ] || rm -rf "$d"; done
+    """
+
+    /// Swaps `current` and `previous`. Servers already running keep their version until restarted.
+    static let rollbackScript = """
+    set -euo pipefail
+    E="\(engineDir)"
+    p=$(readlink "$E/previous"); c=$(readlink "$E/current")
+    [ -x "$E/$p/bin/tensorfold-native" ] || { echo "✗ The previous version is missing."; exit 1; }
+    ln -sfn "$p" "$E/current"; ln -sfn "$c" "$E/previous"
+    echo "› Switched back to TensorFold $(cat "$E/current/VERSION" 2>/dev/null || echo "$p")"
+    """
+
+    /// The newest stable release on GitHub (`releases/latest` skips drafts and pre-releases), or nil.
+    static func latestStable() async -> String? {
+        guard let url = URL(string: "https://api.github.com/repos/ashhart/TensorFold/releases/latest"),
+              let (data, resp) = try? await URLSession.shared.data(from: url),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let tag = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["tag_name"] as? String
+        else { return nil }
+        let v = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+        return semver(v) == nil ? nil : v
+    }
+
+    /// Plain X.Y.Z only, so a pre-release or odd tag never counts as an update.
+    static func semver(_ v: String) -> [Int]? {
+        let p = v.split(separator: ".", omittingEmptySubsequences: false).map { Int($0) }
+        return p.count == 3 && !p.contains(nil) ? p.compactMap { $0 } : nil
+    }
+
+    static func isNewer(_ a: String, than b: String) -> Bool {
+        guard let x = semver(a), let y = semver(b) else { return false }
+        return y.lexicographicallyPrecedes(x)
     }
 
     /// Removes the engine, and with `models`, the listed models' cache folders and the download records.
@@ -283,13 +333,13 @@ enum TensorFold {
     static var manualSteps: String {
         """
         V=\(version)
-        A=\(archive)
-        U=\(releaseURL)
+        A=\(archive())
+        U=\(releaseURL())
         curl -fLO "$U/$A.tar.gz" -fLO "$U/$A.tar.gz.sha256"
         sha256sum -c "$A.tar.gz.sha256"
         tar -xzf "$A.tar.gz"
         mkdir -p ~/.local/opt && mv "$A" ~/.local/opt/
-        echo 'export PATH="$HOME/.local/opt/\(archive)/bin:$PATH"' >> ~/.bashrc
+        echo 'export PATH="$HOME/.local/opt/\(archive())/bin:$PATH"' >> ~/.bashrc
         """
     }
 

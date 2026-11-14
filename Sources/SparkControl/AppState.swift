@@ -70,6 +70,8 @@ final class AppState {
     var tf = TensorFold.Status()
     /// Set while the TensorFold engine is being installed or removed; its output goes here too.
     var tfBusy = false
+    /// TensorFold's newest stable release on GitHub, once checked.
+    var tfLatest: String?
     var tfLog: [String] = []
     var tfSizes: [String: Int64] = [:]
     var comfyBusy = false

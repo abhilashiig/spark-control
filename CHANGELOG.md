@@ -5,6 +5,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-11-14
+
 ### Fixed
 - TensorFold: Qwen3.8 27B now starts with image input. It ships a vision encoder but was started text-only, so images sent to it were refused. Models already added pick it up at their next start.
 - TensorFold: the Image input toggle now adds or removes --vision in the start command, so the model actually serves images; before, it only changed what coding tools were told.

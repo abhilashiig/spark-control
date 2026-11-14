@@ -71,7 +71,8 @@ enum TensorFold {
         Model(id: "qwen3.8-27b", name: "Qwen3.8 27B",
               repo: Repo(id: "TensorFold/Qwen3.8-27B-MLX-4bit"),
               drafter: Repo(id: "z-lab/Qwen3.8-27B-DFlash2"),
-              note: "MLX 4-bit with the DFlash2 drafter."),
+              flags: ["--vision"],
+              note: "MLX 4-bit with images and the DFlash2 drafter."),
         Model(id: "qwen3.6-35b-a3b", name: "Qwen3.6 35B-A3B",
               repo: Repo(id: "TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP", revision: "81169a9bc511a27c1b4eedb77a2cd98ced431847"),
               // On CUDA the MTP layer drafts only when --drafter names the checkpoint itself; without it the
@@ -413,6 +414,13 @@ enum TensorFold {
         return on ? plain : plain + " --no-drafts"
     }
 
+    // MARK: Images
+
+    static func withVision(_ command: String, _ on: Bool) -> String {
+        let plain = command.replacingOccurrences(of: " --vision", with: "")
+        return on ? plain + " --vision" : plain
+    }
+
     // MARK: Context
 
     enum Context: Hashable {
@@ -465,6 +473,13 @@ enum TensorFold {
     static func addingDrafter(to command: String, model: String?) -> String {
         guard let d = Self.model(model)?.drafter, !command.contains("--drafter") else { return command }
         return command + " --drafter " + d.id
+    }
+
+    /// Likewise --vision, unless Image input was turned off on the model's page.
+    static func addingVision(to command: String, model: String?, images: Bool?) -> String {
+        guard images != false, Self.model(model)?.flags.contains("--vision") == true, !command.contains("--vision")
+        else { return command }
+        return withVision(command, true)
     }
 
     /// A display name and served model id no existing model answers to, so the gateway and the Spark's

@@ -370,6 +370,12 @@ check(vl.hasReasoning && vl.takesImages && textOnly.hasReasoning && !textOnly.ta
 check(!Recipe(name: "Qwen3.6", startCommand: "tensorfold serve", stopCommand: "", tensorfold: "q").takesImages
       && Recipe(name: "Gemma", startCommand: "tensorfold serve --vision", stopCommand: "", tensorfold: "g").takesImages,
       "TensorFold models take images only with --vision")
+let tfq = Recipe(name: "Qwen3.8 27B", startCommand: "tensorfold serve q --drafter d", stopCommand: "", tensorfold: "qwen3.8-27b")
+var tfOff = tfq; tfOff.images = false
+check(tfq.migrated(defaultPort: 8000).takesImages && !tfOff.migrated(defaultPort: 8000).takesImages
+      && TensorFold.withVision(TensorFold.withVision(tfq.startCommand, true), false) == tfq.startCommand
+      && TensorFold.withVision(TensorFold.withVision(tfq.startCommand, true), true).components(separatedBy: "--vision").count == 2,
+      "saved Qwen3.8 27B gains --vision unless turned off; the flag toggles cleanly")
 vl.images = false
 check(!vl.takesImages, "the toggle overrides the guess")
 vl.images = nil

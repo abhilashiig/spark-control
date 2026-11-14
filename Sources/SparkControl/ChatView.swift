@@ -551,6 +551,11 @@ private struct Conversation: View {
 
     private func send() {
         guard canSend else { return }
+        if pending.contains(where: { $0.kind == .image }),
+           let r = state.config.recipes.first(where: { $0.apiID == chat?.model }), !r.takesImages {
+            problem = "\(r.name) doesn't take images. Turn on Image input on its page and restart it, or remove the images."
+            return
+        }
         store.send(text, attachments: pending, chatID: chatID, profiles: state.config.profiles, baseURL: state.apiBaseURL,
                    apiKey: state.toolGateway.apiKey)
         text = ""

@@ -106,10 +106,11 @@ struct Recipe: Codable, Identifiable, Hashable {
     var hasReasoning: Bool {
         reasoning ?? ids.contains(#/qwen3|nemotron|deepseek|gpt-oss|gemma-?\s?4|glm|kimi|think|laguna/#)
     }
-    /// TensorFold only serves images with --vision; elsewhere, families that ship a vision encoder.
+    /// TensorFold serves images only with --vision, so its start command decides; elsewhere the toggle,
+    /// else families that ship a vision encoder.
     var takesImages: Bool {
-        images ?? (tensorfold != nil ? startCommand.contains("--vision")
-                   : ids.contains(#/qwen3\.[6-9]|gemma-?\s?4|[-\s]vl\b|vision/#))
+        tensorfold != nil ? startCommand.contains(" --vision")
+            : images ?? ids.contains(#/qwen3\.[6-9]|gemma-?\s?4|[-\s]vl\b|vision/#)
     }
 
     /// Added with + but never given a start command: never saved or shared.
@@ -128,6 +129,7 @@ extension Recipe {
     func migrated(defaultPort: Int) -> Recipe {
         var r = self
         r.startCommand = TensorFold.addingDrafter(to: r.startCommand, model: r.tensorfold)
+        r.startCommand = TensorFold.addingVision(to: r.startCommand, model: r.tensorfold, images: r.images)
         if r.tensorfold != nil, r.stopCommand == TensorFold.legacyStopCommand {
             r.stopCommand = TensorFold.stopCommand(port: r.port ?? defaultPort)
         }

@@ -5,15 +5,13 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
-### Fixed
-- TensorFold: image models no longer refuse JPEG images with "libturbojpeg.so.0 is required". Installing or updating TensorFold now adds the libjpeg-turbo 3.1.4.1 library it needs, checked against its published SHA-256 and kept inside the engine's folder, with no sudo needed. If TensorFold is already installed, use Add JPEG Support on the TensorFold page.
-
 ## [1.9.2] - 2026-11-14
 
 ### Fixed
 - TensorFold: Qwen3.8 27B now starts with image input. It ships a vision encoder but was started text-only, so images sent to it were refused. Models already added pick it up at their next start.
 - TensorFold: the Image input toggle now adds or removes --vision in the start command, so the model actually serves images; before, it only changed what coding tools were told.
 - Chat: sending images to a model that doesn't take them now explains how to turn Image input on, instead of failing with the server's error.
+- TensorFold: image models no longer refuse JPEG images with "libturbojpeg.so.0 is required". Installing or updating TensorFold now adds the libjpeg-turbo 3.1.4.1 library it needs, checked against its published SHA-256 and kept inside the engine's folder, with no sudo needed. If TensorFold is already installed, use Add JPEG Support on the TensorFold page.
 
 ## [1.9.1] - 2026-11-14
 

@@ -269,6 +269,9 @@ let pyCheck = bash("python3 -c 'import ast,sys; ast.parse(open(sys.argv[1]).read
 try? FileManager.default.removeItem(at: py)
 check(pyCheck.0 == 0, "benchmark script is valid Python: \(pyCheck.1)")
 
+for (cmd, code) in [("echo hi; exec false", "1"), ("true # comment", "0")] {
+    check(bash(SSH.withExitLine(cmd)).1.contains("__SPARK_EXIT__" + code), "start commands report their exit code, even through exec: \(cmd)")
+}
 // vLLM catalog and commands
 let vq = VLLM.model("qwen3.6-35b-a3b")!, vg = VLLM.model("gemma-4-26b-a4b")!
 let vqStart = VLLM.startCommand(vq, port: 18300, name: "qwen3.6-35b-a3b")

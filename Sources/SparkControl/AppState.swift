@@ -548,7 +548,7 @@ final class AppState {
         // then follow its output until it exits. One log per model, since several can start over time.
         // `;` (not `&&`) so only nohup is backgrounded and the SSH session returns at once.
         let log = "/tmp/spark-control/start-\(r.id.uuidString.prefix(8)).log"
-        let launch = "mkdir -p /tmp/spark-control; nohup \(SSH.interactive(r.startCommand + "; echo __SPARK_EXIT__$?")) > \(log) 2>&1 < /dev/null & echo $!"
+        let launch = "mkdir -p /tmp/spark-control; nohup \(SSH.interactive(SSH.withExitLine(r.startCommand))) > \(log) 2>&1 < /dev/null & echo $!"
         let res = await SSH.run(target, launch, timeout: 20)
         guard res.code == 0, let pid = res.output.split(separator: "\n").last.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }) else {
             let why = res.output.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -48,6 +48,9 @@ enum SSH {
 
     /// Wraps a command so your aliases and shell functions work, exactly as typed in a terminal.
     static func interactive(_ command: String) -> String { "bash -ic \(quote(command))" }
+    /// Runs `command` in a subshell and then prints `__SPARK_EXIT__<code>`, so the line still appears when the command
+    /// ends in `exec` (vLLM's do). Newlines, so a trailing `#` comment can't swallow the `)`.
+    static func withExitLine(_ command: String) -> String { "(\n\(command)\n); echo __SPARK_EXIT__$?" }
 
     @discardableResult
     /// `input` is written to the remote command's stdin (e.g. a password for `sudo -S`), never to the command line.

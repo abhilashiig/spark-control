@@ -11,6 +11,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ### Fixed
 - vLLM: downloads now use the Spark's Hugging Face login (`hf auth login`), so gated models download instead of failing with "Access denied … requires approval".
+- vLLM: a model that fails to start now shows as failed within seconds; before, it stayed on "Starting…" until the startup timeout (40 minutes by default).
 - Engines: a failed download now shows the actual error instead of a Hugging Face hint line, and a gated model explains how to get access, with a link to its page.
 
 ## [1.9.2] - 2026-11-14

@@ -48,6 +48,12 @@ enum VLLM {
               repo: .init(id: "nvidia/Qwen3.8-27B-NVFP4", revision: "482ca0f3832238542f8f5295dde86b5f22711d80"),
               parsers: qwenParsers,
               note: "NVIDIA NVFP4, the model NVIDIA's Spark vLLM playbook picks for 128 GB. Dense, so slower per token than the MoE models."),
+        // llm-compressor mixed precision (NVFP4 MLPs, FP8 attention and a calibrated FP8 KV cache, read from
+        // config.json), so no --quantization or --kv-cache-dtype. Gated with auto-approval on Hugging Face.
+        Model(id: "qwen3.8-27b-uncensored", name: "Qwen3.8 27B Uncensored",
+              repo: .init(id: "orcarouter/Qwen3.8-27B-Uncensored-NVFP4", revision: "d350e02d82203d5bf07a1e203c997581f235f407"),
+              parsers: qwenParsers,
+              note: "Abliterated (refusals removed) NVFP4 + FP8 build with images and MTP. Accept its terms on Hugging Face and sign the Spark in with hf auth login before downloading."),
         Model(id: "nemotron-3.5-lightning", name: "Nemotron 3.5 Lightning 30B-A3B",
               repo: .init(id: "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4", revision: "bee7596271d1495f6992ae224aefde4410e816b8"),
               parsers: nemotronParsers, flags: ["--trust-remote-code"], window: 1_048_576, startWindow: 262_144,

@@ -7,6 +7,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ### Added
 - TensorFold: Update now shows the release notes of every version between the installed one and the update before you confirm, so you can decide whether to update.
+- vLLM: Qwen3.8 27B Uncensored (orcarouter's abliterated NVFP4 + FP8 build, with images and MTP). It's gated on Hugging Face: accept its terms and run `hf auth login` on the Spark before downloading.
 
 ## [1.9.2] - 2026-11-14
 

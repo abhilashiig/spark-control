@@ -8,6 +8,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ### Added
 - TensorFold: Update now shows the release notes of every version between the installed one and the update before you confirm, so you can decide whether to update.
 - vLLM: Qwen3.8 27B Uncensored (orcarouter's abliterated NVFP4 + FP8 build, with images and MTP). It's gated on Hugging Face: accept its terms and run `hf auth login` on the Spark before downloading.
+- TensorFold: Qwen3.8 27B Uncensored (orcarouter's abliterated MLX 4-bit) with images and the DFlash2 drafter, the fastest way to run it on a Spark: about 70 tok/s on code and 29 on prose measured with its NVFP4 sibling, against 21 and 16 under vLLM, and more expected from the 4-bit weights. It downloads only the 4-bit weights (16 GB of the repo's 94 GB) and needs the Spark's `hf` tool.
 - vLLM: Qwen3.8 27B Uncensored serves 8 requests at once instead of 4: about 150 tok/s in all on code and 111 on prose with 8 clients on a Spark, against a cap at 4 before. A single request runs as before. Already-added copies pick this up at their next start.
 
 ### Fixed

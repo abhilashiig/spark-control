@@ -115,6 +115,25 @@ check(Set(tfIDs).count == tfIDs.count, "catalog ids are unique")
 check(TensorFold.catalog.allSatisfy { m in ([m.repo] + (m.drafter.map { [$0] } ?? [])).allSatisfy { $0.revision.map { $0.count == 40 } ?? true } },
       "pinned revisions are full commit hashes")
 let q27 = TensorFold.model("qwen3.8-27b")!, q36 = TensorFold.model("qwen3.6-35b-a3b")!
+let qu = TensorFold.model("qwen3.8-27b-uncensored")!
+// Run the download with stub hf and tensorfold that log their arguments, in a scratch home.
+let quHome = FileManager.default.temporaryDirectory.appending(path: "tf-skip-\(getpid())")
+try! FileManager.default.createDirectory(at: quHome.appending(path: "bin"), withIntermediateDirectories: true)
+for tool in ["hf", "tf"] {
+    let f = quHome.appending(path: "bin/\(tool)")
+    try! Data("#!/bin/sh\necho \"\(tool) $*\" >> \"$HOME/calls\"\n".utf8).write(to: f)
+    try! FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: f.path)
+}
+let quDL = TensorFold.downloadScript(qu, binary: quHome.appending(path: "bin/tf").path)
+_ = bash(quDL + "\nwait", env: ["HOME": quHome.path, "PATH": quHome.appending(path: "bin").path + ":/usr/bin:/bin"])
+Thread.sleep(forTimeInterval: 1)
+let quCalls = (try? String(contentsOf: quHome.appending(path: "calls"), encoding: .utf8)) ?? ""
+let quRef = (try? String(contentsOf: quHome.appending(path: ".cache/huggingface/hub/models--orcarouter--Qwen3.8-27B-Uncensored-MLX/refs/main"), encoding: .utf8)) ?? ""
+let quOK = FileManager.default.fileExists(atPath: quHome.appending(path: ".local/share/spark-control/tensorfold-data/qwen3.8-27b-uncensored.ok").path)
+try? FileManager.default.removeItem(at: quHome)
+check(quCalls == "hf download orcarouter/Qwen3.8-27B-Uncensored-MLX --revision a92a9d3492320048ca96924262d158f75ab5ce8b --exclude 2-bit/* 4-bit/* 6-bit/* 8-bit/* mtp/*\ntf pull z-lab/Qwen3.8-27B-DFlash2\n"
+      && quRef == "a92a9d3492320048ca96924262d158f75ab5ce8b\n" && quOK && !TensorFold.downloadScript(q27, binary: "tf").contains("download"),
+      "a repo with skipped folders downloads only its weights with hf and points refs/main at the pinned revision: \(quCalls)")
 let q27Start = TensorFold.startCommand(q27, binary: TensorFold.managedBinary, port: 18300)
 check(TensorFold.tidyNotes("# TensorFold 1.2.9\n\nFaster decode and\nfixes.\n\n## Speed\n\n- **A**: two streams\n  decode faster.\n  - nested\n") ==
       "Faster decode and fixes.\n\n**Speed**\n\n• **A**: two streams decode faster.\n      • nested",

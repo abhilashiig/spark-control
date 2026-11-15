@@ -28,6 +28,9 @@ enum TensorFold {
     struct Repo: Hashable {
         var id: String
         var revision: String?
+        /// Folders of the repo the model doesn't use (other quantizations), left out of the download and its size.
+        /// `tensorfold pull` fetches every file, so such a repo downloads with `hf download --exclude`.
+        var skip: [String] = []
         var spec: String { revision.map { "\(id)@\($0)" } ?? id }
         /// The Hugging Face cache folder name.
         var cacheName: String { "models--" + id.replacingOccurrences(of: "/", with: "--") }
@@ -73,6 +76,15 @@ enum TensorFold {
               drafter: Repo(id: "z-lab/Qwen3.8-27B-DFlash2"),
               flags: ["--vision"],
               note: "MLX 4-bit with images and the DFlash2 drafter."),
+        // Abliterated, with the tensors of TensorFold/Vontra's MLX 4-bit (all 2,180 names match), so it serves the
+        // same way. Measured on an idle GB10 with DFlash2: the uncensored NVFP4 build drafts as well as stock
+        // (154 vs 161 rounds for 512 tokens) at 70 tok/s code, 29 prose; stock MLX 4-bit 103 and 42.
+        Model(id: "qwen3.8-27b-uncensored", name: "Qwen3.8 27B Uncensored",
+              repo: Repo(id: "orcarouter/Qwen3.8-27B-Uncensored-MLX", revision: "a92a9d3492320048ca96924262d158f75ab5ce8b",
+                         skip: ["2-bit", "4-bit", "6-bit", "8-bit", "mtp"]),
+              drafter: Repo(id: "z-lab/Qwen3.8-27B-DFlash2"),
+              flags: ["--vision"],
+              note: "orcarouter's abliterated (refusals removed) MLX 4-bit, with images and the DFlash2 drafter. Downloads only the 4-bit weights (16 GB), with the Spark's hf tool."),
         Model(id: "qwen3.6-35b-a3b", name: "Qwen3.6 35B-A3B",
               repo: Repo(id: "TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP", revision: "81169a9bc511a27c1b4eedb77a2cd98ced431847"),
               // On CUDA the MTP layer drafts only when --drafter names the checkpoint itself; without it the
@@ -433,10 +445,19 @@ enum TensorFold {
     /// Starts the download detached from SSH so it survives the Mac sleeping. The `.ok` marker is written
     /// only when the model and its drafter both downloaded and verified.
     static func downloadScript(_ m: Model, binary: String) -> String {
-        let pulls = m.downloads.map { "\"$TF\" pull \(SSH.quote($0.spec))" }.joined(separator: " && ")
-        let job = "\(pulls) && touch \"$D/\(m.id).ok\""
+        let pulls = m.downloads.map { r in
+            guard !r.skip.isEmpty, let rev = r.revision else { return "\"$TF\" pull \(SSH.quote(r.spec))" }
+            // hf leaves refs/main alone for a pinned revision; `tensorfold serve REPO` finds the snapshot through it.
+            let refs = "\"\(hubDir)/\(r.cacheName)/refs\""
+            return "\"$HF\" download \(SSH.quote(r.id)) --revision \(rev) --exclude "
+                + r.skip.map { SSH.quote("\($0)/*") }.joined(separator: " ")
+                + " && mkdir -p \(refs) && echo \(rev) > \(refs)/main"
+        }.joined(separator: " && ")
+        let needsHF = m.downloads.contains { !$0.skip.isEmpty }
+            ? #"{ [ -x "$HF" ] || { echo "✗ The Spark needs the Hugging Face CLI (hf) for this model: pip install -U huggingface_hub"; exit 1; }; } && "# : ""
+        let job = "\(needsHF)\(pulls) && touch \"$D/\(m.id).ok\""
         return """
-        export D="\(dataDir)" TF="\(binary)"
+        export D="\(dataDir)" TF="\(binary)" HF="$(command -v hf || echo "$HOME/.local/bin/hf")"
         mkdir -p "$D"; rm -f "$D/\(m.id).ok"
         if [ ! -e "$D/\(m.id).log" ]; then
           H="\(hubDir)"; : > "$D/\(m.id).keep"
@@ -600,7 +621,10 @@ enum TensorFold {
                   (resp as? HTTPURLResponse)?.statusCode == 200,
                   let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
                   let files = obj["siblings"] as? [[String: Any]] else { return nil }
-            total += files.reduce(0) { $0 + (($1["size"] as? NSNumber)?.int64Value ?? 0) }
+            total += files.reduce(0) { sum, f in
+                let name = f["rfilename"] as? String ?? ""
+                return r.skip.contains { name.hasPrefix($0 + "/") } ? sum : sum + ((f["size"] as? NSNumber)?.int64Value ?? 0)
+            }
         }
         return total
     }

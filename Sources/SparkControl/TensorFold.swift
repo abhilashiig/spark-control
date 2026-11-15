@@ -347,6 +347,46 @@ enum TensorFold {
         return semver(v) == nil ? nil : v
     }
 
+    /// Notes of the stable releases after `installed` up to `target`, newest first, or nil if GitHub can't be read.
+    static func releaseNotes(after installed: String, upTo target: String) async -> [(version: String, notes: String)]? {
+        guard let url = URL(string: "https://api.github.com/repos/ashhart/TensorFold/releases?per_page=30"),
+              let (data, resp) = try? await URLSession.shared.data(from: url),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let list = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]]
+        else { return nil }
+        return list.compactMap { r in
+            guard r["draft"] as? Bool != true, r["prerelease"] as? Bool != true,
+                  let tag = r["tag_name"] as? String else { return nil }
+            let v = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+            // An unparseable installed version (a dev build) only gets the target's notes.
+            let afterInstalled = semver(installed) == nil ? v == target : isNewer(v, than: installed)
+            guard afterInstalled, !isNewer(v, than: target) else { return nil }
+            return (v, (r["body"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        .sorted { isNewer($0.version, than: $1.version) }
+    }
+
+    /// Inline markdown keeps line breaks, so drop the "# TensorFold X" title, bold the headings and unwrap hard-wrapped lines.
+    /// Release notes for SwiftUI's inline markdown, which keeps line breaks: drops the "# TensorFold X" title,
+    /// bolds headings, turns bullets into • and unwraps hard-wrapped lines.
+    static func tidyNotes(_ s: String) -> String {
+        var out: [String] = []
+        for raw in s.components(separatedBy: .newlines) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("# ") { continue }
+            if line.hasPrefix("#") {
+                out.append("**" + line.drop { $0 == "#" }.trimmingCharacters(in: .whitespaces) + "**")
+            } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
+                out.append((raw.hasPrefix(" ") ? "      • " : "• ") + line.dropFirst(2))
+            } else if !line.isEmpty, let last = out.last, !last.isEmpty, !last.hasPrefix("**") {
+                out[out.count - 1] += " " + line   // a hard-wrapped continuation of the line above
+            } else {
+                out.append(line)
+            }
+        }
+        return out.joined(separator: "\n").trimmingCharacters(in: .newlines)
+    }
+
     /// Plain X.Y.Z only, so a pre-release or odd tag never counts as an update.
     static func semver(_ v: String) -> [Int]? {
         let p = v.split(separator: ".", omittingEmptySubsequences: false).map { Int($0) }

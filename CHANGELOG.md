@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Added
+- TensorFold: Update now shows the release notes of every version between the installed one and the update before you confirm, so you can decide whether to update.
+
 ## [1.9.2] - 2026-11-14
 
 ### Fixed

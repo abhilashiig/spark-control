@@ -588,13 +588,8 @@ private struct EngineRow: View {
             }
         }
         .padding(.vertical, 2)
-        .alert("Update TensorFold to \(updating ?? "")?", isPresented: Binding { updating != nil } set: { if !$0 { updating = nil } },
-               presenting: updating) { v in
-            Button("Update") { Task { await state.tfInstall(v) } }
-            Button("Cancel", role: .cancel) {}
-        } message: { v in
-            Text("The release is checked against TensorFold's signing key and test-run before it replaces the installed version, which is kept so you can switch back. Running models keep their version until restarted."
-                 + (v == TensorFold.version ? "" : " Spark Control's model list was tested with \(TensorFold.version)."))
+        .sheet(isPresented: Binding { updating != nil } set: { if !$0 { updating = nil } }) {
+            if let updating { UpdateSheet(target: updating) }
         }
     }
 
@@ -820,6 +815,75 @@ struct LogBox: View {
             .frame(height: 130)
             .onChange(of: lines.count) { proxy.scrollTo(min(lines.count, 300) - 1, anchor: .bottom) }
         }
+    }
+}
+
+/// Confirms a TensorFold update, showing what changed since the installed version.
+private struct UpdateSheet: View {
+    @Environment(AppState.self) private var state
+    @Environment(\.dismiss) private var dismiss
+    let target: String
+    @State private var notes: [(version: String, notes: String)]?
+    @State private var loaded = false
+
+    private var installed: String {
+        if case .managed(let v) = state.tf.engine { return v }
+        return ""
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Update TensorFold \(installed) to \(target)?").font(.headline)
+            Group {
+                if !loaded {
+                    ProgressView("Loading release notes…").frame(maxWidth: .infinity, minHeight: 120)
+                } else if let notes, !notes.isEmpty {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            ForEach(notes, id: \.version) { r in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("TensorFold \(r.version)").font(.subheadline.bold())
+                                    Text(markdown(r.notes.isEmpty ? "No notes for this release." : r.notes))
+                                        .textSelection(.enabled)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                    }
+                    .frame(minHeight: 120, maxHeight: 320)
+                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+                } else {
+                    Text("Release notes couldn't be loaded.").foregroundStyle(.secondary)
+                }
+            }
+            Link("All TensorFold releases on GitHub", destination: URL(string: "https://github.com/ashhart/TensorFold/releases")!)
+            Text("The release is checked against TensorFold's signing key and test-run before it replaces the installed version, which is kept so you can switch back. Running models keep their version until restarted."
+                 + (target == TensorFold.version ? "" : " Spark Control's model list was tested with \(TensorFold.version)."))
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Update") {
+                    dismiss()
+                    Task { await state.tfInstall(target) }
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
+        .task {
+            notes = await TensorFold.releaseNotes(after: installed, upTo: target)
+            loaded = true
+        }
+    }
+
+    private func markdown(_ s: String) -> AttributedString {
+        let text = TensorFold.tidyNotes(s)
+        return (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
     }
 }
 

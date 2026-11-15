@@ -116,6 +116,9 @@ check(TensorFold.catalog.allSatisfy { m in ([m.repo] + (m.drafter.map { [$0] } ?
       "pinned revisions are full commit hashes")
 let q27 = TensorFold.model("qwen3.8-27b")!, q36 = TensorFold.model("qwen3.6-35b-a3b")!
 let q27Start = TensorFold.startCommand(q27, binary: TensorFold.managedBinary, port: 18300)
+check(TensorFold.tidyNotes("# TensorFold 1.2.9\n\nFaster decode and\nfixes.\n\n## Speed\n\n- **A**: two streams\n  decode faster.\n  - nested\n") ==
+      "Faster decode and fixes.\n\n**Speed**\n\n• **A**: two streams decode faster.\n      • nested",
+      "release notes lose the title, unwrap lines and keep bullets")
 check(q27Start.contains("--drafter z-lab/Qwen3.8-27B-DFlash2") && q27Start.contains("--port 18300") && q27Start.contains("--api-key-file"),
       "drafter, port and key are always passed")
 check(q27.downloads.count == 2 && q36.downloads.count == 1 && TensorFold.startCommand(q36, binary: "tf", port: 1).contains("--drafter TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP"),

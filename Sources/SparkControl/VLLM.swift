@@ -100,8 +100,11 @@ enum VLLM {
         let pulls = m.downloads.map { r in
             "hf download \(SSH.quote(r.id))" + (r.revision.map { " --revision \($0)" } ?? "")
         }.joined(separator: " && ")
+        // The container's HOME is /tmp, so it can't see `hf auth login`'s token: mount it read-only (gated repos
+        // need it) and pass HF_TOKEN through when set, keeping the token itself out of the process list.
         let job = """
-        docker run --rm --user "$(id -u):$(id -g)" --entrypoint bash -v "$H:/hub" -e HF_HUB_CACHE=/hub -e HOME=/tmp \(image) -c \(SSH.quote(pulls)) && touch "$D/\(m.key).ok"
+        T="${HF_TOKEN_PATH:-${HF_HOME:-$HOME/.cache/huggingface}/token}"; A=(); [ -f "$T" ] && A=(-v "$T:/tmp/hf-token:ro" -e HF_TOKEN_PATH=/tmp/hf-token)
+        docker run --rm --user "$(id -u):$(id -g)" --entrypoint bash -v "$H:/hub" -e HF_HUB_CACHE=/hub -e HOME=/tmp -e HF_TOKEN "${A[@]}" \(image) -c \(SSH.quote(pulls)) && touch "$D/\(m.key).ok"
         """
         return """
         export D="\(TensorFold.dataDir)" H="\(TensorFold.hubDir)"

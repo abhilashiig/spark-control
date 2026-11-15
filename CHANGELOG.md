@@ -9,6 +9,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - TensorFold: Update now shows the release notes of every version between the installed one and the update before you confirm, so you can decide whether to update.
 - vLLM: Qwen3.8 27B Uncensored (orcarouter's abliterated NVFP4 + FP8 build, with images and MTP). It's gated on Hugging Face: accept its terms and run `hf auth login` on the Spark before downloading.
 
+### Fixed
+- vLLM: downloads now use the Spark's Hugging Face login (`hf auth login`), so gated models download instead of failing with "Access denied … requires approval".
+
 ## [1.9.2] - 2026-11-14
 
 ### Fixed

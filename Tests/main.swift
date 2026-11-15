@@ -285,6 +285,7 @@ for (name, s) in [("vllm start", vqStart), ("vllm stop", VLLM.stopCommand("q")),
     let (code, out) = bash(s, syntaxOnly: true)
     check(code == 0, "\(name) script parses: \(out)")
 }
+check(VLLM.downloadScript(vg).contains("HF_TOKEN_PATH=/tmp/hf-token"), "vLLM downloads see the hf auth login token, so gated repos download")
 check(TensorFold.parseStatus("VLLM|ready\nMODEL|vllm-qwen3.6-35b-a3b|running|7|x").vllm == "ready", "vLLM status parses")
 check(!TensorFold.uninstallScript(models: TensorFold.catalog).contains(#"rm -rf "$D""#), "removing TensorFold keeps the shared data folder")
 

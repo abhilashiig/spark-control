@@ -615,10 +615,33 @@ check(tags == [Ollama.Tag(name: "qwen3.8:latest", bytes: 18_000_000_000), Ollama
 check(Ollama.fits(105_000_000_000, memory: 130_594_021_376, reserve: 12_000_000_000)
       && !Ollama.fits(120_000_000_000, memory: 130_594_021_376, reserve: 12_000_000_000), "fits leaves the system reserve")
 check(Ollama.searchURL("qwen coder").absoluteString == "https://ollama.com/search?q=qwen%20coder&c=local", "search asks for local models")
-let ost = Ollama.parseStatus("OLLAMA|0.40.11\nPULL|user~model:7b|running|pulling 6e4c38e1172f:  45% ▕██▏ 2.1 GB/4.7 GB\nPULL|x:1b|failed|Error: pull model manifest: file does not exist\n")
+let ost = Ollama.parseStatus("OLLAMA|0.40.11\nJOB|ollama|user~model:7b|running|pulling 6e4c38e1172f:  45% ▕██▏ 2.1 GB/4.7 GB\nJOB|ollama|x:1b|failed|Error: pull model manifest: file does not exist\nJOB|hf|a~b|failed|x\n")
 check(ost.version == "0.40.11" && ost.pulls.count == 2 && ost.pulls[0].id == "user/model:7b" && ost.pulls[0].percent == 0.45
       && ost.pulls[1].state == .failed && ost.pulls[1].percent == nil, "ollama status parses pulls")
 check(Ollama.key("user/model:7b") == "ollama-user~model:7b" && Ollama.parseStatus("").version == nil, "pull records name and no Ollama")
 check(Ollama.pullScript("x:1b").contains("ollama pull '\\''x:1b'\\''"), "pull quotes the model name")
+
+// Hugging Face search and download, and the shared job records (fake Spark home with a stub hf)
+let hfFound = HF.parseSearch(Data(#"[{"id":"Qwen/Qwen3.8-27B","downloads":6547772,"likes":20065,"gated":false,"library_name":"transformers"},{"id":"meta-llama/Llama-4","downloads":5,"likes":1,"gated":"manual"},{"x":1}]"#.utf8))
+check(hfFound.count == 2 && hfFound[0].id == "Qwen/Qwen3.8-27B" && !hfFound[0].gated && hfFound[0].library == "transformers"
+      && hfFound[1].gated && hfFound[1].library == nil, "hf search results parse; gated is false or a string")
+check(HF.searchURL("qwen 27b").absoluteString.contains("search=qwen%2027b&sort=downloads&direction=-1&limit=20"), "hf search asks for the most downloaded")
+let jobHome = FileManager.default.temporaryDirectory.appending(path: "selfcheck-jobs-\(getpid())")
+let jobBin = jobHome.appending(path: ".local/bin")
+try! FileManager.default.createDirectory(at: jobBin, withIntermediateDirectories: true)
+try! "#!/bin/sh\nprintf 'Fetching 3 files:  33%%\\r'; echo \"$*\" > \"$HOME/hf-args\"; [ \"$2\" = ok/repo ]\n".write(to: jobBin.appending(path: "hf"), atomically: true, encoding: .utf8)
+try! FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: jobBin.appending(path: "hf").path)
+let jobEnv = ["HOME": jobHome.path, "PATH": "/usr/bin:/bin"]
+_ = bash(HF.downloadScript("ok/repo") + "\nwait", env: jobEnv)
+_ = bash(HF.downloadScript("bad/repo") + "\nwait", env: jobEnv)
+Thread.sleep(forTimeInterval: 0.5)
+let jobOut = bash(Jobs.lines("hf"), env: jobEnv).1
+let hfJobs = Jobs.parse(jobOut, "hf")
+check((try? String(contentsOf: jobHome.appending(path: "hf-args"), encoding: .utf8)).map { $0.hasPrefix("download ") } == true, "the download runs hf download")
+check(hfJobs.count == 2 && hfJobs.contains { $0.id == "ok/repo" && $0.state == .done }
+      && hfJobs.contains { $0.id == "bad/repo" && $0.state == .failed && $0.last.contains("33%") }, "jobs report done and failed with the last progress line: \(jobOut)")
+check(Jobs.parse(bash(Jobs.lines("hf"), env: jobEnv).1, "hf").map(\.id) == ["bad/repo"], "a finished job's records are removed once reported")
+check(bash(Jobs.dismiss(HF.key("bad/repo")), env: jobEnv).0 == 0 && Jobs.parse(bash(Jobs.lines("hf"), env: jobEnv).1, "hf").isEmpty, "dismiss clears a failed job")
+try? FileManager.default.removeItem(at: jobHome)
 
 print("All checks passed")

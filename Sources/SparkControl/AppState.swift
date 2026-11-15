@@ -77,6 +77,9 @@ final class AppState {
     /// The Spark's Hugging Face cache and CLI, once read; the account its token belongs to.
     var hf: HF.Status?
     var hfAccount: String?
+    var hfResults: [HF.Result]?
+    var hfQuery = ""
+    var hfSearching = false
     var ollama: Ollama.Status?
     var ollamaResults: [Ollama.Result]?
     /// What `ollamaResults` were searched for; empty for the most popular models.

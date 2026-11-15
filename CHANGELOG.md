@@ -7,6 +7,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ### Added
 - Hugging Face page: everything in the Spark's Hugging Face cache with its size, whoever downloaded it, plus what's downloading now and what a running model is using. Delete a model you no longer need: one that's serving or downloading can't be deleted, and models in Spark Control that use it are named first.
+- Hugging Face page: search Hugging Face's models from the toolbar, with each repo's download size, popularity and whether it's gated, and download one onto the Spark with progress. Downloads keep going if the Mac sleeps, can be cancelled, and are refused when the repo is bigger than the Spark's free disk.
 - Hugging Face page: Clean Up removes the partial files that interrupted downloads leave behind, even after a later download finished, without touching the model itself.
 - Hugging Face page: install the `hf` tool on the Spark with one click (no sudo), and sign the Spark in to Hugging Face with an access token, or sign it out, so gated models download. The token is checked with Hugging Face first and isn't kept on your Mac.
 - Ollama: search ollama.com from the Ollama page and pull models onto the Spark, with progress. Each model lists every size it comes in, and Fits in Memory (on by default) shows only the sizes that fit in the Spark's memory. Turn it off to see them all.

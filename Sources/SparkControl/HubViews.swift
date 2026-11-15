@@ -73,6 +73,35 @@ extension AppState {
         await hfRefresh()
     }
 
+    func hfSearch(_ query: String) async {
+        hfSearching = true
+        defer { hfSearching = false }
+        guard let results = await HF.search(query.trimmingCharacters(in: .whitespaces)) else {
+            event("Couldn't search Hugging Face")
+            return
+        }
+        hfResults = results
+        hfQuery = query
+    }
+
+    func hfDownload(_ repo: String) async {
+        event("Downloading \(repo) from Hugging Face")
+        let res = await tfRun(HF.downloadScript(repo), timeout: 30)
+        if res?.code != 0 { event("Couldn't start downloading \(repo): \(res?.output ?? "Spark unreachable")") }
+        await hfRefresh()
+    }
+
+    func hfCancel(_ repo: String) async {
+        _ = await tfRun(TensorFold.cancelScript(HF.key(repo)), timeout: 30)
+        event("Cancelled downloading \(repo)")
+        await hfRefresh()
+    }
+
+    func hfDismiss(_ repo: String) async {
+        _ = await tfRun(Jobs.dismiss(HF.key(repo)), timeout: 30)
+        await hfRefresh()
+    }
+
     func ollamaRefresh() async {
         guard let res = await tfRun(Ollama.statusScript, timeout: 30), res.code == 0 else { return }
         let new = Ollama.parseStatus(res.output)
@@ -136,6 +165,7 @@ struct HuggingFaceView: View {
     @Environment(AppState.self) private var state
     @State private var deleting: HF.Repo?
     @State private var signingIn = false
+    @State private var query = ""
 
     var body: some View {
         Form {
@@ -177,8 +207,16 @@ struct HuggingFaceView: View {
                 Text("Tools")
             }
 
+            let jobs = (state.hf?.downloads ?? []).filter { $0.state != .done }
+            if !jobs.isEmpty {
+                Section("Downloads") {
+                    ForEach(jobs) { jobRow($0) }
+                }
+            }
+
             let repos = state.hf?.repos ?? []
-            let downloading = repos.filter { $0.state == .downloading }
+            let running = Set(jobs.filter { $0.state == .running }.map(\.id))
+            let downloading = repos.filter { $0.state == .downloading && !running.contains($0.repo) }
             if !downloading.isEmpty {
                 Section("Downloading") {
                     ForEach(downloading) { RepoRow(repo: $0, deleting: $deleting) }
@@ -196,9 +234,26 @@ struct HuggingFaceView: View {
             } footer: {
                 Text("Everything in the Spark's Hugging Face cache, whoever downloaded it: TensorFold, vLLM, ComfyUI's setup or you. A repo that's serving or downloading can't be deleted.")
             }
+
+            if state.hfSearching || state.hfResults != nil {
+                Section {
+                    if state.hfSearching {
+                        ProgressView().frame(maxWidth: .infinity)
+                    } else if let results = state.hfResults {
+                        if results.isEmpty { Text("No matching models.").foregroundStyle(.secondary) }
+                        ForEach(results) { resultRow($0) }
+                    }
+                } header: {
+                    Text(state.hfQuery.isEmpty ? "Most Downloaded on Hugging Face" : "Results for “\(state.hfQuery)”")
+                } footer: {
+                    Text("Download fetches every file in the repo into the Spark's cache, so check the size: repos of GGUF files often hold every quantization. To run a model, add it from TensorFold or vLLM, or as a custom model.")
+                }
+            }
         }
         .page()
         .navigationTitle("Hugging Face")
+        .searchable(text: $query, prompt: "Search Hugging Face models")
+        .onSubmit(of: .search) { Task { await state.hfSearch(query) } }
         .toolbar {
             Button { Task { await state.hfRefresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                 .disabled(state.route == nil)
@@ -208,7 +263,8 @@ struct HuggingFaceView: View {
             if state.hf?.signedIn == true { await state.hfLoadAccount() }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
-                if state.hf?.repos.contains(where: { $0.state == .downloading }) == true { await state.hfRefresh() }
+                if state.hf?.repos.contains(where: { $0.state == .downloading }) == true
+                    || state.hf?.downloads.contains(where: { $0.state == .running }) == true { await state.hfRefresh() }
             }
         }
         .sheet(isPresented: $signingIn) { HFSignInSheet() }
@@ -220,6 +276,60 @@ struct HuggingFaceView: View {
             let models = state.hfModels(r).map(\.name)
             Text("Frees \(r.bytes.formatted(.byteCount(style: .file))).\(models.isEmpty ? "" : " \(models.joined(separator: ", ")) will need it downloaded again.") This can't be undone.")
         }
+    }
+
+    private func jobRow(_ j: Job) -> some View {
+        let got = state.hf?.repos.first { $0.repo == j.id }?.bytes ?? 0
+        let size = state.hfResults?.first { $0.id == j.id }?.size
+        return HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(j.id).font(.body.monospaced()).lineLimit(1).truncationMode(.middle)
+                if j.state == .running, let size, size > 0 {
+                    ProgressView(value: min(Double(got) / Double(size), 1))
+                    Text("\(got.formatted(.byteCount(style: .file))) of \(size.formatted(.byteCount(style: .file)))")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text(j.state == .running ? "\(got.formatted(.byteCount(style: .file))) so far" : j.last.isEmpty ? "Failed" : j.last)
+                        .font(.caption).foregroundStyle(j.state == .failed ? .red : .secondary).lineLimit(2)
+                }
+            }
+            Spacer()
+            if j.state == .running {
+                Button("Cancel") { Task { await state.hfCancel(j.id) } }
+            } else {
+                Button("Retry") { Task { await state.hfDownload(j.id) } }
+                Button("Dismiss") { Task { await state.hfDismiss(j.id) } }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func resultRow(_ r: HF.Result) -> some View {
+        let have = state.hf?.repos.first { $0.type == "model" && $0.repo == r.id }
+        let busy = state.hf?.downloads.contains { $0.id == r.id && $0.state == .running } == true
+        let tooBig = (r.size ?? 0) > (state.hf?.free ?? .max) - (have?.bytes ?? 0)
+        var facts = [r.library, "↓ " + r.downloads.formatted(.number.notation(.compactName)),
+                     "♥ " + r.likes.formatted(.number.notation(.compactName))].compactMap { $0 }
+        if r.gated { facts.append(state.hf?.signedIn == true ? "Gated: accept its terms on huggingface.co first" : "Gated: sign in first") }
+        return HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Link(r.id, destination: URL(string: "https://huggingface.co/\(r.id)")!)
+                    .font(.body.monospaced()).lineLimit(1).truncationMode(.middle)
+                Text(facts.joined(separator: " · ")).font(.caption).foregroundStyle(r.gated ? .orange : .secondary).lineLimit(1)
+            }
+            Spacer()
+            if let size = r.size {
+                Text(size.formatted(.byteCount(style: .file)))
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(tooBig ? Color.red : Color.secondary)
+                    .help(tooBig ? "More than the Spark has free" : "Every file in the repo")
+            }
+            Button(have != nil && have?.partial == 0 ? "Downloaded" : have != nil ? "Resume" : "Download") {
+                Task { await state.hfDownload(r.id) }
+            }
+            .disabled((have != nil && have?.partial == 0) || busy || tooBig || state.hf?.version == nil || state.route == nil)
+        }
+        .padding(.vertical, 2)
     }
 
     private var cliSubtitle: String {
@@ -464,7 +574,7 @@ struct DiscoveredView: View {
         .padding(.vertical, 2)
     }
 
-    private func pullRow(_ p: Ollama.Pull) -> some View {
+    private func pullRow(_ p: Job) -> some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(p.id).font(.body.monospaced()).lineLimit(1)

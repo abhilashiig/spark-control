@@ -172,16 +172,20 @@ enum VLLM {
         return plain + String(format: " --gpu-memory-utilization %.2f", f) + kv
     }
 
-    /// Keeps a saved model's command in step with its catalog entry: the request limit and the fixed KV cache
-    /// (kept at the memory the command already has), and flags an earlier version added that measured no gain.
+    /// Keeps a saved command of a model with a measured footprint in step with its entry: the fixed KV cache (at
+    /// the memory the command already has); once, when that first appears, the request limit; and flags an earlier
+    /// version added that measured no gain. Other models' commands are left as they are.
     static func synced(_ command: String, model id: String?) -> String {
-        guard let m = model(id) else { return command }
-        var c = command.replacing(try! Regex(" --max-num-seqs(=| +)[0-9]+"), with: " --max-num-seqs \(m.maxSeqs)")
+        guard let m = model(id), m.footprintGB != nil else { return command }
+        var c = command
+        if !c.contains("--kv-cache-memory-bytes") {
+            c = c.replacing(try! Regex(" --max-num-seqs(=| +)[0-9]+"), with: " --max-num-seqs \(m.maxSeqs)")
+        }
         for dropped in [" --async-scheduling", #" --compilation-config '{"pass_config":{"fuse_act_quant":true},"max_cudagraph_capture_size":64}'"#,
                         #" --kernel-config '{"enable_flashinfer_autotune":true}'"#, " --max-num-batched-tokens 8192"] {
             c = c.replacingOccurrences(of: dropped, with: "")
         }
-        if m.footprintGB != nil, let f = memoryFraction(of: c) { c = withMemory(c, f * gb10Memory / 1e9, footprint: m.footprintGB) }
+        if let f = memoryFraction(of: c) { c = withMemory(c, f * gb10Memory / 1e9, footprint: m.footprintGB) }
         return c
     }
 

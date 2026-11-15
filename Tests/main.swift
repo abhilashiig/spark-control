@@ -296,7 +296,10 @@ let vuSaved = vuStart.replacingOccurrences(of: "--max-num-seqs 8", with: "--max-
 let vuSynced = VLLM.synced(vuSaved, model: vu.id)
 check(vuSynced.contains("--max-num-seqs 8") && vuSynced.contains("--kv-cache-memory-bytes") && !vuSynced.contains("async")
       && !vuSynced.contains("kernel-config") && !vuSynced.contains("batched") && VLLM.synced(vuSynced, model: vu.id) == vuSynced
-      && VLLM.synced(vqStart, model: vq.id) == vqStart, "saved commands get the limit and KV size, lose unmeasured flags, and stay put after")
+      && VLLM.synced(vqStart, model: vq.id) == vqStart
+      && VLLM.synced(vqStart.replacingOccurrences(of: "--max-num-seqs 4", with: "--max-num-seqs 16"), model: vq.id).contains("--max-num-seqs 16")
+      && VLLM.synced(vuSynced.replacingOccurrences(of: "--max-num-seqs 8", with: "--max-num-seqs 12"), model: vu.id).contains("--max-num-seqs 12"),
+      "saved commands get the limit and KV size once, lose unmeasured flags, and keep later edits; other models are untouched")
 check(bash(vuSynced, syntaxOnly: true).0 == 0, "the synced start command parses")
 check(VLLM.drafts(of: VLLM.withDrafts(vqStart, 0, model: vq)) == 0 && VLLM.drafts(of: VLLM.withDrafts(vqStart, 1, model: vq)) == 1
       && VLLM.context(of: VLLM.withContext(vqStart, 65_536)) == 65_536, "vLLM drafts and context flags round-trip")

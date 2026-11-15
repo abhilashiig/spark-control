@@ -17,17 +17,10 @@ enum VLLM {
         var id: String
         var name: String
         var repo: TensorFold.Repo
-        /// A separate drafter: Gemma 4's MTP assistant (always used), or a DFlash2 drafter (optional, next to the
-        /// checkpoint's own MTP head). nil drafts from the model's own MTP head.
+        /// A separate MTP drafter (Gemma 4's assistant checkpoints); nil drafts from the model's own MTP head.
         var drafter: TensorFold.Repo?
-        /// vLLM's --speculative-config method for `drafter`: "mtp" or "dflash".
-        var drafterMethod = "mtp"
         /// Drafted tokens per step that measured fastest on a Spark, or 2 where nobody has published a sweep.
-        /// For an optional drafter this is the drafter's count, and `headSuggested` the MTP head's.
         var suggested = 2
-        var headSuggested = 2
-        /// Requests decoded together (--max-num-seqs).
-        var maxSeqs = 4
         var parsers: [String] = []
         var flags: [String] = []
         var window = 262_144
@@ -35,22 +28,20 @@ enum VLLM {
         var startWindow: Int?
         /// Memory it may take, in GB: weights plus room for context. vLLM claims all of it at start.
         var memoryGB: Double = 50
+        /// Requests decoded together (--max-num-seqs).
+        var maxSeqs = 4
+        /// Measured memory besides the KV cache (weights, activations, CUDA graphs), in GB. With it the KV cache gets
+        /// a fixed size (memory minus this), which skips vLLM's start-up memory profiling: on the GB10's unified
+        /// memory that check fails ("Error in memory profiling") whenever free memory moves while it measures.
+        var footprintGB: Double?
         var note: String
 
         /// Download records live in TensorFold's data folder, so they get a prefix no TensorFold model has.
         var key: String { "vllm-" + id }
         var downloads: [TensorFold.Repo] { [repo] + (drafter.map { [$0] } ?? []) }
-        /// The drafter is a choice on the model's page; new models start with the MTP head.
-        var optionalDrafter: Bool { drafterMethod == "dflash" && drafter != nil }
     }
 
     static let qwenParsers = ["--reasoning-parser", "qwen3", "--enable-auto-tool-choice", "--tool-call-parser", "qwen3_coder"]
-    /// From NVIDIA's DGX Spark recipe for Qwen3.8 27B NVFP4, the parts upstream vLLM has, measured on a GB10 (README):
-    /// bigger prompt chunks than the 2,048 drafting leaves, scheduling overlapped with the GPU, the activation quant
-    /// fused into its kernel, CUDA graphs up to 8 requests x 8 tokens, and FlashInfer kernels tuned at start.
-    static let qwenTuning = ["--max-num-batched-tokens 8192", "--async-scheduling",
-                             #"--compilation-config '{"pass_config":{"fuse_act_quant":true},"max_cudagraph_capture_size":64}'"#,
-                             #"--kernel-config '{"enable_flashinfer_autotune":true}'"#]
     static let nemotronParsers = ["--reasoning-parser", "nemotron_v3", "--enable-auto-tool-choice", "--tool-call-parser", "qwen3_coder"]
 
     /// NVFP4 checkpoints that fit one GB10 and carry MTP. Sources for each suggestion are in the README.
@@ -67,10 +58,10 @@ enum VLLM {
         // config.json), so no --quantization or --kv-cache-dtype. Gated with auto-approval on Hugging Face.
         Model(id: "qwen3.8-27b-uncensored", name: "Qwen3.8 27B Uncensored",
               repo: .init(id: "orcarouter/Qwen3.8-27B-Uncensored-NVFP4", revision: "d350e02d82203d5bf07a1e203c997581f235f407"),
-              // DFlash2 follows main, as the TensorFold entry downloads it, so both engines share one copy.
-              drafter: .init(id: "z-lab/Qwen3.8-27B-DFlash2"), drafterMethod: "dflash", suggested: 7, headSuggested: 2,
-              maxSeqs: 8, parsers: qwenParsers, flags: qwenTuning,
-              note: "Abliterated (refusals removed) NVFP4 + FP8 build with images and MTP, tuned for 8 requests at once, plus the optional DFlash2 drafter (3.6 GB). Accept its terms on Hugging Face and sign the Spark in with hf auth login before downloading."),
+              // 8 requests at once: 151 tok/s in all on code at 8 (GB10, MTP x2), where 4 capped it. Footprint
+              // measured 29.1-30.1 GiB at 0.38 (KV 17.2-18.2 GiB), plus margin.
+              parsers: qwenParsers, memoryGB: 50, maxSeqs: 8, footprintGB: 32.5,
+              note: "Abliterated (refusals removed) NVFP4 + FP8 build with images and MTP. Accept its terms on Hugging Face and sign the Spark in with hf auth login before downloading."),
         Model(id: "nemotron-3.5-lightning", name: "Nemotron 3.5 Lightning 30B-A3B",
               repo: .init(id: "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4", revision: "bee7596271d1495f6992ae224aefde4410e816b8"),
               parsers: nemotronParsers, flags: ["--trust-remote-code"], window: 1_048_576, startWindow: 262_144,
@@ -158,9 +149,9 @@ enum VLLM {
         args += ["--served-model-name", name, "--api-key", "\"$(cat \"\(TensorFold.dataDir)/api-key\")\"",
                  "--max-num-seqs \(m.maxSeqs)", "--enable-prefix-caching"]
         args += m.parsers + m.flags
-        let cmd = withMemory(withContext(args.joined(separator: " "), m.startWindow ?? m.window), m.memoryGB, total: total)
-        return m.optionalDrafter ? withDrafts(cmd, m.headSuggested, model: m, separate: false)
-            : withDrafts(cmd, m.suggested, model: m)
+        let cmd = withMemory(withContext(args.joined(separator: " "), m.startWindow ?? m.window), m.memoryGB, total: total,
+                             footprint: m.footprintGB)
+        return withDrafts(cmd, m.suggested, model: m)
     }
 
     static func stopCommand(_ served: String) -> String {
@@ -172,9 +163,26 @@ enum VLLM {
         flagValue("--gpu-memory-utilization", in: command).flatMap { Double($0) }
     }
 
-    static func withMemory(_ command: String, _ gb: Double, total: Double = gb10Memory) -> String {
+    /// Sets --gpu-memory-utilization, which the app counts memory by, and with a measured footprint the fixed
+    /// KV cache size that goes with it.
+    static func withMemory(_ command: String, _ gb: Double, total: Double = gb10Memory, footprint: Double? = nil) -> String {
         let f = min(0.95, max(0.05, gb * 1e9 / total))
-        return command.replacing(try! Regex(" --gpu-memory-utilization(=| +)[^ ]+"), with: "") + String(format: " --gpu-memory-utilization %.2f", f)
+        let plain = command.replacing(try! Regex(" --(gpu-memory-utilization|kv-cache-memory-bytes)(=| +)[^ ]+"), with: "")
+        let kv = footprint.map { String(format: " --kv-cache-memory-bytes %.0f", max(2, gb - $0) * 1e9) } ?? ""
+        return plain + String(format: " --gpu-memory-utilization %.2f", f) + kv
+    }
+
+    /// Keeps a saved model's command in step with its catalog entry: the request limit and the fixed KV cache
+    /// (kept at the memory the command already has), and flags an earlier version added that measured no gain.
+    static func synced(_ command: String, model id: String?) -> String {
+        guard let m = model(id) else { return command }
+        var c = command.replacing(try! Regex(" --max-num-seqs(=| +)[0-9]+"), with: " --max-num-seqs \(m.maxSeqs)")
+        for dropped in [" --async-scheduling", #" --compilation-config '{"pass_config":{"fuse_act_quant":true},"max_cudagraph_capture_size":64}'"#,
+                        #" --kernel-config '{"enable_flashinfer_autotune":true}'"#, " --max-num-batched-tokens 8192"] {
+            c = c.replacingOccurrences(of: dropped, with: "")
+        }
+        if m.footprintGB != nil, let f = memoryFraction(of: c) { c = withMemory(c, f * gb10Memory / 1e9, footprint: m.footprintGB) }
+        return c
     }
 
     // MARK: Flags
@@ -197,35 +205,11 @@ enum VLLM {
         return m.output[1].substring.flatMap { Int($0) } ?? 0
     }
 
-    /// `separate` picks the separate drafter or the MTP head; nil keeps the command's current choice (always the
-    /// drafter when it isn't optional).
-    static func withDrafts(_ command: String, _ n: Int, model m: Model, separate: Bool? = nil) -> String {
-        let useDrafter = separate ?? (!m.optionalDrafter || usesDrafter(command, m))
+    static func withDrafts(_ command: String, _ n: Int, model m: Model) -> String {
         let plain = command.replacing(try! Regex(" --speculative-config '[^']*'"), with: "")
         guard n > 0 else { return plain }
-        guard useDrafter, let d = m.drafter else {
-            return plain + #" --speculative-config '{"method":"mtp","num_speculative_tokens":\#(n)}'"#
-        }
-        // NVIDIA's Spark recipe drafts DFlash2 with probabilistic sampling.
-        let extra = m.drafterMethod == "dflash" ? #","draft_sample_method":"probabilistic""# : ""
-        return plain + #" --speculative-config '{"method":"\#(m.drafterMethod)","model":"\#(d.id)","num_speculative_tokens":\#(n)\#(extra)}'"#
-    }
-
-    /// Whether the command drafts with the model's separate drafter (not its MTP head).
-    static func usesDrafter(_ command: String, _ m: Model) -> Bool {
-        m.drafter.map { command.contains(#""model":"\#($0.id)""#) } ?? false
-    }
-
-    /// A model added before its catalog entry gained tuning flags gets them, and the entry's request limit, once:
-    /// the first flag marks the update, so later edits to the command are kept.
-    static func addingTuning(to command: String, model id: String?) -> String {
-        guard let m = model(id), let marker = m.flags.first?.split(separator: " ").first, !command.contains(" \(marker)")
-        else { return command }
-        let seqs = command.replacing(try! Regex(" --max-num-seqs(=| +)[0-9]+"), with: " --max-num-seqs \(m.maxSeqs)")
-        return m.flags.reduce(seqs) { c, f in
-            let name = f.split(separator: " ").first.map(String.init) ?? f
-            return c.contains(" \(name)") ? c : c + " " + f
-        }
+        let draft = m.drafter.map { #""model":"\#($0.id)","# } ?? ""
+        return plain + #" --speculative-config '{"method":"mtp",\#(draft)"num_speculative_tokens":\#(n)}'"#
     }
 
     private static func flagValue(_ flag: String, in command: String) -> String? {

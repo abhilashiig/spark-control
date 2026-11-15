@@ -181,7 +181,8 @@ private struct MemoryField: View {
                     recipe.memoryGB = v
                     recipe.memoryMeasured = false
                     if let v, recipe.vllm != nil {
-                        recipe.startCommand = VLLM.withMemory(recipe.startCommand, v, total: Double(state.sparkMemoryTotal))
+                        recipe.startCommand = VLLM.withMemory(recipe.startCommand, v, total: Double(state.sparkMemoryTotal),
+                                                             footprint: VLLM.model(recipe.vllm)?.footprintGB)
                     }
                 }), format: .number, prompt: Text("Unknown"))
                 .labelsHidden().multilineTextAlignment(.trailing).frame(width: 90)
@@ -285,9 +286,8 @@ private struct TensorFoldSection: View {
     }
 }
 
-/// Context window, drafter and drafts for vLLM catalog models, kept in the start command's flags.
+/// Context window and MTP drafts for vLLM catalog models, kept in the start command's flags.
 private struct VLLMSection: View {
-    @Environment(AppState.self) private var state
     @Binding var recipe: Recipe
     let model: VLLM.Model
 
@@ -295,11 +295,6 @@ private struct VLLMSection: View {
         let ctx = VLLM.context(of: recipe.startCommand) ?? model.window
         let options = VLLM.contextOptions(model)
         let drafts = VLLM.drafts(of: recipe.startCommand)
-        let dflash = model.optionalDrafter && VLLM.usesDrafter(recipe.startCommand, model)
-        let suggested = model.optionalDrafter && !dflash ? model.headSuggested : model.suggested
-        let counts = dflash ? [3, 5, 7, 10] : [1, 2, 3]
-        // The drafter can be picked once it's on the Spark: vLLM starts offline.
-        let drafterReady = state.tf.models[model.key]?.download == .done
         Section {
             Picker("Context", selection: Binding { ctx } set: {
                 recipe.startCommand = VLLM.withContext(recipe.startCommand, $0)
@@ -308,34 +303,21 @@ private struct VLLMSection: View {
                     Text($0 == model.window ? "Full window (\($0.formatted()))" : "\($0.formatted()) tokens").tag($0)
                 }
             }
-            if model.optionalDrafter, let d = model.drafter {
-                Picker(selection: Binding { dflash } set: {
-                    recipe.startCommand = VLLM.withDrafts(recipe.startCommand, $0 ? model.suggested : model.headSuggested,
-                                                          model: model, separate: $0)
-                }) {
-                    Text("Built-in MTP head").tag(false)
-                    Text(drafterReady || dflash ? "DFlash2" : "DFlash2 (download it on the vLLM page)").tag(true)
-                        .selectionDisabled(!drafterReady && !dflash)
-                } label: {
-                    Text("Drafter")
-                    Text("DFlash2 (\(d.id)) guesses up to \(model.suggested) tokens at once: much faster on code, a little on prose, and it costs about 7 GB of context room. The MTP head is built into the model and does better with many requests at once.")
-                }
-            }
             Picker(selection: Binding { drafts } set: {
                 recipe.startCommand = VLLM.withDrafts(recipe.startCommand, $0, model: model)
             }) {
                 Text("Off").tag(0)
-                ForEach(Array(Set(counts + [drafts, suggested])).filter { $0 > 0 }.sorted(), id: \.self) { n in
-                    Text(n == suggested ? "\(n) tokens (suggested)" : "\(n) token\(n == 1 ? "" : "s")").tag(n)
+                ForEach(Array(Set([1, 2, 3, drafts, model.suggested])).filter { $0 > 0 }.sorted(), id: \.self) { n in
+                    Text(n == model.suggested ? "\(n) tokens (suggested)" : "\(n) token\(n == 1 ? "" : "s")").tag(n)
                 }
             } label: {
-                Text(dflash ? "DFlash2 drafts" : "MTP drafts")
-                Text("Tokens drafted per step. Same replies, faster decoding; more isn't always faster because later drafts are accepted less often.")
+                Text("MTP drafts")
+                Text("Tokens the MTP head drafts per step. Same replies, faster decoding; more isn't always faster because later drafts are accepted less often.")
             }
         } header: {
             Text("vLLM")
         } footer: {
-            Text("Changes apply at the next start. Drafting also takes some memory from the KV cache (about 20% fewer cached tokens measured on a GB10). Run a benchmark after changing the drafter or drafts to see which is fastest for your prompts.")
+            Text("Changes apply at the next start. MTP also takes some memory from the KV cache (about 20% fewer cached tokens measured on a GB10). Run a benchmark after changing drafts to see which is fastest for your prompts.")
         }
     }
 }

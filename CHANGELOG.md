@@ -8,11 +8,10 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ### Added
 - TensorFold: Update now shows the release notes of every version between the installed one and the update before you confirm, so you can decide whether to update.
 - vLLM: Qwen3.8 27B Uncensored (orcarouter's abliterated NVFP4 + FP8 build, with images and MTP). It's gated on Hugging Face: accept its terms and run `hf auth login` on the Spark before downloading.
-
-- vLLM: Qwen3.8 27B Uncensored is tuned for the Spark with flags from NVIDIA's DGX Spark recipe: 8 requests at once, larger prompt chunks, overlapped scheduling, fused kernels and FlashInfer autotuning. Already-added copies pick this up at their next start.
-- vLLM: a Drafter choice on the model's page for Qwen3.8 27B Uncensored: its built-in MTP head, or the DFlash2 drafter (shared with TensorFold's Qwen3.8 27B), which is much faster on code. The drafts menu offers counts that suit each drafter.
+- vLLM: Qwen3.8 27B Uncensored serves 8 requests at once instead of 4: about 150 tok/s in all on code and 111 on prose with 8 clients on a Spark, against a cap at 4 before. A single request runs as before. Already-added copies pick this up at their next start.
 
 ### Fixed
+- vLLM: Qwen3.8 27B Uncensored no longer fails to start with "Error in memory profiling" when the Spark's free memory changes during start-up (another model stopping, the page cache shrinking). Its context memory now has a fixed size, sized from the Memory setting, so vLLM skips that check.
 - Starting a model again while an earlier start was still running no longer shows the new start as failed ("exited with code 137"): each start now has its own log.
 - Engines: a model counts as downloaded only while every repo it needs is on the Spark, so a drafter added to a model later shows as still to download instead of failing at start.
 - vLLM: downloads now use the Spark's Hugging Face login (`hf auth login`), so gated models download instead of failing with "Access denied … requires approval".

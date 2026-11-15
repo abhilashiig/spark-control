@@ -281,24 +281,23 @@ let vq = VLLM.model("qwen3.6-35b-a3b")!, vg = VLLM.model("gemma-4-26b-a4b")!
 let vqStart = VLLM.startCommand(vq, port: 18300, name: "qwen3.6-35b-a3b")
 check(VLLM.drafts(of: vqStart) == 3 && VLLM.context(of: vqStart) == 262_144 && vqStart.contains("-p 18300:8000")
       && vqStart.contains("--revision 1355db6a052410cfd62085d94b58866fd0f2c3c5"), "vLLM start command has port, revision, context and suggested drafts")
-// vLLM: optional DFlash2 drafter, tuning flags, and the one-time update of models added before them
+// vLLM: request limit, fixed KV cache (skips the memory profiling that fails on the GB10), and saved commands kept in step
 let vu = VLLM.model("qwen3.8-27b-uncensored")!
 let vuStart = VLLM.startCommand(vu, port: 18301, name: "u")
-check(vuStart.contains(#"'{"method":"mtp","num_speculative_tokens":2}'"#) && !VLLM.usesDrafter(vuStart, vu)
-      && vuStart.contains("--max-num-seqs 8") && VLLM.qwenTuning.allSatisfy { vuStart.contains($0) },
-      "uncensored 27B starts with its MTP head, 8 requests and the tuning flags")
-let vuDF = VLLM.withDrafts(vuStart, 7, model: vu, separate: true)
-check(VLLM.usesDrafter(vuDF, vu) && VLLM.drafts(of: vuDF) == 7 && vuDF.contains(#""method":"dflash","model":"z-lab/Qwen3.8-27B-DFlash2""#)
-      && VLLM.usesDrafter(VLLM.withDrafts(vuDF, 5, model: vu), vu) && VLLM.drafts(of: VLLM.withDrafts(vuDF, 5, model: vu)) == 5
-      && !VLLM.usesDrafter(VLLM.withDrafts(vuDF, 2, model: vu, separate: false), vu),
-      "the drafter choice switches DFlash2 and the MTP head, and changing drafts keeps it")
-check(bash(vuDF, syntaxOnly: true).0 == 0, "the tuned DFlash2 start command parses")
-let vuOld = vuStart.replacingOccurrences(of: "--max-num-seqs 8", with: "--max-num-seqs 4")
-    .replacingOccurrences(of: " " + VLLM.qwenTuning.joined(separator: " "), with: "")
-let vuNew = VLLM.addingTuning(to: vuOld, model: vu.id)
-check(!vuOld.contains("--async-scheduling") && vuNew.contains("--max-num-seqs 8") && VLLM.qwenTuning.allSatisfy { vuNew.contains($0) }
-      && VLLM.addingTuning(to: vuNew, model: vu.id) == vuNew && VLLM.addingTuning(to: vqStart, model: "qwen3.6-35b-a3b") == vqStart,
-      "a model added before the tuning gets it once; untuned models are left alone")
+check(vuStart.contains("--max-num-seqs 8") && vuStart.contains("--kv-cache-memory-bytes 17500000000")
+      && vuStart.contains(#"'{"method":"mtp","num_speculative_tokens":2}'"#) && !vqStart.contains("--kv-cache-memory-bytes"),
+      "uncensored 27B starts with 8 requests and a fixed KV cache; models without a measured footprint keep profiling")
+let vu60 = VLLM.withMemory(vuStart, 60, footprint: vu.footprintGB)
+check(vu60.contains("--kv-cache-memory-bytes 27500000000") && vu60.components(separatedBy: "--kv-cache-memory-bytes").count == 2
+      && vu60.components(separatedBy: "--gpu-memory-utilization").count == 2, "changing memory resizes the KV cache once")
+let vuSaved = vuStart.replacingOccurrences(of: "--max-num-seqs 8", with: "--max-num-seqs 4")
+    .replacingOccurrences(of: " --kv-cache-memory-bytes 17500000000", with: "")
+    + #" --max-num-batched-tokens 8192 --async-scheduling --compilation-config '{"pass_config":{"fuse_act_quant":true},"max_cudagraph_capture_size":64}' --kernel-config '{"enable_flashinfer_autotune":true}'"#
+let vuSynced = VLLM.synced(vuSaved, model: vu.id)
+check(vuSynced.contains("--max-num-seqs 8") && vuSynced.contains("--kv-cache-memory-bytes") && !vuSynced.contains("async")
+      && !vuSynced.contains("kernel-config") && !vuSynced.contains("batched") && VLLM.synced(vuSynced, model: vu.id) == vuSynced
+      && VLLM.synced(vqStart, model: vq.id) == vqStart, "saved commands get the limit and KV size, lose unmeasured flags, and stay put after")
+check(bash(vuSynced, syntaxOnly: true).0 == 0, "the synced start command parses")
 check(VLLM.drafts(of: VLLM.withDrafts(vqStart, 0, model: vq)) == 0 && VLLM.drafts(of: VLLM.withDrafts(vqStart, 1, model: vq)) == 1
       && VLLM.context(of: VLLM.withContext(vqStart, 65_536)) == 65_536, "vLLM drafts and context flags round-trip")
 check(VLLM.startCommand(vg, port: 1, name: "g").contains(#"'{"method":"mtp","model":"google/gemma-4-26B-A4B-it-assistant","num_speculative_tokens":2}'"#),

@@ -543,8 +543,9 @@ check(FileManager.default.fileExists(atPath: akURL.path + ".spark-control.bak"),
 try? FileManager.default.removeItem(at: keysHome)
 
 // Hugging Face cache and Ollama
+let hfStatus0 = HF.Repo(type: "model", repo: "a/b", bytes: 0, partial: 0, state: .idle, user: "")
 for (name, s) in [("hf status", HF.statusScript), ("hf delete", HF.deleteScript(HF.Repo(type: "model", repo: "a/b", bytes: 0, partial: 0, state: .idle, user: ""), records: ["x"])),
-                  ("hf install", HF.installScript), ("hf login", HF.loginScript), ("hf logout", HF.logoutScript), ("hf whoami", HF.whoamiScript),
+                  ("hf install", HF.installScript), ("hf clean", HF.cleanScript(hfStatus0)), ("hf login", HF.loginScript), ("hf logout", HF.logoutScript), ("hf whoami", HF.whoamiScript),
                   ("ollama status", Ollama.statusScript), ("ollama pull", Ollama.pullScript("library/x:1b")), ("ollama dismiss", Ollama.dismissScript("x:1b")),
                   ("ollama install", Ollama.installCommand), ("vllm delete", VLLM.deleteScript(VLLM.catalog[0]))] {
     let (code, out) = bash(s, syntaxOnly: true)

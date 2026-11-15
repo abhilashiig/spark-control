@@ -66,6 +66,13 @@ extension AppState {
         await tfRefresh()
     }
 
+    func hfClean(_ r: HF.Repo) async {
+        let res = await tfRun(HF.cleanScript(r), timeout: 120)
+        event(res?.code == 0 ? "Removed \(r.partial.formatted(.byteCount(style: .file))) of unfinished files from \(r.repo)"
+                             : "Removing unfinished files of \(r.repo) failed: \(res?.output ?? "Spark unreachable")")
+        await hfRefresh()
+    }
+
     func ollamaRefresh() async {
         guard let res = await tfRun(Ollama.statusScript, timeout: 30), res.code == 0 else { return }
         let new = Ollama.parseStatus(res.output)
@@ -244,6 +251,11 @@ private struct RepoRow: View {
             if repo.state == .downloading {
                 ProgressView().controlSize(.small)
             } else {
+                if repo.partial > 0 {
+                    Button("Clean Up") { Task { await state.hfClean(repo) } }
+                        .disabled(repo.state != .idle || state.route == nil)
+                        .help("Remove the unfinished files an interrupted download left behind. The model stays.")
+                }
                 Button("Delete…", role: .destructive) { deleting = repo }
                     .disabled(repo.state != .idle || state.route == nil)
                     .help(repo.state == .inUse ? "In use by \(SparkMonitor.processName(repo.user))" : "Delete from the Spark")
@@ -253,12 +265,13 @@ private struct RepoRow: View {
     }
 
     private var detail: String {
-        var parts = [repo.bytes.formatted(.byteCount(style: .file)) + (repo.state == .downloading ? " so far" : "")]
+        let done = repo.state == .downloading ? repo.bytes : repo.bytes - repo.partial
+        var parts = [done.formatted(.byteCount(style: .file)) + (repo.state == .downloading ? " so far" : "")]
         if repo.type != "model" { parts.append(repo.type.capitalized) }
         switch repo.state {
         case .downloading: parts.append("by " + SparkMonitor.processName(repo.user))
         case .inUse: parts.append("In use by " + SparkMonitor.processName(repo.user))
-        case .idle: if repo.partial > 0 { parts.append("\(repo.partial.formatted(.byteCount(style: .file))) unfinished") }
+        case .idle: if repo.partial > 0 { parts.append("plus \(repo.partial.formatted(.byteCount(style: .file))) left by interrupted downloads") }
         }
         let models = state.hfModels(repo).map(\.name)
         if !models.isEmpty, repo.state == .idle { parts.append("Used by " + models.joined(separator: ", ")) }

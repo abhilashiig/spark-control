@@ -83,6 +83,13 @@ enum HF {
             + records.map { "rm -f \"$D/\($0)\".ok \"$D/\($0)\".keep\n" }.joined()
     }
 
+    /// Removes a repo's leftover partial files: an interrupted download leaves `*.incomplete` behind even after a
+    /// later one finishes, and hf never cleans them up. Files touched in the last 2 minutes are left alone. Unlike
+    /// `hf cache prune`, it doesn't touch revisions no ref points to (vLLM serves pinned ones).
+    static func cleanScript(_ r: Repo) -> String {
+        "H=\"\(TensorFold.hubDir)\"; find \"$H\"/\(SSH.quote(r.cacheName)) -name '*.incomplete' -mmin +2 -delete && echo \"› Removed unfinished files of \(r.repo)\""
+    }
+
     /// Hugging Face's own installer: its own Python environment, linked into ~/.local/bin. No sudo.
     static let installScript = """
     set -euo pipefail

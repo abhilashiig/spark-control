@@ -5,6 +5,10 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Changed
+- A model's API model name is fixed once it's added or first started, so renaming the model no longer changes the name your clients and chats use. Models you already have keep their current API name. To get a different one, add the model again.
+- TensorFold and vLLM models show their backend model ID read-only: it's the name their start command serves.
+
 ### Fixed
 - A TensorFold or vLLM model whose backend model ID didn't match the name its start command serves (for example after switching a model from vLLM to TensorFold) no longer sits at "Starting" until it times out. The ID now follows the start command, so the model is ready as soon as it loads.
 

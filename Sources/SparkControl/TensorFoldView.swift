@@ -313,6 +313,7 @@ extension AppState {
         // First start loads the weights and compiles kernels: vLLM's Spark guide measured 10-15 minutes.
         r.timeout = 2400
         r.vllm = m.id
+        r.freezeAPI()
         r.backendKey = key
         config.recipes.append(r)
         return r.id
@@ -328,6 +329,7 @@ extension AppState {
         r.port = port
         r.timeout = 1800
         r.tensorfold = m.id
+        r.freezeAPI()
         r.backendKey = key
         config.recipes.append(r)
         return r.id

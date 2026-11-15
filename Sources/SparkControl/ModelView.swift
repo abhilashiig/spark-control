@@ -60,7 +60,11 @@ struct ModelView: View {
                         CopyButton(text: r.wrappedValue.apiID)
                     }
                 }
-                CodeField(title: "Backend model ID", text: r.upstreamModel, prompt: "Detected on first start")
+                if r.wrappedValue.servedName != nil {
+                    LabeledContent("Backend model ID") { Text(r.wrappedValue.upstreamModel).monospaced().textSelection(.enabled) }
+                } else {
+                    CodeField(title: "Backend model ID", text: r.upstreamModel, prompt: "Detected on first start")
+                }
                 Toggle("Reasoning", isOn: Binding { r.wrappedValue.hasReasoning } set: { r.wrappedValue.reasoning = $0 })
                 Toggle("Image input", isOn: Binding { r.wrappedValue.takesImages } set: {
                     r.wrappedValue.images = $0
@@ -69,7 +73,7 @@ struct ModelView: View {
             } header: {
                 Text("API")
             } footer: {
-                Text("Clients ask for “\(r.wrappedValue.apiID)” at \(state.apiBaseURL). It's renamed to the backend model ID before reaching the Spark. Reasoning and Image input are guessed from the model until you set them, and tell coding tools (Connect → Coding Tools) what the model can do. For TensorFold models Image input adds --vision to the start command, applied at the next start.")
+                Text("Clients ask for “\(r.wrappedValue.apiID)” at \(state.apiBaseURL). That name is fixed once the model is added or first started, so renaming the model doesn't break clients: add it again for a different one. It's renamed to the backend model ID before reaching the Spark. Reasoning and Image input are guessed from the model until you set them, and tell coding tools (Connect → Coding Tools) what the model can do. For TensorFold models Image input adds --vision to the start command, applied at the next start.")
             }
 
             Section {

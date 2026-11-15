@@ -93,13 +93,19 @@ struct Recipe: Codable, Identifiable, Hashable {
     /// Whether it thinks before answering and accepts images. nil = guessed from its name and start command.
     var reasoning: Bool?
     var images: Bool?
+    /// The API model name, fixed once the model is added or first started so renaming it doesn't break clients.
+    /// nil = not fixed yet: follows the name.
+    var api: String?
 
     /// The name clients put in the `model` field.
     var apiID: String {
-        name.lowercased()
+        api ?? name.lowercased()
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber && !".-_".contains($0) })
             .joined(separator: "-")
     }
+
+    /// Fixes the API model name to what it is now.
+    mutating func freezeAPI() { if api == nil, !isBlank { api = apiID } }
 
     private var ids: String { (name + " " + upstreamModel).lowercased() }
     // ponytail: name heuristics for common Spark models; the toggles on the model's page override them.
@@ -141,6 +147,7 @@ extension Recipe {
             r.stopCommand = VLLM.stopCommand(r.upstreamModel)
         }
         if let s = r.servedName { r.upstreamModel = s }
+        r.freezeAPI()
         return r
     }
 
@@ -407,6 +414,7 @@ extension Recipe {
         backendKey = try c.decodeIfPresent(String.self, forKey: .backendKey)
         reasoning = try c.decodeIfPresent(Bool.self, forKey: .reasoning)
         images = try c.decodeIfPresent(Bool.self, forKey: .images)
+        api = try c.decodeIfPresent(String.self, forKey: .api)
     }
 }
 

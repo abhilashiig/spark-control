@@ -547,10 +547,13 @@ final class AppState {
 
     private func doStart(_ r: Recipe) async throws {
         var r = r
-        if let s = r.servedName, s != r.upstreamModel, let i = config.recipes.firstIndex(where: { $0.id == r.id }) {
-            config.recipes[i].upstreamModel = s
-            r.upstreamModel = s
-            event("Backend model ID set to \(s), the name its start command serves")
+        if let i = config.recipes.firstIndex(where: { $0.id == r.id }) {
+            if let s = r.servedName, s != r.upstreamModel {
+                r.upstreamModel = s
+                event("Backend model ID set to \(s), the name its start command serves")
+            }
+            r.freezeAPI()
+            if config.recipes[i] != r { config.recipes[i] = r }
         }
         guard let target = sshTarget, let base = backendBase(for: r) else {
             offline = true

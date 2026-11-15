@@ -412,6 +412,12 @@ vlServed.vllm = "m"
 check(switched.migrated(defaultPort: 18300).upstreamModel == "m-tensorfold" && vlServed.servedName == "m"
       && Recipe(name: "P", startCommand: "ollama run --name x", stopCommand: "").servedName == nil,
       "the backend model ID follows the name the start command serves")
+var renamed = Recipe(name: "Qwen3.8 27B (TensorFold)", startCommand: "x", stopCommand: "").migrated(defaultPort: 18300)
+renamed.name = "Qwen Uncensored"
+var unset = Recipe(name: "New", startCommand: "", stopCommand: "")
+unset.freezeAPI()
+check(renamed.apiID == "qwen3.8-27b-tensorfold" && renamed.answers(to: "qwen3.8-27b-tensorfold") && unset.api == nil,
+      "renaming a model keeps its API model name; a blank model's isn't fixed yet")
 
 // Configs saved by older versions still load: missing keys take their defaults.
 let oldConfig = #"{"recipes":[{"id":"6F9A4C3E-1B2D-4E5F-8A7B-9C0D1E2F3A4B","name":"Old","startCommand":"s","stopCommand":"t","enabled":false,"rules":[]}],"gateway":{"port":18081}}"#

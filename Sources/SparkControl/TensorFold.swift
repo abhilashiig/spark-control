@@ -32,7 +32,7 @@ enum TensorFold {
         /// `tensorfold pull` fetches every file, so such a repo downloads with `hf download --exclude`.
         var skip: [String] = []
         /// Names the repo had before Hugging Face renamed it. The Hub redirects them, but the cache keeps files under
-        /// the name they were downloaded with, so a download first adopts such a folder (see `adoptScript`).
+        /// the name they were downloaded with, so a download links the current name to such a folder (see `adoptScript`).
         var formerly: [String] = []
         var spec: String { revision.map { "\(id)@\($0)" } ?? id }
         /// The Hugging Face cache folder name.
@@ -473,13 +473,13 @@ enum TensorFold {
         """
     }
 
-    /// Moves a repo's folder from a former name to its current one when only the old one is there, leaving the old
-    /// name as a link so whatever still asks for it (a hand-made start script) keeps working. The pull then only checks
-    /// the files. Recorded in `.keep`, since the files were on the Spark before this download. Needs $H and $D.
+    /// When only a repo's folder under a former name is there, links the current name to it, so the pull only checks the
+    /// files and the folder itself stays as it was for whatever still uses the old name (a hand-made start script).
+    /// Recorded in `.keep`, so deleting the model never deletes files that were on the Spark before. Needs $H and $D.
     static func adoptScript(_ repos: [Repo], record: String) -> String {
         repos.flatMap { r in r.formerly.map { old in
             let (n, o) = (SSH.quote(r.cacheName), SSH.quote(Repo(id: old).cacheName))
-            return "if [ ! -e \"$H/\"\(n) ] && [ -d \"$H/\"\(o) ] && [ ! -L \"$H/\"\(o) ]; then mv \"$H/\"\(o) \"$H/\"\(n) && ln -s \(n) \"$H/\"\(o) && echo \(n) >> \"$D/\(record).keep\" && echo \"› Using the files already on the Spark under its old name, \(old)\"; fi"
+            return "if [ ! -e \"$H/\"\(n) ] && [ -d \"$H/\"\(o) ]; then ln -s \(o) \"$H/\"\(n) && echo \(n) >> \"$D/\(record).keep\" && echo \"› Using the files already on the Spark under its old name, \(old)\"; fi"
         } }.joined(separator: "\n")
     }
 

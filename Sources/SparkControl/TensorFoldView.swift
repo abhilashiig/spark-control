@@ -678,11 +678,24 @@ struct ModelRow: View {
                         .foregroundStyle(st.download == .failed ? Color.red : Color.secondary)
                         .lineLimit(2)
                 }
+                if st.download == .failed, let repo = gatedRepo(st.message) {
+                    Text("This model is gated on Hugging Face. Access is per repository: open this exact model's page signed in as the account the Spark uses (`hf auth whoami` on the Spark), accept its terms, then Retry. If the Spark isn't signed in, run `hf auth login` on it first.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Link("Open \(repo) on Hugging Face", destination: URL(string: "https://huggingface.co/\(repo)")!)
+                        .font(.caption)
+                }
             }
             Spacer()
             actions(st)
         }
         .padding(.vertical, 3)
+    }
+
+    /// The repo a "requires approval" / GatedRepo error names, else this row's first repo.
+    private func gatedRepo(_ message: String) -> String? {
+        guard message.contains(#/(?i)requires approval|gated|not in the authorized list/#) else { return nil }
+        return message.firstMatch(of: #/'([\w.-]+\/[\w.-]+)'/#).map { String($0.1) } ?? item.sources.first
     }
 
     @ViewBuilder private func actions(_ st: TensorFold.ModelStatus) -> some View {

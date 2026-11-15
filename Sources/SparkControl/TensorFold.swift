@@ -190,7 +190,7 @@ enum TensorFold {
           elif [ -f "$D/$id.ok" ]; then st=done
           elif [ -f "$D/$id.log" ]; then st=failed
           else st=none; fi
-          last=""; [ -f "$D/$id.log" ] && last=$(tail -c 2000 "$D/$id.log" | tr '\\r' '\\n' | grep -v '^[[:space:]]*$' | tail -1)
+          last=""; [ -f "$D/$id.log" ] && last=$(tail -c 2000 "$D/$id.log" | tr '\\r' '\\n' | sed 's/\\x1b\\[[0-9;]*m//g' | grep -v -e '^[[:space:]]*$' -e '^Hint:' | tail -1)
           echo "MODEL|$id|$st|${b:-0}|$last"
         }
 

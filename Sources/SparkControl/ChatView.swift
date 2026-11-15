@@ -312,10 +312,13 @@ final class ChatStore {
 struct ChatView: View {
     @Environment(AppState.self) private var state
     @Environment(ChatStore.self) private var store
+    @AppStorage("chatListWidth") private var listWidth = 260.0
+    @State private var dragStart: Double?
 
     var body: some View {
         @Bindable var store = store
-        // Fixed width: an HSplitView re-split on every chat switch (the conversation is rebuilt by .id), so the list jumped.
+        // Not an HSplitView: it re-split on every chat switch (the conversation is rebuilt by .id), so the list jumped.
+        // The list keeps the width dragged on its divider, shrinking only when the window is too narrow.
         HStack(spacing: 0) {
             List(selection: $store.selection) {
                 ForEach(store.chats) { chat in
@@ -336,9 +339,20 @@ struct ChatView: View {
                     }
                 }
             }
-            .frame(width: 260)
+            .frame(minWidth: 170, maxWidth: listWidth)
+            .layoutPriority(1) // sized first; the HStack still reserves the conversation's minimum width
 
-            Divider()
+            Divider().overlay {
+                Color.clear.frame(width: 8).contentShape(Rectangle())
+                    .pointerStyle(.columnResize)
+                    .gesture(DragGesture(coordinateSpace: .global)
+                        .onChanged { drag in
+                            let start = dragStart ?? listWidth
+                            dragStart = start
+                            listWidth = min(max(start + drag.translation.width, 170), 420)
+                        }
+                        .onEnded { _ in dragStart = nil })
+            }
 
             Group {
                 if let id = store.selection, store.index(id) != nil {

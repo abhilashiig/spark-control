@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Fixed
+- Chat: the chat list can be resized again by dragging its edge (lost in 1.9.3), remembers its width, and narrows with the window instead of holding the window wide.
+
 ## [1.9.3] - 2026-11-15
 
 ### Added

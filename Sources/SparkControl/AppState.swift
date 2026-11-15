@@ -545,10 +545,13 @@ final class AppState {
         event("Starting \(r.name)  $ \(r.startCommand)")
 
         // Detach the start command so a backgrounded server can't hold the SSH session open,
-        // then follow its output until it exits. One log per model, since several can start over time.
-        // `;` (not `&&`) so only nohup is backgrounded and the SSH session returns at once.
-        let log = "/tmp/spark-control/start-\(r.id.uuidString.prefix(8)).log"
-        let launch = "mkdir -p /tmp/spark-control; nohup \(SSH.interactive(SSH.withExitLine(r.startCommand))) > \(log) 2>&1 < /dev/null & echo $!"
+        // then follow its output until it exits. One log per start: a start it replaces (its command's `docker rm -f`)
+        // still prints its exit line, which must not land in this start's log. Earlier logs of the model are removed;
+        // a replaced start keeps writing to its unlinked file. `;` (not `&&`) so only nohup is backgrounded and the
+        // SSH session returns at once.
+        let prefix = "/tmp/spark-control/start-\(r.id.uuidString.prefix(8))"
+        let log = "\(prefix)-\(Int(Date().timeIntervalSince1970)).log"
+        let launch = "mkdir -p /tmp/spark-control; rm -f \(prefix).log \(prefix)-*.log; nohup \(SSH.interactive(SSH.withExitLine(r.startCommand))) > \(log) 2>&1 < /dev/null & echo $!"
         let res = await SSH.run(target, launch, timeout: 20)
         guard res.code == 0, let pid = res.output.split(separator: "\n").last.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }) else {
             let why = res.output.trimmingCharacters(in: .whitespacesAndNewlines)

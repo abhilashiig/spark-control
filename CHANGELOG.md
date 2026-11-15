@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Fixed
+- A TensorFold or vLLM model whose backend model ID didn't match the name its start command serves (for example after switching a model from vLLM to TensorFold) no longer sits at "Starting" until it times out. The ID now follows the start command, so the model is ready as soon as it loads.
+
 ## [1.10.0] - 2026-11-15
 
 ### Added

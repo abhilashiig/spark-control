@@ -140,7 +140,17 @@ extension Recipe {
                 .replacingOccurrences(of: "--name spark-vllm ", with: "--name \(c) ")
             r.stopCommand = VLLM.stopCommand(r.upstreamModel)
         }
+        if let s = r.servedName { r.upstreamModel = s }
         return r
+    }
+
+    /// The model ID a TensorFold or vLLM start command serves under. The backend model ID must match it, or a start waits
+    /// out its whole timeout for a name the server never lists (a recipe switched from vLLM to TensorFold kept the old one).
+    var servedName: String? {
+        let flag = tensorfold != nil ? "--name" : vllm != nil ? "--served-model-name" : nil
+        guard let flag, let m = startCommand.firstMatch(of: try! Regex("(?:^|\\s)\(flag)\\s+\"?([^\\s\"]+)")),
+              let id = m.output[1].substring else { return nil }
+        return String(id)
     }
 }
 

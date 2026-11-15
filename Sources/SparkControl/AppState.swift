@@ -546,6 +546,12 @@ final class AppState {
     }
 
     private func doStart(_ r: Recipe) async throws {
+        var r = r
+        if let s = r.servedName, s != r.upstreamModel, let i = config.recipes.firstIndex(where: { $0.id == r.id }) {
+            config.recipes[i].upstreamModel = s
+            r.upstreamModel = s
+            event("Backend model ID set to \(s), the name its start command serves")
+        }
         guard let target = sshTarget, let base = backendBase(for: r) else {
             offline = true
             throw AppError("The Spark is unreachable.")

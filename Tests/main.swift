@@ -405,6 +405,13 @@ check(legacy.migrated(defaultPort: 18300).startCommand.contains("--name spark-vl
       && legacy.migrated(defaultPort: 18300).stopCommand == VLLM.stopCommand("q")
       && legacyTF.migrated(defaultPort: 18300).stopCommand == TensorFold.stopCommand(port: 18300),
       "models added earlier are migrated to stop only themselves")
+var switched = Recipe(name: "U", startCommand: "\"$HOME/tf\" serve org/M --port 18304 --name m-tensorfold --api-key-file k", stopCommand: "x", upstreamModel: "m")
+switched.tensorfold = "m"
+var vlServed = Recipe(name: "V", startCommand: "exec docker run --rm --name spark-vllm-m img org/M --served-model-name m --api-key k", stopCommand: "x", upstreamModel: "old")
+vlServed.vllm = "m"
+check(switched.migrated(defaultPort: 18300).upstreamModel == "m-tensorfold" && vlServed.servedName == "m"
+      && Recipe(name: "P", startCommand: "ollama run --name x", stopCommand: "").servedName == nil,
+      "the backend model ID follows the name the start command serves")
 
 // Configs saved by older versions still load: missing keys take their defaults.
 let oldConfig = #"{"recipes":[{"id":"6F9A4C3E-1B2D-4E5F-8A7B-9C0D1E2F3A4B","name":"Old","startCommand":"s","stopCommand":"t","enabled":false,"rules":[]}],"gateway":{"port":18081}}"#

@@ -13,6 +13,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - Ollama: install Ollama on the Spark from the Ollama page. It asks for your Spark password for sudo if needed and doesn't keep it.
 
 ### Fixed
+- TensorFold: Qwen3.8 27B finds weights you downloaded under the repo's old name, Vontra/Qwen3.8-27B-MLX-4bit, instead of downloading 16 GB again. Download (or Resume) moves them to the new name and leaves the old name pointing at them, so scripts that use it keep working. Deleting the model from TensorFold then keeps those files.
 - Deleting a model downloaded with a recent `hf` (2.x) now frees its disk space. These keep their files in a store shared between models, which deleting the model's folder left behind.
 - TensorFold: models downloaded with `hf` (Qwen3.8 27B Uncensored) no longer go missing from `hf cache ls` and `hf cache rm`.
 - Chat: the chat list can be resized again by dragging its edge (lost in 1.9.3), remembers its width, and narrows with the window instead of holding the window wide.

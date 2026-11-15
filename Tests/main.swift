@@ -252,6 +252,18 @@ let fnNvfp4 = TensorFold.model("qwen3.8-flash-next-nvfp4")!
 check(fnNvfp4.untested && fnNvfp4.drafts == "MTP" && !fnNvfp4.yarn && fnNvfp4.downloads.map(\.spec) == ["nvidia/Qwen3.8-Flash-Next-NVFP4@fc694b54fb0174e0913e6adf86691ef85a4ead47"]
       && TensorFold.catalog.filter(\.untested).count == 1, "Flash Next NVFP4 is the only untested entry, with MTP and the pinned revision")
 
+// A repo Hugging Face renamed: the download adopts the folder under its old name and leaves a link behind.
+let renHome = FileManager.default.temporaryDirectory.appending(path: "tf-renamed-\(getpid())")
+let renHub = renHome.appending(path: ".cache/huggingface/hub")
+try! FileManager.default.createDirectory(at: renHub.appending(path: "models--Vontra--Qwen3.8-27B-MLX-4bit/snapshots/abc"), withIntermediateDirectories: true)
+_ = bash(TensorFold.downloadScript(q27, binary: "/usr/bin/true") + "\nwait", env: ["HOME": renHome.path, "PATH": "/usr/bin:/bin"])
+let renKeep = (try? String(contentsOf: renHome.appending(path: ".local/share/spark-control/tensorfold-data/\(q27.id).keep"), encoding: .utf8)) ?? ""
+check(FileManager.default.fileExists(atPath: renHub.appending(path: "models--TensorFold--Qwen3.8-27B-MLX-4bit/snapshots/abc").path)
+      && (try? FileManager.default.destinationOfSymbolicLink(atPath: renHub.appending(path: "models--Vontra--Qwen3.8-27B-MLX-4bit").path)) == "models--TensorFold--Qwen3.8-27B-MLX-4bit"
+      && renKeep.contains("models--TensorFold--Qwen3.8-27B-MLX-4bit"),
+      "a renamed repo's old folder is adopted, linked back and kept on delete: \(renKeep)")
+try? FileManager.default.removeItem(at: renHome)
+
 // Unique names next to another setup of the same model
 let taken: Set<String> = ["qwen3.8-27b", "qwen3.8-27b-tensorfold"]
 check(TensorFold.uniqueName(q27) { taken.contains($0) } == ("Qwen3.8 27B (TensorFold 2)", "qwen3.8-27b-tensorfold-2")

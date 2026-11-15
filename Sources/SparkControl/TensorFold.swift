@@ -31,6 +31,9 @@ enum TensorFold {
         /// Folders of the repo the model doesn't use (other quantizations), left out of the download and its size.
         /// `tensorfold pull` fetches every file, so such a repo downloads with `hf download --exclude`.
         var skip: [String] = []
+        /// Names the repo had before Hugging Face renamed it. The Hub redirects them, but the cache keeps files under
+        /// the name they were downloaded with, so a download first adopts such a folder (see `adoptScript`).
+        var formerly: [String] = []
         var spec: String { revision.map { "\(id)@\($0)" } ?? id }
         /// The Hugging Face cache folder name.
         var cacheName: String { "models--" + id.replacingOccurrences(of: "/", with: "--") }
@@ -72,7 +75,7 @@ enum TensorFold {
     /// as downloaded. Two-Spark, converted, speech and OCR rows are left out.
     static let catalog: [Model] = [
         Model(id: "qwen3.8-27b", name: "Qwen3.8 27B",
-              repo: Repo(id: "TensorFold/Qwen3.8-27B-MLX-4bit"),
+              repo: Repo(id: "TensorFold/Qwen3.8-27B-MLX-4bit", formerly: ["Vontra/Qwen3.8-27B-MLX-4bit"]),
               drafter: Repo(id: "z-lab/Qwen3.8-27B-DFlash2"),
               flags: ["--vision"],
               note: "MLX 4-bit with images and the DFlash2 drafter."),
@@ -458,15 +461,26 @@ enum TensorFold {
             ? #"{ [ -x "$HF" ] || { echo "✗ The Spark needs the Hugging Face CLI (hf) for this model: pip install -U huggingface_hub"; exit 1; }; } && "# : ""
         let job = "\(needsHF)\(pulls) && touch \"$D/\(m.id).ok\""
         return """
-        export D="\(dataDir)" TF="\(binary)" HF="$(command -v hf || echo "$HOME/.local/bin/hf")"
+        export D="\(dataDir)" TF="\(binary)" HF="$(command -v hf || echo "$HOME/.local/bin/hf")" H="\(hubDir)"
         mkdir -p "$D"; rm -f "$D/\(m.id).ok"
+        \(adoptScript(m.downloads, record: m.id))
         if [ ! -e "$D/\(m.id).log" ]; then
-          H="\(hubDir)"; : > "$D/\(m.id).keep"
+          : > "$D/\(m.id).keep"
           for n in \(m.downloads.map { SSH.quote($0.cacheName) }.joined(separator: " ")); do [ -d "$H/$n" ] && echo "$n" >> "$D/\(m.id).keep"; done
         fi
         nohup bash -c \(SSH.quote(job)) > "$D/\(m.id).log" 2>&1 < /dev/null &
         echo $! > "$D/\(m.id).pid"
         """
+    }
+
+    /// Moves a repo's folder from a former name to its current one when only the old one is there, leaving the old
+    /// name as a link so whatever still asks for it (a hand-made start script) keeps working. The pull then only checks
+    /// the files. Recorded in `.keep`, since the files were on the Spark before this download. Needs $H and $D.
+    static func adoptScript(_ repos: [Repo], record: String) -> String {
+        repos.flatMap { r in r.formerly.map { old in
+            let (n, o) = (SSH.quote(r.cacheName), SSH.quote(Repo(id: old).cacheName))
+            return "if [ ! -e \"$H/\"\(n) ] && [ -d \"$H/\"\(o) ] && [ ! -L \"$H/\"\(o) ]; then mv \"$H/\"\(o) \"$H/\"\(n) && ln -s \(n) \"$H/\"\(o) && echo \(n) >> \"$D/\(record).keep\" && echo \"› Using the files already on the Spark under its old name, \(old)\"; fi"
+        } }.joined(separator: "\n")
     }
 
     /// Stops a detached download by its record id (a TensorFold model id or a vLLM model's key).

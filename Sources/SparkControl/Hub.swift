@@ -38,7 +38,7 @@ enum HF {
     echo "HF|$([ -x "$HF" ] && NO_COLOR=1 "$HF" version 2>/dev/null | awk '/version:/{print $NF; exit}')|$([ -s "$T" ] && echo 1)"
     P=$(ps -eo args= | grep -vE '^(ba)?sh -i?c ' | cut -c1-400)
     for d in "$H"/models--* "$H"/datasets--* "$H"/spaces--*; do
-      [ -d "$d" ] || continue
+      [ -d "$d" ] && [ ! -L "$d" ] || continue  # a link is a repo's former name (TensorFold.adoptScript)
       n=${d##*/}; id=${n#*--}; id=${id//--//}
       u=$(printf '%s\n' "$P" | awk -v id="$id" -v n="$n" '{for (i = 1; i <= NF; i++) if ($i == id || index($i, id "@") == 1 || index($i "/", "/" n "/")) { print; exit }}')
       st=; [ -n "$u" ] && st=serve

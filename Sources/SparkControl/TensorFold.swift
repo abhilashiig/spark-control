@@ -449,8 +449,9 @@ enum TensorFold {
             guard !r.skip.isEmpty, let rev = r.revision else { return "\"$TF\" pull \(SSH.quote(r.spec))" }
             // hf leaves refs/main alone for a pinned revision; `tensorfold serve REPO` finds the snapshot through it.
             let refs = "\"\(hubDir)/\(r.cacheName)/refs\""
-            return "\"$HF\" download \(SSH.quote(r.id)) --revision \(rev) --exclude "
-                + r.skip.map { SSH.quote("\($0)/*") }.joined(separator: " ")
+            // One pattern per --exclude: hf reads any further words as file names to download.
+            return "\"$HF\" download \(SSH.quote(r.id)) --revision \(rev) "
+                + r.skip.map { "--exclude " + SSH.quote("\($0)/*") }.joined(separator: " ")
                 + " && mkdir -p \(refs) && echo \(rev) > \(refs)/main"
         }.joined(separator: " && ")
         let needsHF = m.downloads.contains { !$0.skip.isEmpty }

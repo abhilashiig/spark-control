@@ -131,7 +131,7 @@ let quCalls = (try? String(contentsOf: quHome.appending(path: "calls"), encoding
 let quRef = (try? String(contentsOf: quHome.appending(path: ".cache/huggingface/hub/models--orcarouter--Qwen3.8-27B-Uncensored-MLX/refs/main"), encoding: .utf8)) ?? ""
 let quOK = FileManager.default.fileExists(atPath: quHome.appending(path: ".local/share/spark-control/tensorfold-data/qwen3.8-27b-uncensored.ok").path)
 try? FileManager.default.removeItem(at: quHome)
-check(quCalls == "hf download orcarouter/Qwen3.8-27B-Uncensored-MLX --revision a92a9d3492320048ca96924262d158f75ab5ce8b --exclude 2-bit/* 4-bit/* 6-bit/* 8-bit/* mtp/*\ntf pull z-lab/Qwen3.8-27B-DFlash2\n"
+check(quCalls == "hf download orcarouter/Qwen3.8-27B-Uncensored-MLX --revision a92a9d3492320048ca96924262d158f75ab5ce8b --exclude 2-bit/* --exclude 4-bit/* --exclude 6-bit/* --exclude 8-bit/* --exclude mtp/*\ntf pull z-lab/Qwen3.8-27B-DFlash2\n"
       && quRef == "a92a9d3492320048ca96924262d158f75ab5ce8b\n" && quOK && !TensorFold.downloadScript(q27, binary: "tf").contains("download"),
       "a repo with skipped folders downloads only its weights with hf and points refs/main at the pinned revision: \(quCalls)")
 let q27Start = TensorFold.startCommand(q27, binary: TensorFold.managedBinary, port: 18300)

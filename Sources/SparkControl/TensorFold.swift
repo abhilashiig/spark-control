@@ -415,7 +415,7 @@ enum TensorFold {
 
     /// Removes the engine, and with `models`, the listed models' cache folders and the download records.
     static func uninstallScript(models: [Model]) -> String {
-        var s = "set -u\nE=\"\(engineDir)\"; D=\"\(dataDir)\"; H=\"\(hubDir)\"\n"
+        var s = "set -u\nE=\"\(engineDir)\"; D=\"\(dataDir)\"; H=\"\(hubDir)\"\n" + HF.removeFunction
         s += "rm -rf \"$E\" && echo \"› Removed $E\"\n"
         if !models.isEmpty {
             s += models.map(removeFiles).joined()
@@ -452,7 +452,7 @@ enum TensorFold {
             // One pattern per --exclude: hf reads any further words as file names to download.
             return "\"$HF\" download \(SSH.quote(r.id)) --revision \(rev) "
                 + r.skip.map { "--exclude " + SSH.quote("\($0)/*") }.joined(separator: " ")
-                + " && mkdir -p \(refs) && echo \(rev) > \(refs)/main"
+                + " && mkdir -p \(refs) && printf %s \(rev) > \(refs)/main"
         }.joined(separator: " && ")
         let needsHF = m.downloads.contains { !$0.skip.isEmpty }
             ? #"{ [ -x "$HF" ] || { echo "✗ The Spark needs the Hugging Face CLI (hf) for this model: pip install -U huggingface_hub"; exit 1; }; } && "# : ""
@@ -479,16 +479,16 @@ enum TensorFold {
 
     /// Deletes a model and its drafter from the Hugging Face cache, with its download records.
     static func deleteScript(_ m: Model) -> String {
-        "H=\"\(hubDir)\"; D=\"\(dataDir)\"\n" + removeFiles(m)
+        "H=\"\(hubDir)\"; D=\"\(dataDir)\"\n" + HF.removeFunction + removeFiles(m)
             + "rm -f \"$D/\(m.id)\".ok \"$D/\(m.id)\".log \"$D/\(m.id)\".pid \"$D/\(m.id)\".keep\n"
     }
 
     /// Deletes a model's cache folders, except ones that were on the Spark before its first download
-    /// (another setup's files, such as a vLLM recipe sharing the same checkpoint). Needs $H and $D.
+    /// (another setup's files, such as a vLLM recipe sharing the same checkpoint). Needs $H, $D and `hfrm`.
     private static func removeFiles(_ m: Model) -> String {
         m.downloads.map {
             let n = SSH.quote($0.cacheName)
-            return "grep -qxF \(n) \"$D/\(m.id).keep\" 2>/dev/null && echo \"› Kept \"\(n)\" (it was there before)\" || rm -rf \"$H/\"\(n)\n"
+            return "grep -qxF \(n) \"$D/\(m.id).keep\" 2>/dev/null && echo \"› Kept \"\(n)\" (it was there before)\" || hfrm \(n)\n"
         }.joined()
     }
 

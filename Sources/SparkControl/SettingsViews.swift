@@ -332,24 +332,30 @@ struct ShutdownButton: View {
             Text("Every running model is stopped first. You'll need to power the Spark back on by hand.")
         }
         .sheet(isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-            ShutdownPasswordSheet(target: state.sshTarget ?? "", error: error)
+            SudoPasswordSheet(title: "Shut Down Spark", button: "Shut Down", role: .destructive, target: state.sshTarget ?? "", error: error) {
+                await state.shutdownSpark(password: $0)
+            }
         }
     }
 }
 
-/// Asks for the Spark password, shuts down with `sudo -S`, then forgets it.
-private struct ShutdownPasswordSheet: View {
-    @Environment(AppState.self) private var state
+/// Asks for the Spark password, runs something with `sudo -S` (shutdown, installing Ollama), then forgets it.
+/// `run` returns an error message, or nil once it worked.
+struct SudoPasswordSheet: View {
     @Environment(\.dismiss) private var dismiss
+    let title: String
+    let button: String
+    var role: ButtonRole?
     let target: String
     @State var error: String?
+    let run: (String) async -> String?
     @State private var password = ""
     @State private var working = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Shut Down Spark").font(.headline)
+                Text(title).font(.headline)
                 Text(target).font(.callout.monospaced()).foregroundStyle(.secondary)
             }
             Text("Enter your Spark password for sudo. It's sent over SSH once and never saved.")
@@ -358,7 +364,7 @@ private struct ShutdownPasswordSheet: View {
             SecureField("Spark password", text: $password)
                 .textFieldStyle(.roundedBorder)
                 .disabled(working)
-                .onSubmit(shutdown)
+                .onSubmit(submit)
             if let error {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
@@ -369,7 +375,7 @@ private struct ShutdownPasswordSheet: View {
                 if working { ProgressView().controlSize(.small) }
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Shut Down", role: .destructive, action: shutdown)
+                Button(button, role: role, action: submit)
                     .keyboardShortcut(.defaultAction)
                     .disabled(password.isEmpty || working)
             }
@@ -378,11 +384,11 @@ private struct ShutdownPasswordSheet: View {
         .frame(width: 420)
     }
 
-    private func shutdown() {
+    private func submit() {
         guard !password.isEmpty, !working else { return }
         working = true
         Task {
-            error = await state.shutdownSpark(password: password)
+            error = await run(password)
             password = ""
             working = false
             if error == nil { dismiss() }

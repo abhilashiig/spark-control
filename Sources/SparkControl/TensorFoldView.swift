@@ -4,13 +4,13 @@ import AppKit
 // MARK: Actions
 
 extension AppState {
-    private func tfRun(_ script: String, timeout: TimeInterval = 60, interactive: Bool = false,
-                       stream: Bool = false) async -> (code: Int32, output: String)? {
+    func tfRun(_ script: String, timeout: TimeInterval = 60, interactive: Bool = false,
+               stream: Bool = false, input: String? = nil) async -> (code: Int32, output: String)? {
         guard let target = sshTarget else { return nil }
         let cmd = interactive ? SSH.interactive(script) : "bash -c \(SSH.quote(script))"
         var onLine: (@Sendable (String) -> Void)?
         if stream { onLine = { [weak self] line in self?.tfLogFromBackground(line) } }
-        return await SSH.run(target, cmd, timeout: timeout, onLine: onLine)
+        return await SSH.run(target, cmd, timeout: timeout, input: input, onLine: onLine)
     }
 
     nonisolated func tfLogFromBackground(_ line: String) {

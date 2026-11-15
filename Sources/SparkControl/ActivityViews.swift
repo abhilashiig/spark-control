@@ -1,49 +1,6 @@
 import SwiftUI
 import Charts
 
-struct DiscoveredView: View {
-    @Environment(AppState.self) private var state
-    @Binding var selection: Pane?
-
-    var body: some View {
-        Group {
-            if let names = state.discovered, !names.isEmpty {
-                List(names, id: \.self) { name in
-                    HStack(spacing: 10) {
-                        Image(systemName: "shippingbox").foregroundStyle(.secondary)
-                        Text(name).font(.body.monospaced()).lineLimit(1).truncationMode(.middle)
-                        Spacer()
-                        if let id = state.recipeID(forOllama: name) {
-                            Button("Configured") { selection = .model(id) }
-                                .buttonStyle(.borderless)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Button("Set Up…") { selection = .model(state.addRecipe(fromOllama: name)) }
-                        }
-                    }
-                    .padding(.vertical, 3)
-                }
-            } else if state.discovering {
-                ProgressView("Looking for Ollama models…")
-            } else {
-                ContentUnavailableView {
-                    Label(state.discovered == nil ? "Ollama Models" : "No Ollama Models", systemImage: "shippingbox")
-                } description: {
-                    Text("Lists the models installed in Ollama on the Spark. Nothing runs until you set one up and enable it.")
-                } actions: {
-                    Button("Scan Spark") { Task { await state.discover() } }.disabled(state.route == nil)
-                }
-            }
-        }
-        .navigationTitle("Ollama")
-        .toolbar {
-            Button { Task { await state.discover() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                .disabled(state.discovering || state.route == nil)
-        }
-        .task { if state.discovered == nil, state.route != nil { await state.discover() } }
-    }
-}
-
 struct RequestsView: View {
     @Environment(AppState.self) private var state
     @State private var selected: RequestEntry.ID?

@@ -29,9 +29,11 @@ pick a model, press play, and point your tools at `http://localhost:18080/v1`.
 
 ### 🚀 Run models
 - **One table for every model**, whatever runs it. Start, stop and switch with a click.
-- **Four engines:** **TensorFold** builds tested on the GB10, **vLLM** with NVFP4 models, **Ollama** models
-  you've already pulled, and any **custom** server that speaks the OpenAI API.
+- **Four engines:** **TensorFold** builds tested on the GB10, **vLLM** with NVFP4 models, **Ollama** (search
+  ollama.com for sizes that fit the Spark's memory and pull them), and any **custom** server that speaks the OpenAI API.
 - **Downloads happen on the Spark itself**, with progress in the app. Nothing big goes through your Mac.
+- **Hugging Face:** see everything in the Spark's model cache, what's downloading and what's in use, and delete
+  what isn't. Install the `hf` tool and sign the Spark in to Hugging Face for gated models, all from the app.
 - **Several models at once** when memory allows. When it doesn't, the app stops only what's in the way.
 - **Per-model settings:** context window, speculative decoding, memory, and rules that fill in or override
   request parameters (say, a default temperature).

@@ -74,6 +74,14 @@ final class AppState {
     var tfLatest: String?
     var tfLog: [String] = []
     var tfSizes: [String: Int64] = [:]
+    /// The Spark's Hugging Face cache and CLI, once read; the account its token belongs to.
+    var hf: HF.Status?
+    var hfAccount: String?
+    var ollama: Ollama.Status?
+    var ollamaResults: [Ollama.Result]?
+    /// What `ollamaResults` were searched for; empty for the most popular models.
+    var ollamaQuery = ""
+    var ollamaSearching = false
     var comfyBusy = false
     /// Spark readings, oldest first: every 2 s while the Spark page is open, every 15 s otherwise.
     var spark: [SparkMonitor.Sample] = []

@@ -132,8 +132,8 @@ let quRef = (try? String(contentsOf: quHome.appending(path: ".cache/huggingface/
 let quOK = FileManager.default.fileExists(atPath: quHome.appending(path: ".local/share/spark-control/tensorfold-data/qwen3.8-27b-uncensored.ok").path)
 try? FileManager.default.removeItem(at: quHome)
 check(quCalls == "hf download orcarouter/Qwen3.8-27B-Uncensored-MLX --revision a92a9d3492320048ca96924262d158f75ab5ce8b --exclude 2-bit/* --exclude 4-bit/* --exclude 6-bit/* --exclude 8-bit/* --exclude mtp/*\ntf pull z-lab/Qwen3.8-27B-DFlash2\n"
-      && quRef == "a92a9d3492320048ca96924262d158f75ab5ce8b\n" && quOK && !TensorFold.downloadScript(q27, binary: "tf").contains("download"),
-      "a repo with skipped folders downloads only its weights with hf and points refs/main at the pinned revision: \(quCalls)")
+      && quRef == "a92a9d3492320048ca96924262d158f75ab5ce8b" && quOK && !TensorFold.downloadScript(q27, binary: "tf").contains("download"),
+      "a repo with skipped folders downloads only its weights with hf and points refs/main at the pinned revision, without the newline hf rejects: \(quCalls)")
 let q27Start = TensorFold.startCommand(q27, binary: TensorFold.managedBinary, port: 18300)
 check(TensorFold.tidyNotes("# TensorFold 1.2.9\n\nFaster decode and\nfixes.\n\n## Speed\n\n- **A**: two streams\n  decode faster.\n  - nested\n") ==
       "Faster decode and fixes.\n\n**Speed**\n\n• **A**: two streams decode faster.\n      • nested",
@@ -541,5 +541,70 @@ check(left.count == 1 && left[0].options.hasPrefix("from="), "only the chosen ke
 check(removeKey(left[0].blob) == 0 && SSHKeys.keys(try! String(contentsOf: akURL, encoding: .utf8)).isEmpty, "removing the last key works")
 check(FileManager.default.fileExists(atPath: akURL.path + ".spark-control.bak"), "backup kept")
 try? FileManager.default.removeItem(at: keysHome)
+
+// Hugging Face cache and Ollama
+for (name, s) in [("hf status", HF.statusScript), ("hf delete", HF.deleteScript(HF.Repo(type: "model", repo: "a/b", bytes: 0, partial: 0, state: .idle, user: ""), records: ["x"])),
+                  ("hf install", HF.installScript), ("hf login", HF.loginScript), ("hf logout", HF.logoutScript), ("hf whoami", HF.whoamiScript),
+                  ("ollama status", Ollama.statusScript), ("ollama pull", Ollama.pullScript("library/x:1b")), ("ollama dismiss", Ollama.dismissScript("x:1b")),
+                  ("ollama install", Ollama.installCommand), ("vllm delete", VLLM.deleteScript(VLLM.catalog[0]))] {
+    let (code, out) = bash(s, syntaxOnly: true)
+    check(code == 0, "\(name) script parses: \(out)")
+}
+let hfStatus = HF.parseStatus("""
+HF|2.1.1|1
+REPO|model|z-lab/Qwen3.8-27B-DFlash2|3800000000|0||
+REPO|model|TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP|20900000000|0|serve|/x/tensorfold-native serve TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP --port 18302
+REPO|dataset|org/data|10|5|download|hf download org/data --repo-type dataset
+""")
+check(hfStatus.version == "2.1.1" && hfStatus.signedIn && hfStatus.repos.count == 3, "hf status parses")
+check(hfStatus.repos[0].repo == "TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP" && hfStatus.repos[0].state == .inUse
+      && SparkMonitor.processName(hfStatus.repos[0].user) == "TensorFold", "repos sort by size and name their user")
+check(hfStatus.repos[2].cacheName == "datasets--org--data" && hfStatus.repos[2].state == .downloading, "dataset cache name and download state")
+check(HF.parseStatus("HF||\n").version == nil && !HF.parseStatus("HF||\n").signedIn, "no hf, no token")
+check(HF.accountName(#"{"type":"user","name":"someone","orgs":[{"name":"org"}]}"#) == "someone", "whoami gives the user, not an org")
+
+// hfrm: tidies a ref hf would skip, asks hf to remove the repo, then removes what's left.
+let hfHub = FileManager.default.temporaryDirectory.appending(path: "selfcheck-hub-\(getpid())")
+try! FileManager.default.createDirectory(at: hfHub.appending(path: "models--a--b/refs"), withIntermediateDirectories: true)
+try! FileManager.default.createDirectory(at: hfHub.appending(path: "bin"), withIntermediateDirectories: true)
+try! "abc123\n".write(to: hfHub.appending(path: "models--a--b/refs/main"), atomically: true, encoding: .utf8)
+let fakeHF = hfHub.appending(path: "bin/hf")
+try! "#!/bin/bash\nprintf '%s|' \"$@\" > \"$H/hf-args\"; cat \"$H/models--a--b/refs/main\" > \"$H/ref-seen\"\n".write(to: fakeHF, atomically: true, encoding: .utf8)
+try! FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeHF.path)
+let rm = bash("H=\(hfHub.path); export H\n" + HF.removeFunction + "hfrm models--a--b", env: ["PATH": hfHub.path + "/bin:/usr/bin:/bin", "HOME": hfHub.path])
+check(rm.0 == 0, "hfrm runs: \(rm.1)")
+check((try? String(contentsOf: hfHub.appending(path: "hf-args"), encoding: .utf8)) == "cache|rm|model/a/b|-y|", "hfrm asks hf to remove model/a/b")
+check((try? String(contentsOf: hfHub.appending(path: "ref-seen"), encoding: .utf8)) == "abc123", "the ref lost its newline before hf saw it")
+check(!FileManager.default.fileExists(atPath: hfHub.appending(path: "models--a--b").path), "the repo folder is gone")
+try? FileManager.default.removeItem(at: hfHub)
+check(TensorFold.deleteScript(q27).contains("hfrm 'models--z-lab--Qwen3.8-27B-DFlash2'") && !TensorFold.deleteScript(q27).contains("rm -rf \"$H/\"'"),
+      "catalog deletes go through hfrm")
+
+let searchHTML = """
+<li><a href="/library/qwen3.8" class="group grid"><div><h2 title="qwen3.8"><span>qwen3.8</span></h2></div>
+<p class="mt-1 line-clamp-2 text-[15px]">Qwen3.8 &amp; friends.</p></a></li>
+<li><a href="/library/llama3.2" class="group grid"><div><h2 title="llama3.2"><span>llama3.2</span></h2></div>
+<p class="mt-1 line-clamp-2 text-[15px]">Small.</p></a></li>
+"""
+let found = Ollama.parseSearch(searchHTML)
+check(found.map(\.name) == ["qwen3.8", "llama3.2"] && found[0].summary == "Qwen3.8 & friends.", "search results parse")
+let tagsHTML = """
+<a href="/library/qwen3.8:latest" class="md:hidden flex"><span class="font-mono">e118e4d12a70</span> • 18GB • 256K context window •</a>
+<div><a href="/library/qwen3.8:latest" class="group-hover:underline">qwen3.8:latest</a><p>18GB</p></div>
+<a href="/library/qwen3.8:480b-cloud" class="md:hidden flex"><span>abc</span> • 256K context window •</a>
+<a href="/library/qwen3.8:27b-bf16" class="md:hidden flex"><span class="font-mono">22130167c4c2</span> • 56GB • 256K context window •</a>
+<a href="/library/qwen3.8:1b" class="md:hidden flex"><span class="font-mono">22130167c4c3</span> • 815MB • 32K context window •</a>
+"""
+let tags = Ollama.parseTags(tagsHTML)
+check(tags == [Ollama.Tag(name: "qwen3.8:latest", bytes: 18_000_000_000), Ollama.Tag(name: "qwen3.8:27b-bf16", bytes: 56_000_000_000),
+               Ollama.Tag(name: "qwen3.8:1b", bytes: 815_000_000)], "tags parse with sizes; cloud tags skipped; no size borrowed from the next tag")
+check(Ollama.fits(105_000_000_000, memory: 130_594_021_376, reserve: 12_000_000_000)
+      && !Ollama.fits(120_000_000_000, memory: 130_594_021_376, reserve: 12_000_000_000), "fits leaves the system reserve")
+check(Ollama.searchURL("qwen coder").absoluteString == "https://ollama.com/search?q=qwen%20coder&c=local", "search asks for local models")
+let ost = Ollama.parseStatus("OLLAMA|0.40.11\nPULL|user~model:7b|running|pulling 6e4c38e1172f:  45% ▕██▏ 2.1 GB/4.7 GB\nPULL|x:1b|failed|Error: pull model manifest: file does not exist\n")
+check(ost.version == "0.40.11" && ost.pulls.count == 2 && ost.pulls[0].id == "user/model:7b" && ost.pulls[0].percent == 0.45
+      && ost.pulls[1].state == .failed && ost.pulls[1].percent == nil, "ollama status parses pulls")
+check(Ollama.key("user/model:7b") == "ollama-user~model:7b" && Ollama.parseStatus("").version == nil, "pull records name and no Ollama")
+check(Ollama.pullScript("x:1b").contains("ollama pull '\\''x:1b'\\''"), "pull quotes the model name")
 
 print("All checks passed")

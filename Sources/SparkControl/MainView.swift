@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Pane: Hashable {
-    case chat, models, model(UUID), connect, discovered, tensorfold, vllm, comfy, spark, sshKeys, terminal, requests, usage, logs
+    case chat, models, model(UUID), connect, discovered, huggingFace, tensorfold, vllm, comfy, spark, sshKeys, terminal, requests, usage, logs
 }
 
 /// `--args -demo YES`: the mode the README's screenshots are taken in. Full screen, a generic hostname, and
@@ -15,7 +15,7 @@ struct MainView: View {
     @Environment(AppState.self) private var state
     /// `open -a "Spark Control" --args -startPage terminal` opens on that page (how the README's screenshots are taken).
     @State private var selection: Pane? = {
-        let pages: [String: Pane] = ["chat": .chat, "models": .models, "tensorfold": .tensorfold, "vllm": .vllm, "ollama": .discovered,
+        let pages: [String: Pane] = ["chat": .chat, "models": .models, "tensorfold": .tensorfold, "vllm": .vllm, "ollama": .discovered, "huggingface": .huggingFace,
                                      "comfyui": .comfy, "spark": .spark, "sshkeys": .sshKeys, "terminal": .terminal,
                                      "requests": .requests, "usage": .usage, "logs": .logs, "connect": .connect]
         return UserDefaults.standard.string(forKey: "startPage").flatMap { pages[$0.lowercased()] } ?? .models
@@ -49,6 +49,7 @@ struct MainView: View {
                     SidebarLabel("TensorFold", "square.stack.3d.up.fill", .indigo).tag(Pane.tensorfold)
                     SidebarLabel("vLLM", "shippingbox.fill", .teal).tag(Pane.vllm)
                     SidebarLabel("Ollama", "magnifyingglass", .brown).tag(Pane.discovered)
+                    SidebarLabel("Hugging Face", "face.smiling.inverse", .yellow).tag(Pane.huggingFace)
                     SidebarLabel("ComfyUI", "photo.on.rectangle.angled", .pink).tag(Pane.comfy)
                 }
                 Section("Activity") {
@@ -81,6 +82,7 @@ struct MainView: View {
             case .models: ModelsView(selection: $selection)
             case .connect: ConnectView()
             case .discovered: DiscoveredView(selection: $selection)
+            case .huggingFace: HuggingFaceView()
             case .tensorfold: TensorFoldView(selection: $selection)
             case .vllm: VLLMView(selection: $selection)
             case .comfy: ComfyView(selection: $selection)

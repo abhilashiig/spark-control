@@ -127,10 +127,10 @@ enum VLLM {
     }
 
     static func deleteScript(_ m: Model) -> String {
-        "H=\"\(TensorFold.hubDir)\"; D=\"\(TensorFold.dataDir)\"\n"
+        "H=\"\(TensorFold.hubDir)\"; D=\"\(TensorFold.dataDir)\"\n" + HF.removeFunction
             + m.downloads.map {
                 let n = SSH.quote($0.cacheName)
-                return "grep -qxF \(n) \"$D/\(m.key).keep\" 2>/dev/null && echo \"› Kept \"\(n)\" (it was there before)\" || rm -rf \"$H/\"\(n)\n"
+                return "grep -qxF \(n) \"$D/\(m.key).keep\" 2>/dev/null && echo \"› Kept \"\(n)\" (it was there before)\" || hfrm \(n)\n"
             }.joined()
             + "rm -f \"$D/\(m.key)\".ok \"$D/\(m.key)\".log \"$D/\(m.key)\".pid \"$D/\(m.key)\".keep\n"
     }

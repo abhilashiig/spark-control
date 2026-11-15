@@ -186,8 +186,11 @@ enum TensorFold {
               END {for (h in m) if (!(h in done)) s += m[h]; print s + 0}')))
           done
           b=$(( $(du -sbcL "${dirs[@]}" 2>/dev/null | tail -1 | cut -f1) + inc ))
+          # Done only while every repo is there: a drafter added to a model's entry later still needs downloading.
+          all=1; for x in "${dirs[@]}"; do [ -d "$x" ] || all=0; done
           if [ -f "$D/$id.pid" ] && kill -0 "$(cat "$D/$id.pid")" 2>/dev/null; then st=running
-          elif [ -f "$D/$id.ok" ]; then st=done
+          elif [ -f "$D/$id.ok" ] && [ $all = 1 ]; then st=done
+          elif [ -f "$D/$id.ok" ]; then st=none
           elif [ -f "$D/$id.log" ]; then st=failed
           else st=none; fi
           last=""; [ -f "$D/$id.log" ] && last=$(tail -c 2000 "$D/$id.log" | tr '\\r' '\\n' | sed 's/\\x1b\\[[0-9;]*m//g' | grep -v -e '^[[:space:]]*$' -e '^Hint:' | tail -1)

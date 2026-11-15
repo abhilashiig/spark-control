@@ -9,7 +9,11 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - TensorFold: Update now shows the release notes of every version between the installed one and the update before you confirm, so you can decide whether to update.
 - vLLM: Qwen3.8 27B Uncensored (orcarouter's abliterated NVFP4 + FP8 build, with images and MTP). It's gated on Hugging Face: accept its terms and run `hf auth login` on the Spark before downloading.
 
+- vLLM: Qwen3.8 27B Uncensored is tuned for the Spark with flags from NVIDIA's DGX Spark recipe: 8 requests at once, larger prompt chunks, overlapped scheduling, fused kernels and FlashInfer autotuning. Already-added copies pick this up at their next start.
+- vLLM: a Drafter choice on the model's page for Qwen3.8 27B Uncensored: its built-in MTP head, or the DFlash2 drafter (shared with TensorFold's Qwen3.8 27B), which is much faster on code. The drafts menu offers counts that suit each drafter.
+
 ### Fixed
+- Engines: a model counts as downloaded only while every repo it needs is on the Spark, so a drafter added to a model later shows as still to download instead of failing at start.
 - vLLM: downloads now use the Spark's Hugging Face login (`hf auth login`), so gated models download instead of failing with "Access denied … requires approval".
 - vLLM: a model that fails to start now shows as failed within seconds; before, it stayed on "Starting…" until the startup timeout (40 minutes by default).
 - Engines: a failed download now shows the actual error instead of a Hugging Face hint line, and a gated model explains how to get access, with a link to its page.

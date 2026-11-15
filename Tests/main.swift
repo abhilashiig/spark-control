@@ -153,6 +153,9 @@ let home = FileManager.default.temporaryDirectory.appending(path: "tf-selfcheck-
 let data = home.appending(path: ".local/share/spark-control/tensorfold-data")
 try! FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
 try! Data().write(to: data.appending(path: "qwen3.5-2b.ok"))
+let q2 = TensorFold.model("qwen3.5-2b")!.repo
+try! FileManager.default.createDirectory(at: home.appending(path: ".cache/huggingface/hub/\(q2.cacheName)/snapshots/\(q2.snapshot)"), withIntermediateDirectories: true)
+try! Data().write(to: data.appending(path: "lfm2.5-24b-a2b.ok"))  // marker left, files gone
 try! Data("› downloading 40%\r› downloading 41%\n".utf8).write(to: data.appending(path: "gemma-4-31b.log"))
 try! Data("\(getpid())".utf8).write(to: data.appending(path: "gemma-4-31b.pid"))
 try! Data("error: 404\n".utf8).write(to: data.appending(path: "kolibri-1.log"))
@@ -161,8 +164,9 @@ try? FileManager.default.removeItem(at: home)
 let st = TensorFold.parseStatus(statusOut)
 check(code == 0 && st.engine == .none && st.freeBytes != nil, "status reads engine and free space: \(statusOut)")
 check(st.models["qwen3.5-2b"]?.download == .done && st.models["kolibri-1"]?.download == .failed
-      && st.models["kolibri-1"]?.message == "error: 404" && st.models["qwen3.8-27b"]?.download == TensorFold.Download.none,
-      "download states from markers")
+      && st.models["kolibri-1"]?.message == "error: 404" && st.models["qwen3.8-27b"]?.download == TensorFold.Download.none
+      && st.models["lfm2.5-24b-a2b"]?.download == TensorFold.Download.none,
+      "download states from markers; a marker counts only while every repo is there")
 check(st.models["gemma-4-31b"]?.download == .running && st.models["gemma-4-31b"]?.message == "› downloading 41%", "running download shows its last progress line")
 // Updates: only a newer plain X.Y.Z counts; each install keeps the version it replaced, rollback swaps them.
 check(TensorFold.isNewer("1.2.10", than: "1.2.9") && TensorFold.isNewer("2.0.0", than: "1.9.9") && !TensorFold.isNewer("1.2.6", than: "1.2.6")
@@ -277,6 +281,24 @@ let vq = VLLM.model("qwen3.6-35b-a3b")!, vg = VLLM.model("gemma-4-26b-a4b")!
 let vqStart = VLLM.startCommand(vq, port: 18300, name: "qwen3.6-35b-a3b")
 check(VLLM.drafts(of: vqStart) == 3 && VLLM.context(of: vqStart) == 262_144 && vqStart.contains("-p 18300:8000")
       && vqStart.contains("--revision 1355db6a052410cfd62085d94b58866fd0f2c3c5"), "vLLM start command has port, revision, context and suggested drafts")
+// vLLM: optional DFlash2 drafter, tuning flags, and the one-time update of models added before them
+let vu = VLLM.model("qwen3.8-27b-uncensored")!
+let vuStart = VLLM.startCommand(vu, port: 18301, name: "u")
+check(vuStart.contains(#"'{"method":"mtp","num_speculative_tokens":2}'"#) && !VLLM.usesDrafter(vuStart, vu)
+      && vuStart.contains("--max-num-seqs 8") && VLLM.qwenTuning.allSatisfy { vuStart.contains($0) },
+      "uncensored 27B starts with its MTP head, 8 requests and the tuning flags")
+let vuDF = VLLM.withDrafts(vuStart, 7, model: vu, separate: true)
+check(VLLM.usesDrafter(vuDF, vu) && VLLM.drafts(of: vuDF) == 7 && vuDF.contains(#""method":"dflash","model":"z-lab/Qwen3.8-27B-DFlash2""#)
+      && VLLM.usesDrafter(VLLM.withDrafts(vuDF, 5, model: vu), vu) && VLLM.drafts(of: VLLM.withDrafts(vuDF, 5, model: vu)) == 5
+      && !VLLM.usesDrafter(VLLM.withDrafts(vuDF, 2, model: vu, separate: false), vu),
+      "the drafter choice switches DFlash2 and the MTP head, and changing drafts keeps it")
+check(bash(vuDF, syntaxOnly: true).0 == 0, "the tuned DFlash2 start command parses")
+let vuOld = vuStart.replacingOccurrences(of: "--max-num-seqs 8", with: "--max-num-seqs 4")
+    .replacingOccurrences(of: " " + VLLM.qwenTuning.joined(separator: " "), with: "")
+let vuNew = VLLM.addingTuning(to: vuOld, model: vu.id)
+check(!vuOld.contains("--async-scheduling") && vuNew.contains("--max-num-seqs 8") && VLLM.qwenTuning.allSatisfy { vuNew.contains($0) }
+      && VLLM.addingTuning(to: vuNew, model: vu.id) == vuNew && VLLM.addingTuning(to: vqStart, model: "qwen3.6-35b-a3b") == vqStart,
+      "a model added before the tuning gets it once; untuned models are left alone")
 check(VLLM.drafts(of: VLLM.withDrafts(vqStart, 0, model: vq)) == 0 && VLLM.drafts(of: VLLM.withDrafts(vqStart, 1, model: vq)) == 1
       && VLLM.context(of: VLLM.withContext(vqStart, 65_536)) == 65_536, "vLLM drafts and context flags round-trip")
 check(VLLM.startCommand(vg, port: 1, name: "g").contains(#"'{"method":"mtp","model":"google/gemma-4-26B-A4B-it-assistant","num_speculative_tokens":2}'"#),

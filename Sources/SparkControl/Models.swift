@@ -124,12 +124,13 @@ struct Recipe: Codable, Identifiable, Hashable {
 }
 
 extension Recipe {
-    /// Models saved by older versions: catalog models gain a drafter their entry now names, and those added before
+    /// Models saved by older versions: catalog models gain a drafter or tuning flags their entry now names, and those added before
     /// several could run stop only their own server or container.
     func migrated(defaultPort: Int) -> Recipe {
         var r = self
         r.startCommand = TensorFold.addingDrafter(to: r.startCommand, model: r.tensorfold)
         r.startCommand = TensorFold.addingVision(to: r.startCommand, model: r.tensorfold, images: r.images)
+        r.startCommand = VLLM.addingTuning(to: r.startCommand, model: r.vllm)
         if r.tensorfold != nil, r.stopCommand == TensorFold.legacyStopCommand {
             r.stopCommand = TensorFold.stopCommand(port: r.port ?? defaultPort)
         }

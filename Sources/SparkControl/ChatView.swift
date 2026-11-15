@@ -315,7 +315,8 @@ struct ChatView: View {
 
     var body: some View {
         @Bindable var store = store
-        HSplitView {
+        // Fixed width: an HSplitView re-split on every chat switch (the conversation is rebuilt by .id), so the list jumped.
+        HStack(spacing: 0) {
             List(selection: $store.selection) {
                 ForEach(store.chats) { chat in
                     let recipe = state.config.recipes.first { $0.apiID == chat.model }
@@ -335,7 +336,9 @@ struct ChatView: View {
                     }
                 }
             }
-            .frame(minWidth: 170, idealWidth: 210, maxWidth: 300)
+            .frame(width: 260)
+
+            Divider()
 
             Group {
                 if let id = store.selection, store.index(id) != nil {

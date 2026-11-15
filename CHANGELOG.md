@@ -5,6 +5,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-11-15
+
 ### Added
 - Hugging Face page: everything in the Spark's Hugging Face cache with its size, whoever downloaded it, plus what's downloading now and what a running model is using. Delete a model you no longer need: one that's serving or downloading can't be deleted, and models in Spark Control that use it are named first.
 - Hugging Face page: search Hugging Face's models from the toolbar, with each repo's download size, popularity and whether it's gated, and download one onto the Spark with progress. Downloads keep going if the Mac sleeps, can be cancelled, and are refused when the repo is bigger than the Spark's free disk.

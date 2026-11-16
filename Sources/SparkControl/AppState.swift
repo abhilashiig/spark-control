@@ -760,7 +760,10 @@ final class AppState {
         let e = RequestEntry(method: method, path: path, model: model, client: client, userAgent: userAgent,
                              forwarded: String(decoding: body.prefix(64 << 10), as: UTF8.self))
         requests.insert(e, at: 0)
-        if requests.count > 200 { requests.removeLast() }
+        // At most 200 entries and ~4 MB of request bodies, so long prompts don't pile up in memory.
+        var bytes = 0
+        let keep = requests.prefix(200).prefix { bytes += $0.forwarded.utf8.count; return bytes <= 4 << 20 }.count
+        requests.removeSubrange(max(keep, 1)...)
         return e.id
     }
 

@@ -1214,7 +1214,12 @@ private enum Thumbnails {
     static var cache: [UUID: NSImage] = [:]
     static func image(for a: ChatAttachment) -> NSImage? {
         if let hit = cache[a.id] { return hit }
-        guard let data = Data(base64Encoded: a.payload), let image = NSImage(data: data) else { return nil }
+        // A small thumbnail, not the full image: the chip is 26pt, and a 2048px bitmap would cost ~16 MB each.
+        let options = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
+                       kCGImageSourceThumbnailMaxPixelSize: 160] as CFDictionary
+        guard let data = Data(base64Encoded: a.payload), let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else { return nil }
+        let image = NSImage(cgImage: cg, size: .zero)
         cache[a.id] = image
         return image
     }

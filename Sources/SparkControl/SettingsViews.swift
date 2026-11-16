@@ -274,11 +274,17 @@ private struct GatewaySettingsView: View {
 private struct GeneralSettings: View {
     @Environment(AppState.self) private var state
     @State private var confirmClearBench = false
+    @AppStorage(Appearance.key) private var appearance = Appearance.system.rawValue
 
     var body: some View {
         @Bindable var state = state
         Form {
             LabeledContent("Version", value: Bundle.main.appVersion)
+            Picker("Appearance", selection: $appearance) {
+                ForEach(Appearance.allCases) { Text($0.label).tag($0.rawValue) }
+            }
+            .pickerStyle(.segmented)
+            .help("System follows macOS's light or dark mode")
             Toggle("Open at login", isOn: $state.launchAtLogin)
             LabeledContent("Data") {
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([Store.configURL]) }

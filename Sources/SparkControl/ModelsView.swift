@@ -93,12 +93,12 @@ struct ModelsView: View {
                     + Text(" of \(Self.gb(total)) in use").foregroundStyle(Color.text2))
                     .font(.system(size: 12.5)).monospacedDigit()
             }
-            MemoryBar(fraction: Double(used) / Double(max(1, total)), fill: Color.ink).padding(.top, 10)
+            MemoryBar(fraction: Double(used) / Double(max(1, total)), fill: Color.text).padding(.top, 10)
             if !running.isEmpty {
                 HStack(spacing: 16) {
                     ForEach(running) { r in
                         HStack(spacing: 8) {
-                            RoundedRectangle(cornerRadius: 2).fill(Color.ink).frame(width: 8, height: 8)
+                            RoundedRectangle(cornerRadius: 2).fill(Color.text).frame(width: 8, height: 8)
                             Text(r.name)
                         }
                     }
@@ -152,7 +152,7 @@ struct ModelsView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(on ? Color.black.opacity(0.06) : .clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(on ? Color.overlay(0.06) : .clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .hoverFill(radius: 10, active: on)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { selection = .model(r.id) }

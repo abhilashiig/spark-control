@@ -31,6 +31,44 @@ extension Color {
     static let hairline = Color(light: 0x000000, dark: 0xFFFFFF).opacity(0.08)
     static let running = Color(light: 0x28A745, dark: 0x32C25A)
     static let danger = Color(light: 0xC4302B, dark: 0xFF5A52)
+    /// The segmented control's selected thumb.
+    static let thumb = Color(light: 0xFFFFFF, dark: 0x5B5B5F)
+
+    /// Hover, selection and track fills: black over light backgrounds, a stronger white over dark ones.
+    static func overlay(_ opacity: Double) -> Color {
+        Color(nsColor: NSColor(name: nil) {
+            $0.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+                ? NSColor.white.withAlphaComponent(opacity * 1.6) : NSColor.black.withAlphaComponent(opacity)
+        })
+    }
+}
+
+/// The app's light or dark look: the system's by default, or fixed in Settings → General.
+enum Appearance: String, CaseIterable, Identifiable {
+    case system, light, dark
+    static let key = "appearance"
+    var id: Self { self }
+    var label: String { rawValue.capitalized }
+
+    static func apply(_ raw: String) {
+        NSApp.appearance = switch Appearance(rawValue: raw) ?? .system {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
+extension View {
+    /// Keeps the app's appearance in step with the setting while this view is on screen.
+    func appliesAppearance() -> some View { modifier(AppliesAppearance()) }
+}
+
+private struct AppliesAppearance: ViewModifier {
+    @AppStorage(Appearance.key) private var appearance = Appearance.system.rawValue
+    func body(content: Content) -> some View {
+        content.onChange(of: appearance, initial: true) { Appearance.apply(appearance) }
+    }
 }
 
 /// The validated categorical slots (light and dark steps), in fixed order, and the reserved status colours.
@@ -258,7 +296,7 @@ extension View {
     func pageHeader(_ title: String) -> some View { pageHeader(title) { EmptyView() } }
 
     /// A rounded fill that shows while the pointer is over the view.
-    func hoverFill(_ color: Color = Color.black.opacity(0.035), radius: CGFloat = 7, active: Bool = false) -> some View {
+    func hoverFill(_ color: Color = Color.overlay(0.035), radius: CGFloat = 7, active: Bool = false) -> some View {
         modifier(HoverFill(color: color, radius: radius, active: active))
     }
 }
@@ -302,7 +340,7 @@ struct GhostIconStyle: ButtonStyle {
                 .labelStyle(GhostLabelStyle())
                 .foregroundStyle(Color.text3)
                 .frame(minWidth: size, minHeight: size)
-                .background((configuration.isPressed ? Color.black.opacity(0.09) : hover ? Color.black.opacity(0.05) : .clear),
+                .background((configuration.isPressed ? Color.overlay(0.09) : hover ? Color.overlay(0.05) : .clear),
                             in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .contentShape(Rectangle())
                 .opacity(enabled ? 1 : 0.4)
@@ -346,7 +384,7 @@ struct HeaderSearch: View {
         .padding(.horizontal, 8)
         .frame(width: width, height: 28)
         .frame(maxWidth: width == nil ? .infinity : nil)
-        .background(Color.black.opacity(0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .background(Color.overlay(0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }
 
@@ -367,7 +405,7 @@ struct Segments<T: Hashable>: View {
                         .frame(height: 24)
                         .background {
                             if on {
-                                RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.cardBackground)
+                                RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.thumb)
                                     .shadow(color: .black.opacity(0.14), radius: 1.5, y: 1)
                                     .shadow(color: .black.opacity(0.06), radius: 0, y: 0.5)
                             }
@@ -379,7 +417,7 @@ struct Segments<T: Hashable>: View {
             }
         }
         .padding(2)
-        .background(Color.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.overlay(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -404,7 +442,7 @@ struct DesignButtonStyle: ButtonStyle {
                 .frame(maxWidth: .infinity)
                 .background(prominent ? Color.brand : Color.cardBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
-                    if !prominent { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.black.opacity(0.12)) }
+                    if !prominent { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.overlay(0.12)) }
                 }
                 .brightness(prominent && hover ? 0.06 : 0)
                 .opacity(configuration.isPressed ? 0.85 : enabled ? 1 : 0.45)

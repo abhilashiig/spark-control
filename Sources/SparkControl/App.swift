@@ -12,8 +12,7 @@ struct SparkControlApp: App {
                 .environment(chats)
                 .frame(minWidth: 900, minHeight: 560)
                 .tint(.brand)
-                // The design is light only; the menu bar and Settings still follow the system.
-                .preferredColorScheme(.light)
+                .appliesAppearance()
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1000, height: 640)
@@ -30,7 +29,7 @@ struct SparkControlApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView().environment(state).tint(.brand)
+            SettingsView().environment(state).tint(.brand).appliesAppearance()
         }
     }
 }

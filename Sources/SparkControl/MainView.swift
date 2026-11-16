@@ -138,8 +138,8 @@ private struct Sidebar: View {
             }
             .padding(.horizontal, 8)
             .frame(height: 30)
-            .background(on ? Color.black.opacity(0.075) : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .hoverFill(Color.black.opacity(0.04), active: on)
+            .background(on ? Color.overlay(0.075) : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .hoverFill(Color.overlay(0.04), active: on)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -152,36 +152,33 @@ private struct DeviceHeader: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
-        Menu {
-            SettingsLink { Text("Settings…") }
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "bolt")
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white)
-                    .frame(width: 30, height: 30)
-                    .background(Color.ink, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(alignment: .bottomTrailing) {
-                        Circle().fill(dot).frame(width: 9, height: 9)
-                            .overlay(Circle().stroke(Color.sidebar, lineWidth: 2))
-                            .offset(x: 2, y: 2)
-                    }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.text).lineLimit(1)
-                    Text(status).font(.system(size: 11.5)).foregroundStyle(Color.text2).lineLimit(1)
+        HStack(spacing: 10) {
+            Image(systemName: "bolt")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(Color.ink, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(alignment: .bottomTrailing) {
+                    Circle().fill(dot).frame(width: 9, height: 9)
+                        .overlay(Circle().stroke(Color.sidebar, lineWidth: 2))
+                        .offset(x: 2, y: 2)
                 }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.up.chevron.down").font(.system(size: 10, weight: .medium)).foregroundStyle(Color.text2)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.text).lineLimit(1)
+                Text(status).font(.system(size: 11.5)).foregroundStyle(Color.text2).lineLimit(1)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .hoverFill(Color.black.opacity(0.04), radius: 9)
-            .contentShape(Rectangle())
+            .help(state.route.flatMap { r in state.config.device.map { "\($0.host(r)) over \(r.label)" } } ?? "")
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 0)
+            SettingsLink { Label("Settings", systemImage: "gearshape") }
+                .labelStyle(.iconOnly)
+                .buttonStyle(GhostIconStyle())
+                .help("Settings (⌘,)")
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .help(state.route.flatMap { r in state.config.device.map { "\($0.host(r)) over \(r.label)" } } ?? "")
+        .padding(.leading, 8)
+        .padding(.trailing, 2)
+        .padding(.vertical, 6)
     }
 
     private var name: String {

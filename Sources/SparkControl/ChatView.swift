@@ -405,7 +405,7 @@ struct ChatView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(on ? Color.black.opacity(0.06) : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .background(on ? Color.overlay(0.06) : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .hoverFill(radius: 9, active: on)
         .contentShape(Rectangle())
         .onTapGesture { click(chat.id, visible) }
@@ -490,7 +490,7 @@ private struct Conversation: View {
                     .foregroundStyle(Color.text3)
                     .padding(.horizontal, 10)
                     .frame(height: 28)
-                    .hoverFill(Color.black.opacity(0.05))
+                    .hoverFill(Color.overlay(0.05))
                     .contentShape(Rectangle())
                 }
                 .menuStyle(.button)
@@ -536,7 +536,7 @@ private struct Conversation: View {
                 } label: {
                     LineIcon(symbol: "ellipsis").foregroundStyle(Color.text3)
                         .frame(width: 28, height: 28)
-                        .hoverFill(Color.black.opacity(0.05))
+                        .hoverFill(Color.overlay(0.05))
                         .contentShape(Rectangle())
                 }
                 .menuStyle(.button)
@@ -562,7 +562,8 @@ private struct Conversation: View {
                                         onEdit: store.streamingChat != nil ? nil : { text in
                                             store.resend(m.id, text: text, chatID: chatID, profiles: state.config.profiles, baseURL: state.apiBaseURL,
                                                          apiKey: state.toolGateway.apiKey)
-                                        })
+                                        },
+                                        onRetry: store.streamingChat != nil ? nil : retry(m, in: chat?.messages ?? []))
                                 .id(m.id)
                         }
                         Color.clear.frame(height: 1).id("bottom")
@@ -604,6 +605,16 @@ private struct Conversation: View {
 
     private var current: Recipe? { models.first { $0.apiID == chat?.model } }
 
+    /// Regenerates a reply by sending the question before it again; that reply and everything after it are replaced.
+    private func retry(_ reply: ChatMessage, in messages: [ChatMessage]) -> (() -> Void)? {
+        guard reply.role != "user", let i = messages.firstIndex(where: { $0.id == reply.id }),
+              let question = messages[..<i].last(where: { $0.role == "user" }) else { return nil }
+        return {
+            store.resend(question.id, text: question.content, chatID: chatID, profiles: state.config.profiles,
+                         baseURL: state.apiBaseURL, apiKey: state.toolGateway.apiKey)
+        }
+    }
+
     /// The chat's model, centred, with whether it's loaded beneath.
     private func modelMenu(_ chat: Chat?) -> some View {
         Menu {
@@ -627,7 +638,7 @@ private struct Conversation: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
-            .hoverFill(Color.black.opacity(0.05), radius: 8)
+            .hoverFill(Color.overlay(0.05), radius: 8)
             .contentShape(Rectangle())
         }
         .menuStyle(.button)
@@ -672,7 +683,7 @@ private struct Conversation: View {
                     .background { Button("Paste", action: paste).keyboardShortcut("v").opacity(0).frame(width: 0, height: 0) }
                 Spacer()
                 if streaming {
-                    Button { store.stop() } label: { RoundIcon(symbol: "stop.fill", fill: Color.text) }
+                    Button { store.stop() } label: { RoundIcon(symbol: "stop.fill", fill: Color.text, icon: Color.pageBackground) }
                         .buttonStyle(PressableStyle())
                         .help("Stop")
                         .transition(.scale.combined(with: .opacity))
@@ -693,7 +704,7 @@ private struct Conversation: View {
         .padding(.bottom, 10)
         .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .strokeBorder(focused ? Color.brand.opacity(0.45) : Color.black.opacity(0.1), lineWidth: 1))
+            .strokeBorder(focused ? Color.brand.opacity(0.45) : Color.overlay(0.1), lineWidth: 1))
         .shadow(color: .black.opacity(0.04), radius: 1, y: 1)
         .shadow(color: .black.opacity(0.06), radius: 12, y: 8)
         .animation(.easeOut(duration: 0.15), value: focused)
@@ -755,10 +766,11 @@ private struct Conversation: View {
 private struct RoundIcon: View {
     let symbol: String
     let fill: Color
+    var icon = Color.white
     var body: some View {
         Image(systemName: symbol)
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(icon)
             .frame(width: 32, height: 32)
             .background(fill, in: Circle())
     }
@@ -769,6 +781,7 @@ private struct MessageView: View {
     let live: Bool
     /// Nil while a reply is streaming.
     var onEdit: ((String) -> Void)?
+    var onRetry: (() -> Void)?
     @State private var showThoughts = false
     @State private var editing = false
     @State private var draft = ""
@@ -837,7 +850,7 @@ private struct MessageView: View {
                             .foregroundStyle(Color.text2)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .hoverFill(Color.black.opacity(0.05), radius: 6)
+                            .hoverFill(Color.overlay(0.05), radius: 6)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -869,6 +882,11 @@ private struct MessageView: View {
                         HStack(spacing: 2) {
                             if !message.content.isEmpty {
                                 CopyButton(text: message.content).buttonStyle(GhostIconStyle()).help("Copy")
+                            }
+                            if let onRetry {
+                                Button(action: onRetry) { Label("Retry", systemImage: "arrow.clockwise") }
+                                    .buttonStyle(GhostIconStyle())
+                                    .help("Retry: generate this reply again. Messages after it are replaced.")
                             }
                             if let stats = message.stats {
                                 Text(stats).font(.system(size: 12)).foregroundStyle(Color.text2).monospacedDigit().padding(.leading, 8)

@@ -7,6 +7,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ### Added
 - Notifications when a model is running, stops, stops responding or fails to start; when a download (Hugging Face, Ollama or a catalog model) finishes or fails, even with its page closed; when an install or removal finishes; and when a benchmark finishes. They show while Spark Control isn't the app in front, and can be turned off in System Settings.
+- Settings → General → Appearance: System (follows macOS's light or dark mode), Light or Dark.
+- Chat: Retry under a reply generates it again from the same question (handy after an error or a weak answer). Messages after it are replaced.
 
 ### Changed
 - New look (beta): a flat, light window with a sidebar showing the Spark and whether it's online, pages grouped under Engines, Monitor and Device, and API Access at the foot. Every page has a simple title bar with its controls; Settings is in the menu under the Spark's name. "Spark" is now called Overview and "Connect" is API Access.

@@ -77,6 +77,7 @@ struct MainView: View {
 
 /// The design's sidebar: the Spark at the top, page groups, API Access and power at the foot. Flat #F3F3F5, no vibrancy.
 private struct Sidebar: View {
+    @Environment(AppState.self) private var state
     @Binding var selection: Pane?
 
     var body: some View {
@@ -89,6 +90,13 @@ private struct Sidebar: View {
                 VStack(alignment: .leading, spacing: 0) {
                     row("Chat", "bubble.left", .chat)
                     row("Models", "cube", .models)
+                    // Only what's running (or starting, stopping, failed), and the open one; the rest is on Models.
+                    ForEach(state.config.recipes.filter { state.phase(for: $0) != .stopped || selection == .model($0.id) }) { r in
+                        item(r.name.isEmpty ? "Untitled" : r.name, .model(r.id)) {
+                            ModelAvatar(name: r.name, phase: state.phase(for: r), size: 22)
+                        }
+                        .padding(.leading, 12)
+                    }
                     group("Engines")
                     row("TensorFold", "square.stack.3d.up", .tensorfold)
                     row("vLLM", "cube", .vllm)
@@ -129,11 +137,15 @@ private struct Sidebar: View {
     }
 
     private func row(_ title: String, _ symbol: String, _ pane: Pane) -> some View {
+        item(title, pane) { LineIcon(symbol: symbol).foregroundStyle(Color.brand) }
+    }
+
+    private func item(_ title: String, _ pane: Pane, @ViewBuilder icon: () -> some View) -> some View {
         let on = selection == pane
         return Button { selection = pane } label: {
             HStack(spacing: 9) {
-                LineIcon(symbol: symbol).foregroundStyle(Color.brand)
-                Text(title).font(.system(size: 13, weight: on ? .medium : .regular)).foregroundStyle(Color.text)
+                icon()
+                Text(title).font(.system(size: 13, weight: on ? .medium : .regular)).foregroundStyle(Color.text).lineLimit(1)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 8)

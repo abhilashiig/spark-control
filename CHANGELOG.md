@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Changed
+- Menu bar: when the Spark is offline or a model fails, the icon stays the Spark Control bolt with a small warning badge instead of switching to a generic warning triangle.
+
 ## [1.11.0] - 2026-11-16
 
 ### Added

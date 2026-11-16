@@ -20,7 +20,7 @@ struct SparkControlApp: App {
             MenuBarView().environment(state).tint(.brand)
         } label: {
             switch state.phase {
-            case .failed, .offline: Image(systemName: "exclamationmark.triangle")
+            case .failed, .offline: Image(nsImage: MenuIcon.image(running: false, warning: true))
             case let p: Image(nsImage: MenuIcon.image(running: p == .ready))
             }
         }
@@ -35,9 +35,9 @@ struct SparkControlApp: App {
 // MARK: Shared bits
 
 /// The app icon's bolt, drawn as a black-and-white template so the menu bar tints it.
-/// The bolt is filled while a model runs and outlined otherwise.
+/// The bolt is filled while a model runs and outlined otherwise; a warning adds a "!" badge.
 enum MenuIcon {
-    static func image(running: Bool) -> NSImage {
+    static func image(running: Bool, warning: Bool = false) -> NSImage {
         let img = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { r in
             NSColor.black.set()
             // The bolt from the icon's 1024 grid, centred and scaled to 15.5 pt tall.
@@ -55,6 +55,18 @@ enum MenuIcon {
             } else {
                 bolt.lineWidth = 1.2
                 bolt.stroke()
+            }
+            if warning {
+                let ctx = NSGraphicsContext.current
+                let b = NSPoint(x: r.maxX - 4.5, y: r.minY + 4.5)
+                ctx?.compositingOperation = .clear
+                NSBezierPath(ovalIn: NSRect(x: b.x - 5.5, y: b.y - 5.5, width: 11, height: 11)).fill()
+                ctx?.compositingOperation = .sourceOver
+                NSBezierPath(ovalIn: NSRect(x: b.x - 4.5, y: b.y - 4.5, width: 9, height: 9)).fill()
+                ctx?.compositingOperation = .clear
+                NSBezierPath(roundedRect: NSRect(x: b.x - 0.75, y: b.y - 0.6, width: 1.5, height: 3.6),
+                             xRadius: 0.75, yRadius: 0.75).fill()
+                NSBezierPath(ovalIn: NSRect(x: b.x - 0.8, y: b.y - 2.9, width: 1.6, height: 1.6)).fill()
             }
             return true
         }

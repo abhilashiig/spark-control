@@ -345,7 +345,6 @@ struct ChatView: View {
     @Environment(AppState.self) private var state
     @Environment(ChatStore.self) private var store
     @AppStorage("chatListWidth") private var listWidth = 280.0
-    @State private var dragStart: Double?
     @State private var picked: Set<UUID> = []
     @State private var toDelete: Set<UUID> = []
     @State private var search = ""
@@ -390,17 +389,7 @@ struct ChatView: View {
             .frame(minWidth: 200, maxWidth: listWidth)
             .layoutPriority(1) // sized first; the HStack still reserves the conversation's minimum width
 
-            Hairline(vertical: true).overlay {
-                Color.clear.frame(width: 8).contentShape(Rectangle())
-                    .pointerStyle(.columnResize)
-                    .gesture(DragGesture(coordinateSpace: .global)
-                        .onChanged { drag in
-                            let start = dragStart ?? listWidth
-                            dragStart = start
-                            listWidth = min(max(start + drag.translation.width, 200), 420)
-                        }
-                        .onEnded { _ in dragStart = nil })
-            }
+            ResizeHairline(width: $listWidth, range: 200...420)
 
             Group {
                 if let id = store.selection, store.index(id) != nil {

@@ -21,12 +21,15 @@ struct MainView: View {
         return UserDefaults.standard.string(forKey: "startPage").flatMap { pages[$0.lowercased()] } ?? .models
     }()
 
+    @AppStorage("sidebarWidth") private var sidebarWidth = 216.0
+
     var body: some View {
         @Bindable var state = state
         HStack(spacing: 0) {
             Sidebar(selection: $selection)
-                .frame(width: 216)
-            Hairline(vertical: true)
+                .frame(width: sidebarWidth)
+            ResizeHairline(width: $sidebarWidth, range: 180...360)
+                .zIndex(1) // the drag strip overhangs the page beside it
             Group {
             switch selection {
             case .model(let id) where state.config.recipes.contains { $0.id == id }:

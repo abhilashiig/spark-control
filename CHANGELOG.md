@@ -7,6 +7,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ### Fixed
 - The sidebar lists running models under Models again, as before the redesign; click one to open it.
+- The sidebar can be resized again: drag its edge. The width is remembered.
 
 ### Changed
 - Uses less memory: image thumbnails in Chat are kept small, and the Requests page keeps at most about 4 MB of request bodies (older requests drop off sooner when prompts are long).

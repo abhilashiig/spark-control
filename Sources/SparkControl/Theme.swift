@@ -490,3 +490,24 @@ struct Hairline: View {
         Rectangle().fill(Color.hairline).frame(width: vertical ? 1 : nil, height: vertical ? nil : 1)
     }
 }
+
+/// A vertical hairline you drag to resize the column on its left.
+struct ResizeHairline: View {
+    @Binding var width: Double
+    let range: ClosedRange<Double>
+    @State private var dragStart: Double?
+
+    var body: some View {
+        Hairline(vertical: true).overlay {
+            Color.clear.frame(width: 8).contentShape(Rectangle())
+                .pointerStyle(.columnResize)
+                .gesture(DragGesture(coordinateSpace: .global)
+                    .onChanged { drag in
+                        let start = dragStart ?? width
+                        dragStart = start
+                        width = min(max(start + drag.translation.width, range.lowerBound), range.upperBound)
+                    }
+                    .onEnded { _ in dragStart = nil })
+        }
+    }
+}

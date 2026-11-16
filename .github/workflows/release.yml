@@ -42,10 +42,12 @@ jobs:
           # Notes = the "## [V]" section of CHANGELOG.md, up to the next "## " heading.
           awk -v v="$V" '/^## /{p = index($0, "[" v "]") > 0; next} p' CHANGELOG.md > notes.md
           [ -s notes.md ] || { echo "CHANGELOG.md has no section for $V"; exit 1; }
+          # A version with a suffix (1.12.0-beta.1) is a pre-release, so it never shows as Latest.
+          PRE=(); [[ "$V" == *-* ]] && PRE=(--prerelease)
           # A re-pushed tag replaces that release's DMG and notes.
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "SparkControl-$GITHUB_REF_NAME.dmg" --clobber
-            gh release edit "$GITHUB_REF_NAME" --title "Spark Control $V" --notes-file notes.md
+            gh release edit "$GITHUB_REF_NAME" --title "Spark Control $V" --notes-file notes.md "${PRE[@]}"
           else
-            gh release create "$GITHUB_REF_NAME" "SparkControl-$GITHUB_REF_NAME.dmg" --title "Spark Control $V" --notes-file notes.md
+            gh release create "$GITHUB_REF_NAME" "SparkControl-$GITHUB_REF_NAME.dmg" --title "Spark Control $V" --notes-file notes.md "${PRE[@]}"
           fi

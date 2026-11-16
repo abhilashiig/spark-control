@@ -76,6 +76,9 @@ Chats get a title automatically, and you can edit and resend any message.
   just work. Five colour themes and the shortcuts you know from Terminal.app (⌘T, ⌘W, ⌘K, ⌘1–9, ⌘+ ⌘−).
 - **SSH Keys:** see every key that can log in to your Spark, when and from where each last did, and
   remove any you don't recognise.
+- **Wi-Fi:** see the networks your Spark can reach and switch it to another. You're warned first when the
+  switch could cut you off (you reach it over that Wi-Fi, or over Tailscale riding on it), and a network it
+  can't join sends it back to the one it was on.
 - **ComfyUI** for image generation: installed and started on the Spark, opened in your browser.
 
 ## Getting started

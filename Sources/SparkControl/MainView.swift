@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Pane: Hashable {
-    case chat, models, model(UUID), connect, discovered, huggingFace, tensorfold, vllm, comfy, spark, sshKeys, terminal, requests, usage, logs
+    case chat, models, model(UUID), connect, discovered, huggingFace, tensorfold, vllm, comfy, spark, sshKeys, wifi, terminal, requests, usage, logs
 }
 
 /// `--args -demo YES`: the mode the README's screenshots are taken in. Full screen, a generic hostname, and
@@ -16,7 +16,7 @@ struct MainView: View {
     /// `open -a "Spark Control" --args -startPage terminal` opens on that page (how the README's screenshots are taken).
     @State private var selection: Pane? = {
         let pages: [String: Pane] = ["chat": .chat, "models": .models, "tensorfold": .tensorfold, "vllm": .vllm, "ollama": .discovered, "huggingface": .huggingFace,
-                                     "comfyui": .comfy, "spark": .spark, "sshkeys": .sshKeys, "terminal": .terminal,
+                                     "comfyui": .comfy, "spark": .spark, "sshkeys": .sshKeys, "wifi": .wifi, "terminal": .terminal,
                                      "requests": .requests, "usage": .usage, "logs": .logs, "connect": .connect]
         return UserDefaults.standard.string(forKey: "startPage").flatMap { pages[$0.lowercased()] } ?? .models
     }()
@@ -55,6 +55,7 @@ struct MainView: View {
                 Section("Activity") {
                     SidebarLabel("Spark", "gauge.with.dots.needle.67percent", .orange).tag(Pane.spark)
                     SidebarLabel("SSH Keys", "key.fill", .yellow).tag(Pane.sshKeys)
+                    SidebarLabel("Wi-Fi", "wifi", .cyan).tag(Pane.wifi)
                     SidebarLabel("Terminal", "terminal.fill", .mint).tag(Pane.terminal)
                     SidebarLabel("Requests", "arrow.left.arrow.right", .blue).tag(Pane.requests)
                     SidebarLabel("Usage", "chart.bar.xaxis", .green).tag(Pane.usage)
@@ -88,6 +89,7 @@ struct MainView: View {
             case .comfy: ComfyView(selection: $selection)
             case .spark: SparkView()
             case .sshKeys: SSHKeysView()
+            case .wifi: WiFiView()
             case .terminal: TerminalPage()
             case .requests: RequestsView()
             case .usage: UsageView()

@@ -451,3 +451,184 @@ struct SSHKeysView: View {
         await load()
     }
 }
+
+// MARK: Wi-Fi
+
+/// The networks the Spark's Wi-Fi can see, and switching between them, with a warning when switching could cut this
+/// Mac off from the Spark.
+struct WiFiView: View {
+    @Environment(AppState.self) private var state
+    @State private var status: WiFi.Status?
+    @State private var failed = false
+    @State private var busy = false
+    @State private var joining: WiFi.Network?
+    @State private var password = ""
+    @State private var sudoError: String?
+    @State private var note: String?
+
+    var body: some View {
+        Form {
+            if let status {
+                Section { summary(status) }
+                if status.device == nil {
+                    ContentUnavailableView("No Wi-Fi", systemImage: "wifi.slash",
+                                           description: Text("The Spark has no Wi-Fi adapter that NetworkManager manages."))
+                } else {
+                    Section("\(status.networks.count) network\(status.networks.count == 1 ? "" : "s") nearby") {
+                        if status.networks.isEmpty { Text("No networks found. Try Refresh.").foregroundStyle(.secondary) }
+                        ForEach(status.networks) { row($0) }
+                    }
+                }
+            } else if state.sshTarget == nil {
+                ContentUnavailableView("Spark unreachable", systemImage: "wifi.slash")
+            } else if failed {
+                ContentUnavailableView("Couldn't read the Wi-Fi", systemImage: "wifi.exclamationmark",
+                                       description: Text("The Spark didn't answer in time. Try Refresh."))
+            } else {
+                ProgressView().frame(maxWidth: .infinity)
+            }
+        }
+        .page()
+        .navigationTitle("Wi-Fi")
+        .toolbar {
+            Button { Task { await load(rescan: true) } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                .disabled(state.sshTarget == nil || busy)
+        }
+        .task(id: state.sshTarget) { await load(rescan: false) }
+        .sheet(item: $joining) { n in joinSheet(n) }
+        .sheet(isPresented: Binding(get: { sudoError != nil }, set: { if !$0 { sudoError = nil; pending = nil; password = "" } })) {
+            SudoPasswordSheet(title: "Switch Wi-Fi", button: "Switch", target: state.sshTarget ?? "", error: sudoError) { pw in
+                guard let n = pending else { return nil }
+                return await join(n, sudo: pw)
+            }
+        }
+    }
+
+    /// The network being joined while the sudo sheet is up.
+    @State private var pending: WiFi.Network?
+
+    @ViewBuilder private func summary(_ s: WiFi.Status) -> some View {
+        Label(path(s), systemImage: s.reachedOverWiFi ? "wifi" : "cable.connector")
+        if let note { Label(note, systemImage: "arrow.triangle.2.circlepath").foregroundStyle(.secondary) }
+        if let last = s.last { Label(last, systemImage: "info.circle").foregroundStyle(.secondary) }
+    }
+
+    private func path(_ s: WiFi.Status) -> String {
+        let over = { (d: String) in d == s.device ? "the Spark's Wi-Fi" : d.isEmpty ? "an unknown link" : "the Spark's wired link (\(d))" }
+        return s.viaTailscale ? "This Mac reaches the Spark over Tailscale, through \(over(s.uplink))."
+                              : "This Mac reaches the Spark over \(over(s.sshDevice))."
+    }
+
+    private func row(_ n: WiFi.Network) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "wifi", variableValue: Double(n.signal) / 100)
+                .foregroundStyle(n.inUse ? Color.brand : .secondary)
+                .accessibilityLabel("Signal \(n.signal)%")
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(n.ssid).font(.headline)
+                    if n.secured { Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary).accessibilityLabel("Secured") }
+                    if n.inUse {
+                        Text("Connected").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(Color.brand.opacity(0.15), in: Capsule()).foregroundStyle(Color.brand)
+                    }
+                }
+                Text([n.secured ? n.security : "Open", n.saved ? "Saved" : nil, "\(n.signal)%"].compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if !n.inUse {
+                Button("Join…") { password = ""; joining = n }.disabled(busy || state.sshTarget == nil)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// Only the risks that apply: none when this Mac reaches the Spark over a wire.
+    private func warnings(_ n: WiFi.Network, _ s: WiFi.Status) -> [String] {
+        guard s.reachedOverWiFi else { return [] }
+        let current = s.current?.ssid ?? "the current network"
+        var w: [String] = []
+        if s.viaTailscale {
+            w.append("You're connected over Tailscale, which runs over the Spark's Wi-Fi. If \(n.ssid) has no internet access, Tailscale can't reconnect and you'll lose access to the Spark until someone fixes it at the Spark.")
+        } else if s.tailscale {
+            w.append("This Mac reaches the Spark over \(current). Once the Spark moves to \(n.ssid), it's only reachable by joining this Mac to \(n.ssid) too, or over Tailscale, which needs \(n.ssid) to have internet access.")
+            if state.config.device?.mode == .local {
+                w.append("Spark Control is set to use the local network only. Set Connection to Automatic in Settings so it can fall back to Tailscale.")
+            }
+        } else {
+            w.append("This Mac reaches the Spark over \(current), and Tailscale isn't running on the Spark. Once it moves to \(n.ssid), the only way back is to join this Mac to \(n.ssid) too.")
+        }
+        if !n.secured && (s.viaTailscale || s.tailscale) {
+            w.append("Open networks often need a sign-in page (hotels, cafés) that the Spark can't fill in, so it may get no internet access.")
+        }
+        return w
+    }
+
+    private func joinSheet(_ n: WiFi.Network) -> some View {
+        let s = status ?? WiFi.Status()
+        let w = warnings(n, s)
+        return VStack(alignment: .leading, spacing: 14) {
+            Text("Join “\(n.ssid)”?").font(.headline)
+            if n.secured && !n.saved {
+                SecureField("Wi-Fi password", text: $password).textFieldStyle(.roundedBorder)
+            }
+            ForEach(w, id: \.self) { Label($0, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange) }
+            Text("If the Spark can't join \(n.ssid) (a wrong password, out of range), it goes back to \(s.current?.ssid ?? "its current network").")
+                .foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Cancel") { joining = nil }.keyboardShortcut(.cancelAction)
+                Button(w.isEmpty ? "Join" : "Join Anyway", role: w.isEmpty ? nil : .destructive) {
+                    joining = nil
+                    Task { if let e = await join(n, sudo: nil) { pending = n; sudoError = e } }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(n.secured && !n.saved && password.isEmpty)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(20)
+        .frame(width: 440)
+    }
+
+    private func load(rescan: Bool) async {
+        guard let target = state.sshTarget else { return }
+        let res = await SSH.run(target, "bash -c \(SSH.quote(WiFi.listScript(rescan: rescan)))", timeout: 30)
+        failed = res.code != 0
+        guard !failed else { return }
+        let s = WiFi.parse(res.output)
+        if let last = s.last { state.event("Wi-Fi: \(last)") }
+        status = s
+    }
+
+    /// Starts the switch. Returns an error for the sudo sheet when sudo needs a (right) password, else nil.
+    private func join(_ n: WiFi.Network, sudo: String?) async -> String? {
+        guard let target = state.sshTarget else { return "The Spark is unreachable." }
+        busy = true
+        defer { busy = false }
+        let res = await SSH.run(target, "bash -c \(SSH.quote(WiFi.switchScript(n.ssid)))", timeout: 30,
+                                input: password + "\n" + (sudo ?? ""))
+        if res.output.contains("__NEEDS_SUDO__") {
+            return sudo == nil ? "The Spark needs your password to change its Wi-Fi." : "That password didn't work."
+        }
+        password = ""
+        pending = nil
+        guard res.output.contains("__STARTED__") else {
+            state.event("Couldn't switch the Spark's Wi-Fi to \(n.ssid): \(res.output)")
+            note = "Couldn't start switching to \(n.ssid)."
+            return nil
+        }
+        state.event("Switching the Spark's Wi-Fi to \(n.ssid)")
+        note = "Switching to \(n.ssid)…"
+        let cutOff = status?.reachedOverWiFi == true
+        Task {
+            try? await Task.sleep(for: .seconds(cutOff ? 12 : 8))
+            if cutOff { state.networkTrouble() }  // the shared SSH connection rode the old Wi-Fi
+            try? await Task.sleep(for: .seconds(3))
+            note = nil
+            await load(rescan: false)
+        }
+        return nil
+    }
+}

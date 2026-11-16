@@ -568,6 +568,36 @@ check(removeKey(left[0].blob) == 0 && SSHKeys.keys(try! String(contentsOf: akURL
 check(FileManager.default.fileExists(atPath: akURL.path + ".spark-control.bak"), "backup kept")
 try? FileManager.default.removeItem(at: keysHome)
 
+// Wi-Fi
+let wifi = WiFi.parse("""
+dev:wlP9s9
+saved:Home\\:5G
+saved:Office
+wifi:*:72:WPA2:Office
+wifi: :80:WPA2 WPA3:Home\\:5G
+wifi: :40:WPA2:Home\\:5G
+wifi: :65::Cafe
+wifi: :30:WPA2:
+wifi: :55:WPA2:Office
+ssh:wlP9s9
+up:wlP9s9
+ts:1
+last:Joined Office.
+""")
+check(wifi.device == "wlP9s9" && wifi.tailscale && wifi.last == "Joined Office.", "wifi status lines parse")
+check(wifi.networks.map(\.ssid) == ["Office", "Home:5G", "Cafe"], "one row per network, hidden skipped, connected first then signal")
+check(wifi.networks[0].inUse && wifi.networks[0].signal == 72 && wifi.networks[0].saved, "connected network keeps its best signal")
+check(wifi.networks[1].saved && wifi.networks[1].signal == 80 && wifi.networks[1].security == "WPA2 WPA3", "escaped colon in SSID and saved match")
+check(!wifi.networks[2].secured && !wifi.networks[2].saved, "open network")
+check(wifi.reachedOverWiFi && !wifi.viaTailscale, "SSH over the Wi-Fi")
+check(WiFi.parse("dev:wlan0\nssh:tailscale0\nup:wlan0\n").reachedOverWiFi, "Tailscale riding the Wi-Fi counts")
+check(!WiFi.parse("dev:wlan0\nssh:tailscale0\nup:enP7s7\n").reachedOverWiFi && !WiFi.parse("dev:wlan0\nssh:enP7s7\n").reachedOverWiFi, "wired links don't")
+check(WiFi.parse("ssh:enP7s7\n").device == nil && !WiFi.parse("ssh:enP7s7\n").reachedOverWiFi, "no Wi-Fi adapter")
+for (name, s) in [("wifi list", WiFi.listScript(rescan: true)), ("wifi switch", WiFi.switchScript("it's: \"odd\" $net"))] {
+    let (code, out) = bash(s, syntaxOnly: true)
+    check(code == 0, "\(name) script parses: \(out)")
+}
+
 // Hugging Face cache and Ollama
 let hfStatus0 = HF.Repo(type: "model", repo: "a/b", bytes: 0, partial: 0, state: .idle, user: "")
 for (name, s) in [("hf status", HF.statusScript), ("hf delete", HF.deleteScript(HF.Repo(type: "model", repo: "a/b", bytes: 0, partial: 0, state: .idle, user: ""), records: ["x"])),

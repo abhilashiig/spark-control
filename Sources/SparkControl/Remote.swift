@@ -339,3 +339,104 @@ extension SSH {
         ["-t", "-o", "ConnectTimeout=6", "-o", "ServerAliveInterval=15", "-o", "StrictHostKeyChecking=accept-new", target]
     }
 }
+
+/// The Spark's Wi-Fi through NetworkManager's nmcli: nearby networks, how this Mac reaches the Spark, and switching
+/// with a way back to the previous network when the new one can't be joined.
+enum WiFi {
+    struct Network: Identifiable, Hashable {
+        var ssid: String
+        var signal: Int
+        var security: String
+        var inUse: Bool
+        var saved = false
+        var id: String { ssid }
+        var secured: Bool { !security.isEmpty && security != "--" }
+    }
+
+    struct Status {
+        /// The Wi-Fi interface; nil when the Spark has none (or no nmcli).
+        var device: String?
+        var networks: [Network] = []
+        /// Interface this app's SSH session arrives on, and the one the default route (and so Tailscale) leaves by.
+        var sshDevice = ""
+        var uplink = ""
+        var tailscale = false
+        /// How the previous switch ended, read once.
+        var last: String?
+        var current: Network? { networks.first(where: \.inUse) }
+        var viaTailscale: Bool { sshDevice.hasPrefix("tailscale") }
+        /// This Mac reaches the Spark over its Wi-Fi: directly, or over Tailscale riding on it.
+        var reachedOverWiFi: Bool { device != nil && (sshDevice == device || (viaTailscale && uplink == device)) }
+    }
+
+    static let log = "$HOME/.cache/spark-control-wifi.log"
+
+    static func listScript(rescan: Bool) -> String {
+        """
+        nmcli -t -f DEVICE,TYPE device 2>/dev/null | awk -F: '$2=="wifi"{print "dev:"$1}'
+        nmcli -t -f NAME,TYPE connection show 2>/dev/null | awk -F: '$NF ~ /wireless/ {sub(/:[^:]*$/,""); print "saved:"$0}'
+        nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID device wifi list --rescan \(rescan ? "yes" : "auto") 2>/dev/null | sed 's/^/wifi:/'
+        set -- $SSH_CONNECTION; [ -n "$1" ] && ip -o route get "$1" 2>/dev/null | sed -n 's/.* dev \\([^ ]*\\).*/ssh:\\1/p'
+        ip -o route get 1.1.1.1 2>/dev/null | sed -n 's/.* dev \\([^ ]*\\).*/up:\\1/p'
+        tailscale status >/dev/null 2>&1 && echo ts:1
+        f="\(log)"; [ -f "$f" ] && tail -n 1 "$f" | sed 's/^/last:/' && rm -f "$f"
+        true
+        """
+    }
+
+    static func parse(_ out: String) -> Status {
+        var s = Status(), saved = Set<String>(), found: [Network] = []
+        for line in out.split(separator: "\n") {
+            guard let i = line.firstIndex(of: ":") else { continue }
+            let v = String(line[line.index(after: i)...])
+            switch line[..<i] {
+            case "dev": s.device = s.device ?? v
+            case "saved": saved.insert(unescape(v))
+            case "ssh": s.sshDevice = v
+            case "up": s.uplink = v
+            case "ts": s.tailscale = true
+            case "last": s.last = v
+            case "wifi":
+                // IN-USE:SIGNAL:SECURITY:SSID. Only the SSID can hold an (escaped) colon, so it's everything after the third.
+                let f = v.split(separator: ":", maxSplits: 3, omittingEmptySubsequences: false).map(String.init)
+                guard f.count == 4, case let ssid = unescape(f[3]), !ssid.isEmpty else { continue }
+                let n = Network(ssid: ssid, signal: Int(f[1]) ?? 0, security: f[2], inUse: f[0] == "*")
+                // One row per network, though each access point and band is listed apart.
+                if let j = found.firstIndex(where: { $0.ssid == ssid }) {
+                    found[j].signal = max(found[j].signal, n.signal)
+                    found[j].inUse = found[j].inUse || n.inUse
+                } else { found.append(n) }
+            default: break
+            }
+        }
+        s.networks = found.map { var n = $0; n.saved = saved.contains(n.ssid); return n }
+            .sorted { ($0.inUse ? 1 : 0, $0.signal) > ($1.inUse ? 1 : 0, $1.signal) }
+        return s
+    }
+
+    /// nmcli's terse output escapes `:` and `\` with a backslash.
+    static func unescape(_ s: String) -> String { s.replacing(#/\\(.)/#) { String($0.1) } }
+
+    /// Reads the network's password, then the Spark password for sudo, from stdin (either line may be empty). Starts the
+    /// switch detached, so it finishes, or falls back to the previous network, after this SSH session drops with the
+    /// old Wi-Fi. Prints __STARTED__, or __NEEDS_SUDO__ when nmcli isn't allowed and sudo needs a (right) password.
+    static func switchScript(_ ssid: String) -> String {
+        let job = """
+        exec >"$3" 2>&1
+        old=$(nmcli -t -f UUID,TYPE connection show --active | awk -F: '$2 ~ /wireless/ {print $1; exit}')
+        r=$(if [ -n "$2" ]; then nmcli -w 45 device wifi connect "$1" password "$2"; else nmcli -w 45 device wifi connect "$1"; fi 2>&1) && { echo "Joined $1."; exit; }
+        r=$(printf '%s' "$r" | tail -n 1)
+        if [ -n "$old" ] && nmcli -w 45 connection up uuid "$old" >/dev/null 2>&1; then echo "Couldn't join $1, so the Spark went back to its previous Wi-Fi. $r"
+        else echo "Couldn't join $1. $r"; fi
+        """
+        return """
+        IFS= read -r wp; IFS= read -r sp
+        log="\(log)"; mkdir -p "${log%/*}"; rm -f "$log"
+        p=$(nmcli -t -f PERMISSION,VALUE general permissions 2>/dev/null)
+        if printf '%s\\n' "$p" | grep -q 'network-control:yes' && printf '%s\\n' "$p" | grep -q 'settings.modify.system:yes'; then pre=
+        elif sudo -n true 2>/dev/null || { [ -n "$sp" ] && printf '%s\\n' "$sp" | sudo -S -p '' -v 2>/dev/null; }; then pre="sudo -n"
+        else echo __NEEDS_SUDO__; exit 3; fi
+        $pre setsid -f bash -c \(SSH.quote(job)) _ \(SSH.quote(ssid)) "$wp" "$log" </dev/null >/dev/null 2>&1 && echo __STARTED__
+        """
+    }
+}

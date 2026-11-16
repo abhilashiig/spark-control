@@ -55,12 +55,14 @@ extension AppState {
             let why = bench?.pid == nil ? "Benchmark cancelled" : "Benchmark ended without results"
             say(why)
             event("\(why): \(r.name)")
+            if bench?.pid != nil { Notify.post("Benchmark of \(r.name) ended without results") }
             return
         }
         benchResults[r.id, default: []].append(result)
         benchResults[r.id] = Array(benchResults[r.id]!.suffix(10))
         Store.save(benchResults)
         event("Benchmark of \(r.name) finished")
+        Notify.post("Benchmark of \(r.name) finished")
     }
 
     func deleteBenchmark(_ id: UUID, started: String) {

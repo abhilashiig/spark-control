@@ -5,7 +5,11 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Added
+- Notifications when a model is running, stops, stops responding or fails to start; when a download (Hugging Face, Ollama or a catalog model) finishes or fails, even with its page closed; when an install or removal finishes; and when a benchmark finishes. They show while Spark Control isn't the app in front, and can be turned off in System Settings.
+
 ### Changed
+- The app now notices when the Spark goes away (shut down or off the network) and shows it as unreachable, instead of showing "No model running".
 - Menu bar: when the Spark is offline or a model fails, the icon stays the Spark Control bolt with a small warning badge instead of switching to a generic warning triangle.
 
 ## [1.11.0] - 2026-11-16

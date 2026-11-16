@@ -1,6 +1,7 @@
 import SwiftUI
 import Network
 import ServiceManagement
+import UserNotifications
 
 enum Phase: Equatable {
     case stopped, starting, ready, stopping, offline
@@ -47,7 +48,7 @@ final class AppState {
     var route: Route?
     var checks: [Route: RouteCheck] = [:]
     /// Each model that isn't stopped, by recipe id. Several can run at once when memory and ports allow.
-    var phases: [UUID: Phase] = [:]
+    var phases: [UUID: Phase] = [:] { didSet { notifyPhases(from: oldValue) } }
     /// Set when the Spark can't be reached at all.
     var offline = false
     /// The most recently started or used model: the default for chat and for requests that name none.
@@ -67,20 +68,23 @@ final class AppState {
     var usage: [UsageRecord]
     var discovered: [String]?
     var discovering = false
-    var tf = TensorFold.Status()
+    var tf = TensorFold.Status() { didSet { notifyCatalog(from: oldValue) } }
     /// Set while the TensorFold engine is being installed or removed; its output goes here too.
-    var tfBusy = false
+    /// Every such job ends by logging its outcome, which is what the notification says.
+    var tfBusy = false {
+        didSet { if oldValue, !tfBusy, let e = logs.last(where: \.event) { Notify.post(e.text) } }
+    }
     /// TensorFold's newest stable release on GitHub, once checked.
     var tfLatest: String?
     var tfLog: [String] = []
     var tfSizes: [String: Int64] = [:]
     /// The Spark's Hugging Face cache and CLI, once read; the account its token belongs to.
-    var hf: HF.Status?
+    var hf: HF.Status? { didSet { notifyJobs(from: oldValue?.downloads, to: hf?.downloads) } }
     var hfAccount: String?
     var hfResults: [HF.Result]?
     var hfQuery = ""
     var hfSearching = false
-    var ollama: Ollama.Status?
+    var ollama: Ollama.Status? { didSet { notifyJobs(from: oldValue?.pulls, to: ollama?.pulls) } }
     var ollamaResults: [Ollama.Result]?
     /// What `ollamaResults` were searched for; empty for the most popular models.
     var ollamaQuery = ""
@@ -139,6 +143,10 @@ final class AppState {
                 if Date().timeIntervalSince(lastPull) > 60 { await pullModels() }
                 await refresh()
                 if Date().timeIntervalSince(spark.last?.date ?? .distantPast) > 10 { await sampleSpark() }
+                // Follow downloads while their pages are closed too, so finishing ones can notify.
+                if hf?.downloads.contains(where: { $0.state == .running }) == true { await hfRefresh() }
+                if ollama?.pulls.contains(where: { $0.state == .running }) == true { await ollamaRefresh() }
+                if tf.models.values.contains(where: { $0.download == .running }) { await tfRefresh() }
             }
         }
     }
@@ -349,6 +357,16 @@ final class AppState {
             offline = config.device != nil
             return
         }
+        // A fixed or already chosen route stays set when the Spark goes away, so check it still answers SSH.
+        guard await Probe.tcp(device.host(route), 22, timeout: 3) != nil else {
+            guard transition == nil, self.route == route else { return }
+            if !offline { event("Lost the Spark at \(device.host(route))") }
+            Route.allCases.forEach { SSH.disconnect(device.sshTarget($0)) }
+            offline = true
+            if device.mode == .auto { self.route = nil }  // so the loop looks for it on both routes again
+            return
+        }
+        guard transition == nil else { return }
         offline = false
         var foundExternal: String?
         for p in Array(Set([device.backendPort] + config.recipes.map(port(of:)))).sorted() {
@@ -664,6 +682,34 @@ final class AppState {
         return nil
     }
 
+    // MARK: Notifications
+
+    private func notifyPhases(from old: [UUID: Phase]) {
+        for r in config.recipes where old[r.id] != phases[r.id] {
+            switch (old[r.id], phases[r.id]) {
+            case (.starting?, .ready?): Notify.post("\(r.name) is running", "Ready as \(r.apiID)")
+            case (.stopping?, nil), (.ready?, nil): Notify.post("\(r.name) stopped")
+            case (let was, .failed(let why)?): Notify.post(was == .ready ? "\(r.name) stopped responding" : "\(r.name) didn't start", why)
+            default: break
+            }
+        }
+    }
+
+    /// A finished download's record is reported once, so this sees each finish exactly once.
+    private func notifyJobs(from old: [Job]?, to new: [Job]?) {
+        for j in new ?? [] where j.state != .running && old?.first(where: { $0.id == j.id })?.state == .running {
+            Notify.post(j.state == .done ? "Downloaded \(j.id)" : "Downloading \(j.id) failed", j.state == .done ? "" : j.last)
+        }
+    }
+
+    private func notifyCatalog(from old: TensorFold.Status) {
+        for (key, m) in tf.models where m.download != .running && old.models[key]?.download == .running {
+            let name = TensorFold.catalog.first { $0.id == key }?.name ?? VLLM.catalog.first { $0.key == key }?.name
+                ?? ComfyUI.catalog.first { $0.key == key }?.name ?? key
+            Notify.post(m.download == .failed ? "Downloading \(name) failed" : "Downloaded \(name)", m.download == .failed ? m.message : "")
+        }
+    }
+
     // MARK: Ollama
 
     func discover() async {
@@ -758,5 +804,21 @@ final class AppState {
     private func append(_ line: LogLine) {
         logs.append(line)
         if logs.count > 3000 { logs.removeFirst(logs.count - 3000) }
+    }
+}
+
+/// macOS shows these only while Spark Control isn't the frontmost app, and they can be turned off in System Settings.
+enum Notify {
+    static func post(_ title: String, _ body: String = "") {
+        // An unbundled build (`swift run`) has no bundle ID, and UNUserNotificationCenter traps without one.
+        guard Bundle.main.bundleIdentifier != nil else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        Task {
+            let center = UNUserNotificationCenter.current()
+            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return }
+            try? await center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+        }
     }
 }

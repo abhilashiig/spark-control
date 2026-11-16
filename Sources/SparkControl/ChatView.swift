@@ -35,6 +35,36 @@ struct Chat: Codable, Identifiable {
     var system = ""
     var messages: [ChatMessage] = []
     var updated = Date()
+    /// A `ThinkingEffort` raw value; nil is High. A string, so an unknown value can't fail decoding every chat.
+    var effort: String?
+}
+
+/// How long a reasoning model thinks before answering. Built on what the Spark's Qwen servers honour:
+/// enable_thinking turns thinking off, and vLLM's thinking_token_budget caps it (reasoning_effort is ignored).
+enum ThinkingEffort: String, CaseIterable, Identifiable {
+    case off, low, medium, high
+    var id: Self { self }
+    var label: String { rawValue.capitalized }
+
+    var detail: String {
+        switch self {
+        case .off: "No thinking: fastest replies"
+        case .low: "Thinks briefly, up to about 1,000 tokens"
+        case .medium: "Thinks up to about 4,000 tokens"
+        case .high: "Thinks as long as the model needs"
+        }
+    }
+
+    init(_ raw: String?) { self = raw.flatMap(Self.init(rawValue:)) ?? .high }
+
+    func apply(to body: inout [String: Any]) {
+        switch self {
+        case .off: body["chat_template_kwargs"] = ["enable_thinking": false]
+        case .low: body["thinking_token_budget"] = 1024
+        case .medium: body["thinking_token_budget"] = 4096
+        case .high: break
+        }
+    }
 }
 
 /// Chats live in chats.json next to the config. They go through the local gateway, so model
@@ -139,10 +169,11 @@ final class ChatStore {
                 messages.append(["role": "assistant", "content": m.content])
             }
         }
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": chat.model, "messages": messages,
             "stream": true, "stream_options": ["include_usage": true],
         ]
+        ThinkingEffort(chat.effort).apply(to: &body)
         return Self.post(body, baseURL: baseURL, apiKey: apiKey)
     }
 
@@ -499,6 +530,35 @@ private struct Conversation: View {
                 .fixedSize()
                 .help("Profile: the system prompt this chat uses")
                 .sheet(isPresented: $editingProfiles) { ProfilesEditor(selection: chat?.profile ?? state.config.profiles.first?.id) }
+                if current?.hasReasoning == true || chat?.effort != nil {
+                    let effort = ThinkingEffort(chat?.effort)
+                    Menu {
+                        Section("Thinking Effort") {
+                            ForEach(ThinkingEffort.allCases) { e in
+                                Toggle(isOn: Binding(get: { effort == e },
+                                                     set: { _ in store.update(chatID) { $0.effort = e == .high ? nil : e.rawValue } })) {
+                                    Text(e.label)
+                                    Text(e.detail)
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            LineIcon(symbol: "lightbulb", size: 15)
+                            Text(effort == .off ? "Thinking off" : "\(effort.label) effort").font(.system(size: 12.5))
+                        }
+                        .foregroundStyle(Color.text3)
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
+                        .hoverFill(Color.overlay(0.05))
+                        .contentShape(Rectangle())
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Thinking effort: how long the model reasons before answering. Less is faster, more is more careful.")
+                }
                 Button { editingSystem.toggle() } label: {
                     Label("Chat Instructions", systemImage: "slider.horizontal.3")
                 }

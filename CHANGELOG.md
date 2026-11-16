@@ -8,6 +8,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ### Added
 - Notifications when a model is running, stops, stops responding or fails to start; when a download (Hugging Face, Ollama or a catalog model) finishes or fails, even with its page closed; when an install or removal finishes; and when a benchmark finishes. They show while Spark Control isn't the app in front, and can be turned off in System Settings.
 - Settings → General → Appearance: System (follows macOS's light or dark mode), Light or Dark.
+- Chat: thinking effort per chat for reasoning models: Off (no thinking, fastest), Low, Medium or High (the model thinks as long as it needs, as before). Low and Medium cap how long it thinks, which is faster but can make hard answers less careful.
 - Chat: Retry under a reply generates it again from the same question (handy after an error or a weak answer). Messages after it are replaced.
 
 ### Changed

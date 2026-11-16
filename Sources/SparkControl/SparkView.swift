@@ -465,6 +465,7 @@ struct WiFiView: View {
     @State private var password = ""
     @State private var sudoError: String?
     @State private var note: String?
+    @State private var scanSheet = false
 
     var body: some View {
         Form {
@@ -474,9 +475,20 @@ struct WiFiView: View {
                     ContentUnavailableView("No Wi-Fi", systemImage: "wifi.slash",
                                            description: Text("The Spark has no Wi-Fi adapter that NetworkManager manages."))
                 } else {
-                    Section("\(status.networks.count) network\(status.networks.count == 1 ? "" : "s") nearby") {
+                    Section {
                         if status.networks.isEmpty { Text("No networks found. Try Refresh.").foregroundStyle(.secondary) }
                         ForEach(status.networks) { row($0) }
+                    } header: {
+                        Text("\(status.networks.count) network\(status.networks.count == 1 ? "" : "s") nearby")
+                    } footer: {
+                        if status.scanBlocked {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text("The Spark only scans for networks with your password, so this is its last scan and may be missing some.")
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Button("Scan with Password…") { scanSheet = true }.disabled(busy)
+                            }
+                        }
                     }
                 }
             } else if state.sshTarget == nil {
@@ -491,10 +503,16 @@ struct WiFiView: View {
         .page()
         .navigationTitle("Wi-Fi")
         .toolbar {
-            Button { Task { await load(rescan: true) } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+            Button { Task { await load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                 .disabled(state.sshTarget == nil || busy)
         }
-        .task(id: state.sshTarget) { await load(rescan: false) }
+        .task(id: state.sshTarget) { await load() }
+        .sheet(isPresented: $scanSheet) {
+            SudoPasswordSheet(title: "Scan for Networks", button: "Scan", target: state.sshTarget ?? "", error: nil) { pw in
+                await load(sudo: pw)
+                return status?.scanBlocked == true ? "That password didn't work." : nil
+            }
+        }
         .sheet(item: $joining) { n in joinSheet(n) }
         .sheet(isPresented: Binding(get: { sudoError != nil }, set: { if !$0 { sudoError = nil; pending = nil; password = "" } })) {
             SudoPasswordSheet(title: "Switch Wi-Fi", button: "Switch", target: state.sshTarget ?? "", error: sudoError) { pw in
@@ -592,9 +610,9 @@ struct WiFiView: View {
         .frame(width: 440)
     }
 
-    private func load(rescan: Bool) async {
+    private func load(sudo: String? = nil) async {
         guard let target = state.sshTarget else { return }
-        let res = await SSH.run(target, "bash -c \(SSH.quote(WiFi.listScript(rescan: rescan)))", timeout: 30)
+        let res = await SSH.run(target, "bash -c \(SSH.quote(WiFi.listScript))", timeout: 30, input: sudo ?? "")
         failed = res.code != 0
         guard !failed else { return }
         let s = WiFi.parse(res.output)
@@ -627,7 +645,7 @@ struct WiFiView: View {
             if cutOff { state.networkTrouble() }  // the shared SSH connection rode the old Wi-Fi
             try? await Task.sleep(for: .seconds(3))
             note = nil
-            await load(rescan: false)
+            await load()
         }
         return nil
     }

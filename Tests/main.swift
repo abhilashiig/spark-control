@@ -593,7 +593,8 @@ check(wifi.reachedOverWiFi && !wifi.viaTailscale, "SSH over the Wi-Fi")
 check(WiFi.parse("dev:wlan0\nssh:tailscale0\nup:wlan0\n").reachedOverWiFi, "Tailscale riding the Wi-Fi counts")
 check(!WiFi.parse("dev:wlan0\nssh:tailscale0\nup:enP7s7\n").reachedOverWiFi && !WiFi.parse("dev:wlan0\nssh:enP7s7\n").reachedOverWiFi, "wired links don't")
 check(WiFi.parse("ssh:enP7s7\n").device == nil && !WiFi.parse("ssh:enP7s7\n").reachedOverWiFi, "no Wi-Fi adapter")
-for (name, s) in [("wifi list", WiFi.listScript(rescan: true)), ("wifi switch", WiFi.switchScript("it's: \"odd\" $net"))] {
+check(WiFi.parse("noscan:1\n").scanBlocked && !wifi.scanBlocked, "refused scan noted")
+for (name, s) in [("wifi list", WiFi.listScript), ("wifi switch", WiFi.switchScript("it's: \"odd\" $net"))] {
     let (code, out) = bash(s, syntaxOnly: true)
     check(code == 0, "\(name) script parses: \(out)")
 }

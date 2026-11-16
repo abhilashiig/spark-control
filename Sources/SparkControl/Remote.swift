@@ -361,6 +361,8 @@ enum WiFi {
         var sshDevice = ""
         var uplink = ""
         var tailscale = false
+        /// The Spark refused a fresh scan, so the list may be missing networks.
+        var scanBlocked = false
         /// How the previous switch ended, read once.
         var last: String?
         var current: Network? { networks.first(where: \.inUse) }
@@ -371,18 +373,23 @@ enum WiFi {
 
     static let log = "$HOME/.cache/spark-control-wifi.log"
 
-    static func listScript(rescan: Bool) -> String {
-        """
-        nmcli -t -f DEVICE,TYPE device 2>/dev/null | awk -F: '$2=="wifi"{print "dev:"$1}'
-        nmcli -t -f NAME,TYPE connection show 2>/dev/null | awk -F: '$NF ~ /wireless/ {sub(/:[^:]*$/,""); print "saved:"$0}'
-        nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID device wifi list --rescan \(rescan ? "yes" : "auto") 2>/dev/null | sed 's/^/wifi:/'
-        set -- $SSH_CONNECTION; [ -n "$1" ] && ip -o route get "$1" 2>/dev/null | sed -n 's/.* dev \\([^ ]*\\).*/ssh:\\1/p'
-        ip -o route get 1.1.1.1 2>/dev/null | sed -n 's/.* dev \\([^ ]*\\).*/up:\\1/p'
-        tailscale status >/dev/null 2>&1 && echo ts:1
-        f="\(log)"; [ -f "$f" ] && tail -n 1 "$f" | sed 's/^/last:/' && rm -f "$f"
-        true
-        """
-    }
+    /// Asks for a fresh scan first: allowed over SSH only by polkit or sudo, so a Spark password may come on stdin.
+    /// Without one the list is NetworkManager's last scan, which can be down to the network it's on (noscan:1).
+    static let listScript = """
+    IFS= read -r sp
+    if { nmcli device wifi rescan || sudo -n nmcli device wifi rescan || { [ -n "$sp" ] && printf '%s\\n' "$sp" | sudo -S -p '' nmcli device wifi rescan; }; } >/dev/null 2>&1
+    then sleep 5; else echo noscan:1; fi
+    nmcli -t -f DEVICE,TYPE device 2>/dev/null | awk -F: '$2=="wifi"{print "dev:"$1}'
+    nmcli -t -f NAME,TYPE connection show 2>/dev/null | awk -F: '$NF ~ /wireless/ {sub(/:[^:]*$/,""); print "saved:"$0}'
+    nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID device wifi list --rescan no 2>/dev/null | sed 's/^/wifi:/'
+    # A link-local client address names its interface (fe80::…%wlan0), which ip route can't look up.
+    set -- $SSH_CONNECTION
+    case "$1" in *%*) echo "ssh:${1##*%}" ;; ?*) ip -o route get "$1" 2>/dev/null | sed -n 's/.* dev \\([^ ]*\\).*/ssh:\\1/p' ;; esac
+    ip -o route get 1.1.1.1 2>/dev/null | sed -n 's/.* dev \\([^ ]*\\).*/up:\\1/p'
+    tailscale status >/dev/null 2>&1 && echo ts:1
+    f="\(log)"; [ -f "$f" ] && tail -n 1 "$f" | sed 's/^/last:/' && rm -f "$f"
+    true
+    """
 
     static func parse(_ out: String) -> Status {
         var s = Status(), saved = Set<String>(), found: [Network] = []
@@ -395,6 +402,7 @@ enum WiFi {
             case "ssh": s.sshDevice = v
             case "up": s.uplink = v
             case "ts": s.tailscale = true
+            case "noscan": s.scanBlocked = true
             case "last": s.last = v
             case "wifi":
                 // IN-USE:SIGNAL:SECURITY:SSID. Only the SSID can hold an (escaped) colon, so it's everything after the third.

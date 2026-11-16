@@ -6,7 +6,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ## [Unreleased]
 
 ### Added
-- Wi-Fi page: see the networks the Spark's Wi-Fi can reach, with signal, security and which ones it has saved, and switch it to another. When you reach the Spark over its Wi-Fi (directly or over Tailscale), you're told first how you could lose access: the new network has to be one this Mac joins too, or have internet access for Tailscale. If the Spark can't join the new network, it goes back to the one it was on.
+- Wi-Fi page: see the networks the Spark's Wi-Fi can reach, with signal, security and which ones it has saved, and switch it to another. When you reach the Spark over its Wi-Fi (directly or over Tailscale), you're told first how you could lose access: the new network has to be one this Mac joins too, or have internet access for Tailscale. If the Spark can't join the new network, it goes back to the one it was on. The Spark only lets you scan for networks over SSH with your password, so without it the list is from the Spark's last scan, and Scan with Password… gets a fresh one.
 
 ### Changed
 - A model's API model name is fixed once it's added or first started, so renaming the model no longer changes the name your clients and chats use. Models you already have keep their current API name. To get a different one, add the model again.

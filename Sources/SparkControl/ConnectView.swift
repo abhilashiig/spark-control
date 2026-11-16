@@ -71,7 +71,7 @@ struct ConnectView: View {
             }
         }
         .page()
-        .navigationTitle("Connect")
+        .pageHeader("API Access")
     }
 
     private var code: String {

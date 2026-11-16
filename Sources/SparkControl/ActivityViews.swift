@@ -58,8 +58,7 @@ struct RequestsView: View {
                 ContentUnavailableView.search(text: search)
             }
         }
-        .searchable(text: $search, placement: .toolbar, prompt: "Search model, client, endpoint, status")
-        .navigationTitle("Requests")
+        .pageHeader("Requests") { HeaderSearch(text: $search, prompt: "Search model, client, endpoint, status", width: 280) }
     }
 
     private var detail: String {
@@ -291,13 +290,7 @@ struct UsageView: View {
             }
         }
         .page()
-        .navigationTitle("Usage")
-        .toolbar {
-            Picker("Period", selection: $period) {
-                ForEach(Period.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-        }
+        .pageHeader("Usage") { Segments(selection: $period, options: Period.allCases.map { ($0, $0.rawValue) }) }
         .confirmationDialog("Reset all usage history?", isPresented: $confirmReset) {
             Button("Reset", role: .destructive) { state.resetUsage() }
         } message: {
@@ -348,9 +341,8 @@ struct LogsView: View {
         .overlay {
             if state.logs.isEmpty { ContentUnavailableView("No Logs", systemImage: "text.alignleft") }
         }
-        .navigationTitle("Logs")
-        .toolbar {
-            Button { state.logs.removeAll() } label: { Label("Clear", systemImage: "trash") }
+        .pageHeader("Logs") {
+            Button { state.logs.removeAll() } label: { Label("Clear", systemImage: "trash") }.help("Clear Logs")
         }
     }
 }

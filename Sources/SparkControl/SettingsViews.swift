@@ -310,15 +310,13 @@ struct ShutdownButton: View {
             if working {
                 ProgressView().controlSize(.small)
             } else {
-                Button(role: .destructive) { confirm = true } label: { Image(systemName: "power") }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.red)
+                Button(role: .destructive) { confirm = true } label: { LineIcon(symbol: "power") }
+                    .buttonStyle(GhostIconStyle())
                     .disabled(state.sshTarget == nil)
                     .help("Shut Down Spark…")
                     .accessibilityLabel("Shut Down Spark")
             }
         }
-        .frame(width: 18)
         .confirmationDialog("Shut down the Spark?", isPresented: $confirm) {
             Button("Shut Down", role: .destructive) {
                 working = true

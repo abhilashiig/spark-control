@@ -251,11 +251,10 @@ struct HuggingFaceView: View {
             }
         }
         .page()
-        .navigationTitle("Hugging Face")
-        .searchable(text: $query, prompt: "Search Hugging Face models")
-        .onSubmit(of: .search) { Task { await state.hfSearch(query) } }
-        .toolbar {
+        .pageHeader("Hugging Face") {
+            HeaderSearch(text: $query, prompt: "Search Hugging Face models", width: 240) { Task { await state.hfSearch(query) } }
             Button { Task { await state.hfRefresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                .help("Refresh")
                 .disabled(state.route == nil)
         }
         .task {
@@ -493,18 +492,14 @@ struct DiscoveredView: View {
             }
         }
         .page()
-        .navigationTitle("Ollama")
-        .searchable(text: $query, prompt: "Search ollama.com")
-        .onSubmit(of: .search) {
-            Task { await state.ollamaSearch(query) }
-        }
-        .toolbar {
-            Toggle("Fits in Memory", isOn: $fitsOnly)
-                .toggleStyle(.button)
+        .pageHeader("Ollama") {
+            Segments(selection: $fitsOnly, options: [(false, "All Sizes"), (true, "Fits in Memory")])
                 .help("Show only sizes that fit in the Spark's memory")
+            HeaderSearch(text: $query, prompt: "Search ollama.com") { Task { await state.ollamaSearch(query) } }
             Button {
                 Task { await state.discover(); await state.ollamaRefresh() }
             } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                .help("Refresh")
                 .disabled(state.discovering || state.route == nil)
         }
         .task {

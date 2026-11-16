@@ -100,10 +100,12 @@ struct ModelView: View {
             }
         }
         .page()
-        .navigationTitle(r.wrappedValue.name.isEmpty ? "Untitled" : r.wrappedValue.name)
+        .pageHeader(r.wrappedValue.name.isEmpty ? "Untitled" : r.wrappedValue.name) {
+            Button { selection = .models } label: { Label("Back to Models", systemImage: "xmark") }.help("Back to Models")
+        }
         .confirmationDialog("Delete “\(r.wrappedValue.name)”?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) {
-                selection = nil
+                selection = .models
                 state.deleteRecipe(id)
             }
         } message: {
@@ -120,7 +122,7 @@ private struct ModelHeader: View {
     var body: some View {
         let phase = state.phase(for: recipe)
         HStack(spacing: 14) {
-            ModelAvatar(name: recipe.name, phase: phase, size: 52)
+            ModelAvatar(name: recipe.name, phase: phase, size: 56)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(recipe.name.isEmpty ? "Untitled" : recipe.name).font(.title2.weight(.bold))
@@ -135,22 +137,16 @@ private struct ModelHeader: View {
             }
             Spacer()
             if case .failed(let m) = phase, m.contains("Permission denied"), let target = state.sshTarget {
-                Button("Set Up Key Login…") { keyTarget = target }.controlSize(.large)
+                Button("Set Up Key Login…") { keyTarget = target }.buttonStyle(DesignButtonStyle(prominent: false)).fixedSize()
             }
             if phase.busy {
                 ProgressView().controlSize(.small)
             } else if phase == .ready {
-                Button { state.stop(recipe) } label: { Label("Stop", systemImage: "stop.fill") }
-                    .buttonStyle(.bordered).tint(.red).controlSize(.large)
+                Button("Stop") { state.stop(recipe) }
+                    .buttonStyle(DesignButtonStyle(prominent: false)).frame(width: 110)
             } else {
-                Button {
-                    state.start(recipe)
-                } label: {
-                    Label(phase.isFailure ? "Try Again" : "Start", systemImage: phase.isFailure ? "arrow.clockwise" : "play.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-                .controlSize(.large)
+                Button(phase.isFailure ? "Try again" : "Load model") { state.start(recipe) }
+                .buttonStyle(DesignButtonStyle()).frame(width: 130)
                 .disabled(!recipe.enabled || recipe.startCommand.isEmpty || state.route == nil || state.isBusy)
             }
         }

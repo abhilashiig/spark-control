@@ -59,8 +59,7 @@ struct SparkView: View {
             }
         }
         .background(Color.pageBackground)
-        .navigationTitle("Spark")
-        .toolbar {
+        .pageHeader("Overview") {
             Button { Task { await state.openDashboard() } } label: { Label("DGX Dashboard", systemImage: "safari") }
                 .help("Open NVIDIA's DGX Dashboard in your browser, through an SSH tunnel")
                 .disabled(state.route == nil)
@@ -382,9 +381,8 @@ struct SSHKeysView: View {
             }
         }
         .page()
-        .navigationTitle("SSH Keys")
-        .toolbar {
-            Button { Task { await load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+        .pageHeader("SSH Keys") {
+            Button { Task { await load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }.help("Refresh")
                 .disabled(state.sshTarget == nil || busy)
         }
         .task(id: state.sshTarget) { await load() }
@@ -501,9 +499,8 @@ struct WiFiView: View {
             }
         }
         .page()
-        .navigationTitle("Wi-Fi")
-        .toolbar {
-            Button { Task { await load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+        .pageHeader("Wi-Fi") {
+            Button { Task { await load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }.help("Refresh")
                 .disabled(state.sshTarget == nil || busy)
         }
         .task(id: state.sshTarget) { await load() }

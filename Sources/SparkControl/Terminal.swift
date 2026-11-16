@@ -140,8 +140,7 @@ struct TerminalPage: View {
                 }
             }
         }
-        .navigationTitle("Terminal")
-        .toolbar {
+        .pageHeader("Terminal") {
             Menu {
                 Picker("Theme", selection: $themeName) {
                     ForEach(TerminalTheme.all) { Text($0.name).tag($0.name) }

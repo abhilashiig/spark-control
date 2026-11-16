@@ -346,39 +346,21 @@ struct TensorFoldView: View {
     @State private var manual = false
 
     var body: some View {
-        Form {
-            Section {
-                EngineRow(removing: $removing, manual: $manual)
-                if !state.tfLog.isEmpty { LogBox(lines: state.tfLog) }
-            } header: {
-                Text("Engine")
-            } footer: {
-                if case .user = state.tf.engine {
-                    Text("Installed by you, so Spark Control uses it but never updates or removes it.")
-                } else {
-                    Text("Installs into ~/.local/share/spark-control on the Spark after checking the release checksum and signature. No sudo needed.")
-                }
-            }
-
-            Section {
+        VStack(alignment: .leading, spacing: 0) {
+            EngineRow(removing: $removing, manual: $manual)
+            CatalogSection("Tested on one GB10",
+                           "Models from TensorFold \(TensorFold.version)'s tested list, with speculative drafts and long contexts. Downloads go to the Spark's Hugging Face cache, with the drafter when TensorFold names one.") {
                 ForEach(TensorFold.catalog.filter { !$0.untested }) { m in
                     ModelRow(item: .tf(m), selection: $selection, deleting: $deleting)
                 }
-            } header: {
-                Text("Tested on One GB10")
-            } footer: {
-                Text("Models from TensorFold \(TensorFold.version)'s tested list. Downloads go to the Spark's Hugging Face cache, with the drafter when TensorFold names one, and keep going if the Mac sleeps.")
             }
-
-            Section {
+            CatalogSection("Not tested on one GB10",
+                           "TensorFold reads these checkpoints but hasn't recorded them on a single GB10, so they may refuse to start or run slower than expected. If the files are already on the Spark, Download only checks them against Hugging Face.") {
                 ForEach(TensorFold.catalog.filter(\.untested)) { m in
                     ModelRow(item: .tf(m), selection: $selection, deleting: $deleting)
                 }
-            } header: {
-                Text("Not Tested on One GB10")
-            } footer: {
-                Text("TensorFold reads these checkpoints but hasn't recorded them on a single GB10, so they may refuse to start or run slower than expected. If the files are already on the Spark, Download only checks them against Hugging Face.")
             }
+            CatalogFootnote("Downloads continue while your Mac sleeps.")
         }
         .catalogPage("TensorFold", deleting: $deleting)
         .task { if state.tfLatest == nil { state.tfLatest = await TensorFold.latestStable() } }
@@ -394,25 +376,15 @@ struct VLLMView: View {
     @State private var removing = false
 
     var body: some View {
-        Form {
-            Section {
-                VLLMEngineRow(removing: $removing)
-                if !state.tfLog.isEmpty { LogBox(lines: state.tfLog) }
-            } header: {
-                Text("Engine")
-            } footer: {
-                Text("The official vLLM \(VLLM.version) image, pinned by digest and run with Docker. No sudo needed.")
-            }
-
-            Section {
+        VStack(alignment: .leading, spacing: 0) {
+            VLLMEngineRow(removing: $removing)
+            CatalogSection("Models for vLLM",
+                           "Each fits on one GB10 and drafts tokens ahead for faster replies; each model's page sets how many. Downloads are shared with TensorFold.") {
                 ForEach(VLLM.catalog) { m in
                     ModelRow(item: .vllm(m), selection: $selection, deleting: $deleting)
                 }
-            } header: {
-                Text("NVFP4 with MTP")
-            } footer: {
-                Text("Models that fit one GB10 and carry an MTP head, which drafts tokens for faster decoding; each model's page sets how many. Downloads go to the Spark's Hugging Face cache, shared with TensorFold, and keep going if the Mac sleeps. The first start of a model loads its weights and compiles kernels, which can take 10–15 minutes.")
             }
+            CatalogFootnote("Downloads continue while your Mac sleeps. A model's first start compiles kernels and can take 10–15 minutes.")
         }
         .catalogPage("vLLM", deleting: $deleting)
         .confirmationDialog("Remove vLLM from the Spark?", isPresented: $removing) {
@@ -431,65 +403,57 @@ struct ComfyView: View {
 
     var body: some View {
         let installed = state.tf.comfyVersion != nil
-        Form {
-            Section {
-                HStack(spacing: 12) {
-                    IconTile(symbol: "photo.on.rectangle.angled", tint: .pink, size: 40)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(state.tf.comfyVersion.map { "ComfyUI \($0)" } ?? "ComfyUI isn't installed").font(.headline)
-                        Text(state.route == nil ? "The Spark is unreachable." : installed ? "Installed by Spark Control." : "Installs ComfyUI \(ComfyUI.version) with PyTorch for CUDA 13.0 in its own Python environment. About 10 GB, no sudo.")
-                            .font(.callout).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            EngineHero(symbol: "photo", title: "ComfyUI",
+                       description: "Image generation and editing on the Spark, opened in your browser.",
+                       meta: state.route == nil ? "The Spark is unreachable"
+                           : installed ? "Version \(state.tf.comfyVersion ?? "")  ·  Installed by Spark Control"
+                           : "Version \(ComfyUI.version)  ·  About 10 GB  ·  PyTorch for CUDA 13.0, no sudo") {
+                if state.tfBusy {
+                    ProgressView().controlSize(.small)
+                } else if !installed {
+                    Button("Install") { Task { await state.comfyInstall() } }
+                        .buttonStyle(PillButtonStyle(filled: true, large: true)).disabled(state.route == nil)
+                } else {
+                    if state.tf.comfyVersion != ComfyUI.version {
+                        Button("Update to \(ComfyUI.version)") { Task { await state.comfyInstall() } }
+                            .buttonStyle(PillButtonStyle(large: true)).disabled(state.route == nil)
                     }
-                    Spacer()
-                    if state.tfBusy {
-                        ProgressView().controlSize(.small)
-                    } else if !installed {
-                        Button("Install") { Task { await state.comfyInstall() } }
-                            .buttonStyle(.borderedProminent).disabled(state.route == nil)
-                    } else {
-                        if state.tf.comfyVersion != ComfyUI.version {
-                            Button("Update to \(ComfyUI.version)") { Task { await state.comfyInstall() } }.disabled(state.route == nil)
-                        }
-                        Button("Remove…", role: .destructive) { removing = true }.disabled(state.route == nil)
-                    }
+                    Button("Remove…") { removing = true }
+                        .buttonStyle(PillButtonStyle(large: true, tint: .danger)).disabled(state.route == nil)
                 }
-                .padding(.vertical, 2)
-                if !state.tfLog.isEmpty { LogBox(lines: state.tfLog) }
-            } header: {
-                Text("Engine")
-            } footer: {
+            } log: {
                 Text("Installs into ~/.local/share/spark-control/comfyui on the Spark, following NVIDIA's DGX Spark ComfyUI playbook.")
             }
 
             if installed {
-                Section {
+                CatalogSection("Server",
+                               "ComfyUI listens only on the Spark and opens on this Mac at 127.0.0.1:\(ComfyUI.localPort) through SSH, so nobody else on the network can reach it. It shares the GB10's memory with models: starting it stops the running model, and starting a model (a chat request included) stops ComfyUI.") {
                     HStack(spacing: 12) {
-                        StatusDot(phase: state.tf.comfyRunning ? .ready : .stopped)
-                        Text(state.tf.comfyRunning ? "Running" : "Stopped")
+                        Circle().fill(state.tf.comfyRunning ? Color.running : Color.clear)
+                            .overlay { if !state.tf.comfyRunning { Circle().strokeBorder(Color(light: 0xAEAEB2, dark: 0x636366), lineWidth: 1.5) } }
+                            .frame(width: 7, height: 7)
+                        Text(state.tf.comfyRunning ? "Running" : "Stopped").font(.system(size: 13)).foregroundStyle(Color.text)
                         Spacer()
                         if state.comfyBusy { ProgressView().controlSize(.small) }
                         if state.tf.comfyRunning {
-                            Button("Stop") { Task { await state.comfyStop() } }.disabled(state.comfyBusy)
+                            Button("Stop") { Task { await state.comfyStop() } }
+                                .buttonStyle(PillButtonStyle()).disabled(state.comfyBusy)
                         }
                         Button(state.tf.comfyRunning ? "Open in Browser" : "Start and Open") { Task { await state.comfyOpen() } }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(PillButtonStyle(filled: true))
                             .disabled(state.comfyBusy || state.route == nil || state.isBusy)
                     }
-                } header: {
-                    Text("Server")
-                } footer: {
-                    Text("ComfyUI listens only on the Spark and opens on this Mac at 127.0.0.1:\(ComfyUI.localPort) through SSH, so nobody else on the network can reach it. It shares the GB10's memory with models: starting it stops the running model, and starting a model (a chat request included) stops ComfyUI.")
+                    .padding(.vertical, 16)
+                    .overlay(alignment: .bottom) { Hairline() }
                 }
             }
 
-            Section {
+            CatalogSection("Starter models",
+                           "Downloaded straight onto the Spark, into ComfyUI's models folder, and resumable. ComfyUI's own Download button for missing models saves to this Mac instead, so other models are easiest to add here or on the Spark with curl or hf.") {
                 ForEach(ComfyUI.catalog) { m in
                     ModelRow(item: .comfy(m), selection: $selection, deleting: $deleting)
                 }
-            } header: {
-                Text("Starter Models")
-            } footer: {
-                Text("Downloaded straight onto the Spark, into ComfyUI's models folder, and resumable. ComfyUI's own Download button for missing models saves to this Mac instead, so other models are easiest to add here or on the Spark with curl or hf.")
             }
         }
         .catalogPage("ComfyUI", deleting: $deleting)
@@ -508,11 +472,17 @@ private struct CatalogPage: ViewModifier {
     @Binding var deleting: CatalogItem?
 
     func body(content: Content) -> some View {
-        content
-            .page()
-            .navigationTitle(title)
-            .toolbar {
+        ScrollView {
+            content
+                .frame(maxWidth: 820, alignment: .leading)
+                .padding(.horizontal, 32)
+                .padding(.top, 40)
+                .padding(.bottom, 56)
+                .frame(maxWidth: .infinity)
+        }
+            .pageHeader(title) {
                 Button { Task { await state.tfRefresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    .help("Refresh")
                     .disabled(state.route == nil)
             }
             .task {
@@ -553,63 +523,65 @@ private struct EngineRow: View {
     @State private var updating: String?
 
     var body: some View {
-        HStack(spacing: 12) {
-            IconTile(symbol: "square.stack.3d.up.fill", tint: .indigo, size: 40)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.headline)
-                Text(subtitle).font(.callout).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
-            }
-            Spacer()
+        EngineHero(symbol: "square.stack.3d.up", title: "TensorFold",
+                   description: "Builds tested on one GB10, with speculative drafts and long contexts. A good default for one person chatting or coding.",
+                   meta: meta) {
             if state.tfBusy {
                 ProgressView().controlSize(.small)
             } else {
                 switch state.tf.engine {
                 case .none:
-                    Button("Set Up Manually…") { manual = true }
+                    Button("Set Up Manually…") { manual = true }.buttonStyle(PillButtonStyle(large: true))
                     Button("Install") { Task { await state.tfInstall(state.tfTarget) } }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PillButtonStyle(filled: true, large: true))
                         .disabled(state.route == nil)
                 case .managed(let v):
-                    if !state.tf.jpeg {
-                        Button("Add JPEG Support") { Task { await state.tfAddJPEG() } }
-                            .disabled(state.route == nil)
-                    }
-                    if let p = state.tf.previous {
-                        Button("Switch Back to \(p)") { Task { await state.tfRollback() } }
-                            .disabled(state.route == nil)
-                    }
                     if TensorFold.isNewer(state.tfTarget, than: v) || TensorFold.semver(v) == nil && v != state.tfTarget {
                         Button("Update to \(state.tfTarget)…") { updating = state.tfTarget }
+                            .buttonStyle(PillButtonStyle(filled: true, large: true))
                             .disabled(state.route == nil)
                     }
-                    Button("Remove…", role: .destructive) { removing = true }
-                        .disabled(state.route == nil)
+                    Menu {
+                        if !state.tf.jpeg {
+                            Button("Add JPEG Support") { Task { await state.tfAddJPEG() } }
+                        }
+                        if let p = state.tf.previous {
+                            Button("Switch Back to \(p)") { Task { await state.tfRollback() } }
+                        }
+                        Divider()
+                        Button("Remove…", role: .destructive) { removing = true }
+                    } label: {
+                        Label("More", systemImage: "ellipsis")
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(GhostIconStyle())
+                    .menuStyle(.button).menuIndicator(.hidden).fixedSize()
+                    .disabled(state.route == nil)
+                    .help("More")
                 case .user:
                     EmptyView()
                 }
             }
+        } log: {
+            if case .user = state.tf.engine {
+                Text("Installed by you, so Spark Control uses it but never updates or removes it.")
+            } else if case .managed = state.tf.engine, !state.tf.jpeg {
+                Text("Image models refuse JPEG until libjpeg-turbo \(TensorFold.jpegVersion) is added (More → Add JPEG Support).")
+            } else {
+                Text("Installs into ~/.local/share/spark-control on the Spark after checking the release checksum and signature.")
+            }
         }
-        .padding(.vertical, 2)
         .sheet(isPresented: Binding { updating != nil } set: { if !$0 { updating = nil } }) {
             if let updating { UpdateSheet(target: updating) }
         }
     }
 
-    private var title: String {
+    private var meta: String {
+        if state.route == nil { return "The Spark is unreachable" }
         switch state.tf.engine {
-        case .none: "TensorFold isn't installed"
-        case .managed(let v): "TensorFold \(v)"
-        case .user(_, let v): v.isEmpty ? "TensorFold" : v
-        }
-    }
-
-    private var subtitle: String {
-        if state.route == nil { return "The Spark is unreachable." }
-        switch state.tf.engine {
-        case .none: return "Install TensorFold \(state.tfTarget) for the GB10, or set it up yourself."
-        case .managed: return state.tf.jpeg ? "Installed by Spark Control."
-            : "Installed by Spark Control. Image models refuse JPEG until libjpeg-turbo \(TensorFold.jpegVersion) is added."
-        case .user(let path, _): return path
+        case .none: return "Version \(state.tfTarget)  ·  Not installed  ·  No sudo"
+        case .managed(let v): return "Version \(v)  ·  Installed by Spark Control"
+        case .user(let path, let v): return (v.isEmpty ? "" : "\(v)  ·  ") + path
         }
     }
 }
@@ -668,30 +640,48 @@ struct ModelRow: View {
 
     var body: some View {
         let st = state.tf.models[item.key] ?? .init()
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.name).font(.body.weight(.medium))
-                Text(item.note).font(.callout).foregroundStyle(.secondary)
-                Text(item.sources.joined(separator: " + "))
-                    .font(.caption.monospaced()).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+        HStack(alignment: .center, spacing: 16) {
+            ModelAvatar(name: item.name, size: 48)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(item.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(Color.text)
+                    Text(source).font(.system(size: 12.5)).foregroundStyle(Color.text2).lineLimit(1)
+                }
+                .help(item.sources.joined(separator: "\n"))
+                Text(item.note).font(.system(size: 13)).foregroundStyle(Color.text3).lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 3)
                 if st.download == .running || st.download == .failed, !st.message.isEmpty {
                     Text(st.message)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(st.download == .failed ? Color.red : Color.secondary)
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .foregroundStyle(st.download == .failed ? Color.danger : Color.text2)
                         .lineLimit(2)
+                        .padding(.top, 6)
                 }
                 if st.download == .failed, let repo = gatedRepo(st.message) {
                     Text("This model is gated on Hugging Face. Access is per repository: open this exact model's page signed in as the account the Spark uses (`hf auth whoami` on the Spark), accept its terms, then Retry. If the Spark isn't signed in, run `hf auth login` on it first.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.system(size: 12)).foregroundStyle(Color.text2)
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 6)
                     Link("Open \(repo) on Hugging Face", destination: URL(string: "https://huggingface.co/\(repo)")!)
-                        .font(.caption)
+                        .font(.system(size: 12))
+                        .padding(.top, 2)
                 }
             }
-            Spacer()
-            actions(st)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 12) { actions(st) }
+                .font(.system(size: 12.5))
+                .fixedSize()
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 16)
+        .overlay(alignment: .bottom) { Hairline() }
+    }
+
+    /// Who publishes it: the Hugging Face owners of its repos ("nvidia", "nvidia + google").
+    private var source: String {
+        let owners = item.sources.compactMap { $0.contains("/") ? String($0.split(separator: "/")[0]) : nil }
+        var seen = Set<String>()
+        return owners.filter { seen.insert($0.lowercased()).inserted }.joined(separator: " + ")
     }
 
     /// The repo a "requires approval" / GatedRepo error names, else this row's first repo.
@@ -708,16 +698,13 @@ struct ModelRow: View {
         switch st.download {
         case .running:
             progress(st.bytes, of: size)
-            Button("Cancel") { Task { await state.catCancel(item) } }
+            Button("Cancel") { Task { await state.catCancel(item) } }.buttonStyle(PillButtonStyle())
         case .done:
-            Text(st.bytes.formatted(.byteCount(style: .file))).foregroundStyle(.secondary).monospacedDigit()
+            downloaded(st.bytes.formatted(.byteCount(style: .file)))
             addOrOpen(noEngine)
-            Button(role: .destructive) { deleting = item } label: { Image(systemName: "trash") }
-                .help("Delete from the Spark")
-                .disabled(state.route == nil)
+            moreMenu("Delete from the Spark")
         case .none where complete:
-            Label("On Spark", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            downloaded("On Spark")
                 .help("Already in the Spark's Hugging Face cache (\(st.bytes.formatted(.byteCount(style: .file)))), downloaded outside Spark Control.")
             addOrOpen(noEngine)
         case .failed, .none:
@@ -725,20 +712,38 @@ struct ModelRow: View {
             let tooBig = missing.map { m in state.tf.freeBytes.map { m > $0 } ?? false } ?? false
             if tooBig, let missing {
                 Text("Needs \(missing.formatted(.byteCount(style: .file))) more, not enough space")
-                    .foregroundStyle(.red).monospacedDigit()
+                    .foregroundStyle(Color.danger).monospacedDigit()
             } else if st.bytes > 0 {
                 progress(st.bytes, of: size)
             } else if let size {
-                Text(size.formatted(.byteCount(style: .file))).foregroundStyle(.secondary).monospacedDigit()
+                Text(size.formatted(.byteCount(style: .file))).foregroundStyle(Color.text2).monospacedDigit()
             }
             Button(st.download == .failed ? "Retry" : st.bytes > 0 ? "Resume" : "Download") { Task { await state.catDownload(item) } }
+                .buttonStyle(PillButtonStyle())
                 .disabled(noEngine || tooBig)
-            if st.download == .failed {
-                Button(role: .destructive) { deleting = item } label: { Image(systemName: "trash") }
-                    .help("Delete the partial download")
-                    .disabled(state.route == nil)
-            }
+                .help(noEngine ? "Install the engine first" : "")
+            if st.download == .failed { moreMenu("Delete the partial download") }
         }
+    }
+
+    private func downloaded(_ text: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
+            Text(text).monospacedDigit()
+        }
+        .foregroundStyle(Color.text2)
+    }
+
+    private func moreMenu(_ delete: String) -> some View {
+        Menu {
+            Button(delete, role: .destructive) { deleting = item }
+        } label: {
+            Label("More options for \(item.name)", systemImage: "ellipsis")
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(GhostIconStyle())
+        .menuStyle(.button).menuIndicator(.hidden).fixedSize()
+        .disabled(state.route == nil)
     }
 
     /// "12.4 GB of 41.8 GB" with a bar, or just the bytes so far while the full size is unknown.
@@ -746,32 +751,32 @@ struct ModelRow: View {
         let have = bytes.formatted(.byteCount(style: .file))
         if let size, size > 0 {
             VStack(alignment: .trailing, spacing: 2) {
-                Text("\(have) of \(size.formatted(.byteCount(style: .file)))").foregroundStyle(.secondary).monospacedDigit()
-                ProgressView(value: Double(min(bytes, size)), total: Double(size)).frame(width: 120)
+                Text("\(have) of \(size.formatted(.byteCount(style: .file)))").foregroundStyle(Color.text2).monospacedDigit()
+                ProgressView(value: Double(min(bytes, size)), total: Double(size)).frame(width: 120).tint(.brand)
             }
         } else {
             ProgressView().controlSize(.small)
-            if bytes > 0 { Text(have).foregroundStyle(.secondary).monospacedDigit() }
+            if bytes > 0 { Text(have).foregroundStyle(Color.text2).monospacedDigit() }
         }
     }
 
     @ViewBuilder private func addOrOpen(_ noEngine: Bool) -> some View {
         if case .comfy(let m) = item {
             Button("Open") { Task { await state.comfyOpen(template: m.template) } }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PillButtonStyle(filled: true))
                 .disabled(noEngine || state.comfyBusy || state.isBusy)
                 .help("Starts ComfyUI if needed and opens this model's workflow in the browser, ready for a prompt")
         } else if let id = state.catRecipeID(item) {
-            Button("Open") { selection = .model(id) }
+            Button("Open") { selection = .model(id) }.buttonStyle(PillButtonStyle())
         } else {
-            Button("Add Model") {
+            Button("Add to Models") {
                 adding = true
                 Task {
                     if let id = await state.catAdd(item) { selection = .model(id) }
                     adding = false
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PillButtonStyle(filled: true))
             .disabled(noEngine || adding)
         }
     }
@@ -782,33 +787,107 @@ private struct VLLMEngineRow: View {
     @Binding var removing: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
-            IconTile(symbol: "shippingbox.fill", tint: .teal, size: 40)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(state.tf.vllm == "ready" ? "vLLM \(VLLM.version)" : "vLLM isn't installed").font(.headline)
-                Text(subtitle).font(.callout).foregroundStyle(.secondary)
-            }
-            Spacer()
+        EngineHero(symbol: "cube", title: "vLLM",
+                   description: "High-throughput serving for many requests at once, with NVFP4 weights and multi-token prediction.",
+                   meta: meta) {
             if state.tfBusy {
                 ProgressView().controlSize(.small)
             } else if state.tf.vllm == "ready" {
-                Button("Remove…", role: .destructive) { removing = true }.disabled(state.route == nil)
+                Button("Remove…") { removing = true }
+                    .buttonStyle(PillButtonStyle(large: true, tint: .danger))
+                    .disabled(state.route == nil)
             } else {
                 Button("Install") { Task { await state.vllmInstall() } }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PillButtonStyle(filled: true, large: true))
                     .disabled(state.route == nil || state.tf.vllm == "nodocker")
             }
+        } log: {
+            if state.tf.vllm == "nodocker" {
+                Text("Docker isn't installed on the Spark. DGX OS includes it; install it to use vLLM.")
+            } else if state.tf.vllm == "ready" {
+                Text("Docker image \(VLLM.image.prefix(40))…")
+            }
         }
-        .padding(.vertical, 2)
     }
 
-    private var subtitle: String {
-        if state.route == nil { return "The Spark is unreachable." }
-        switch state.tf.vllm {
-        case "ready": return "Docker image \(VLLM.image.prefix(40))…"
-        case "nodocker": return "Docker isn't installed on the Spark. DGX OS includes it; install it to use vLLM."
-        default: return "Pulls the official vLLM \(VLLM.version) image (about 26 GB on disk) with Docker. No sudo needed."
+    private var meta: String {
+        if state.route == nil { return "The Spark is unreachable" }
+        return "Version \(VLLM.version)  ·  26 GB  ·  " + (state.tf.vllm == "ready" ? "Installed" : "Runs in Docker, no sudo")
+    }
+}
+
+/// An engine page's top: an 84pt dark tile, the name, what it's for, a version line, and its actions;
+/// below them the install log or a note. A hairline closes it off.
+struct EngineHero<Actions: View, Log: View>: View {
+    @Environment(AppState.self) private var state
+    let symbol: String
+    let title: String
+    let description: String
+    let meta: String
+    @ViewBuilder var actions: Actions
+    @ViewBuilder var log: Log
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 22) {
+                Image(systemName: symbol)
+                    .symbolVariant(.none)
+                    .font(.system(size: 34, weight: .light))
+                    .foregroundStyle(.white)
+                    .frame(width: 84, height: 84)
+                    .background(Color.ink, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title).font(.system(size: 26, weight: .bold)).tracking(-0.5).foregroundStyle(Color.text)
+                    Text(description).font(.system(size: 14)).foregroundStyle(Color.text3).lineSpacing(5)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 4)
+                    Text(meta).font(.system(size: 12.5)).foregroundStyle(Color.text2).lineLimit(2).truncationMode(.middle)
+                        .padding(.top, 8)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 8) { actions }.fixedSize()
+            }
+            Group { log }
+                .font(.system(size: 12)).foregroundStyle(Color.text2)
+                .fixedSize(horizontal: false, vertical: true)
+            if !state.tfLog.isEmpty { LogBox(lines: state.tfLog) }
         }
+        .padding(.bottom, 32)
+        .overlay(alignment: .bottom) { Hairline() }
+    }
+}
+
+/// A titled run of catalog rows: 19pt title, a short explanation, then rows between hairlines.
+struct CatalogSection<Rows: View>: View {
+    let title: String
+    let subtitle: String
+    @ViewBuilder var rows: Rows
+    init(_ title: String, _ subtitle: String, @ViewBuilder rows: () -> Rows) {
+        (self.title, self.subtitle, self.rows) = (title, subtitle, rows())
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title).font(.system(size: 19, weight: .semibold)).tracking(-0.2).foregroundStyle(Color.text)
+                .accessibilityAddTraits(.isHeader)
+            Text(subtitle).font(.system(size: 13)).foregroundStyle(Color.text2).lineSpacing(5)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 620, alignment: .leading)
+                .padding(.top, 6)
+            VStack(alignment: .leading, spacing: 0) { rows }
+                .overlay(alignment: .top) { Hairline() }
+                .padding(.top, 16)
+        }
+        .padding(.top, 32)
+    }
+}
+
+struct CatalogFootnote: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text).font(.system(size: 12.5)).foregroundStyle(Color.text2).padding(.top, 28)
     }
 }
 

@@ -10,10 +10,13 @@ struct SparkControlApp: App {
             MainView()
                 .environment(state)
                 .environment(chats)
-                .frame(minWidth: 780, minHeight: 500)
+                .frame(minWidth: 900, minHeight: 560)
                 .tint(.brand)
+                // The design is light only; the menu bar and Settings still follow the system.
+                .preferredColorScheme(.light)
         }
-        .defaultSize(width: 960, height: 640)
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1000, height: 640)
         .commands { CommandGroup(replacing: .newItem) {} }
 
         MenuBarExtra {

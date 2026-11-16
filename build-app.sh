@@ -12,7 +12,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$(swift build -c release --arch arm64 --show-bin-path)/SparkControl" "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
-codesign --force --sign - "$APP"
+# A real identity keeps the app's code identity stable across builds, so macOS remembers its Local Network
+# permission; ad-hoc signing (CI, or no certificate) makes every build a new app that macOS may silently block.
+IDENTITY="${SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development|Developer ID Application/ {print $2; exit}')}"
+codesign --force --sign "${IDENTITY:--}" "$APP"
 echo "Built $APP"
 
 if [ -n "${1:-}" ]; then

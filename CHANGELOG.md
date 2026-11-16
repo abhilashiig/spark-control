@@ -9,6 +9,10 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - Notifications when a model is running, stops, stops responding or fails to start; when a download (Hugging Face, Ollama or a catalog model) finishes or fails, even with its page closed; when an install or removal finishes; and when a benchmark finishes. They show while Spark Control isn't the app in front, and can be turned off in System Settings.
 
 ### Changed
+- New look (beta): a flat, light window with a sidebar showing the Spark and whether it's online, pages grouped under Engines, Monitor and Device, and API Access at the foot. Every page has a simple title bar with its controls; Settings is in the menu under the Spark's name. "Spark" is now called Overview and "Connect" is API Access.
+- Models is now a list of what's loaded and the rest of your library, with a memory bar and a details panel. The panel loads, stops or opens the model in Chat, and before loading shows how much memory it needs and which models it would unload. Settings and benchmarks open from the panel's Settings link or by double-clicking a model.
+- Chat: search your chats; the model and whether it's loaded sit at the top of the conversation, and the message box says what sending will load and unload. Chat statistics, Show Chat Files and deleting chats are in the conversation's More (…) menu.
+- TensorFold, vLLM and ComfyUI pages: each engine leads with its install button, and its models are listed with their size, a Download button, and Add to Models once downloaded.
 - The app now notices when the Spark goes away (shut down or off the network) and shows it as unreachable, instead of showing "No model running".
 - Menu bar: when the Spark is offline or a model fails, the icon stays the Spark Control bolt with a small warning badge instead of switching to a generic warning triangle.
 

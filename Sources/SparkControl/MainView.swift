@@ -23,59 +23,11 @@ struct MainView: View {
 
     var body: some View {
         @Bindable var state = state
-        NavigationSplitView {
-            List(selection: $selection) {
-                Section {
-                    SidebarLabel("Chat", "bubble.left.and.bubble.right.fill", .brand).tag(Pane.chat)
-                }
-                Section("Models") {
-                    SidebarLabel("All Models", "square.grid.2x2.fill", .sparkNavy).tag(Pane.models)
-                    // Only what's running (or starting, stopping, failed); the rest is on the Models page.
-                    ForEach(state.config.recipes.filter { state.phase(for: $0) != .stopped || selection == .model($0.id) }) { r in
-                        HStack(spacing: 8) {
-                            ModelAvatar(name: r.name, phase: state.phase(for: r), size: 22)
-                            Text(r.name.isEmpty ? "Untitled" : r.name)
-                                .lineLimit(1)
-                                .foregroundStyle(r.enabled ? .primary : .secondary)
-                            Spacer()
-                            if !r.enabled {
-                                Text("Off").font(.caption2).foregroundStyle(.tertiary)
-                            }
-                        }
-                        .tag(Pane.model(r.id))
-                    }
-                }
-                Section("Engines") {
-                    SidebarLabel("TensorFold", "square.stack.3d.up.fill", .indigo).tag(Pane.tensorfold)
-                    SidebarLabel("vLLM", "shippingbox.fill", .teal).tag(Pane.vllm)
-                    SidebarLabel("Ollama", "magnifyingglass", .brown).tag(Pane.discovered)
-                    SidebarLabel("Hugging Face", "face.smiling.inverse", .yellow).tag(Pane.huggingFace)
-                    SidebarLabel("ComfyUI", "photo.on.rectangle.angled", .pink).tag(Pane.comfy)
-                }
-                Section("Activity") {
-                    SidebarLabel("Spark", "gauge.with.dots.needle.67percent", .orange).tag(Pane.spark)
-                    SidebarLabel("SSH Keys", "key.fill", .yellow).tag(Pane.sshKeys)
-                    SidebarLabel("Wi-Fi", "wifi", .cyan).tag(Pane.wifi)
-                    SidebarLabel("Terminal", "terminal.fill", .mint).tag(Pane.terminal)
-                    SidebarLabel("Requests", "arrow.left.arrow.right", .blue).tag(Pane.requests)
-                    SidebarLabel("Usage", "chart.bar.xaxis", .green).tag(Pane.usage)
-                    SidebarLabel("Logs", "text.alignleft", .gray).tag(Pane.logs)
-                }
-                Section("API") {
-                    SidebarLabel("Connect", "link", .purple).tag(Pane.connect)
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 210, ideal: 230)
-            .safeAreaInset(edge: .bottom, spacing: 0) { ConnectionFooter() }
-            .toolbar {
-                ToolbarItem {
-                    Button { selection = .model(state.addRecipe()) } label: {
-                        Label("Add Model", systemImage: "plus")
-                    }
-                    .help("Add Model")
-                }
-            }
-        } detail: {
+        HStack(spacing: 0) {
+            Sidebar(selection: $selection)
+                .frame(width: 216)
+            Hairline(vertical: true)
+            Group {
             switch selection {
             case .model(let id) where state.config.recipes.contains { $0.id == id }:
                 ModelView(id: id, selection: $selection).id(id)
@@ -96,7 +48,12 @@ struct MainView: View {
             case .logs: LogsView()
             default: ContentUnavailableView("Select a Model", systemImage: "cpu")
             }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.pageBackground)
         }
+        .ignoresSafeArea(.container, edges: .top)
+        .foregroundStyle(Color.text)
         .sheet(isPresented: $state.showSetup) { DeviceSetupView() }
         .onAppear {
             guard Demo.on else { return }
@@ -114,48 +71,130 @@ struct MainView: View {
         .onChange(of: selection) { old, _ in
             if case .model(let id) = old { state.config.recipes.removeAll { $0.id == id && $0.isBlank } }
         }
-        .onAppear {
-            if selection == nil { selection = state.config.recipes.first.map { .model($0.id) } }
-        }
+        .onAppear { if selection == nil { selection = .models } }
     }
 }
 
-private struct SidebarLabel: View {
-    let title: String
-    let symbol: String
-    let tint: Color
-    init(_ title: String, _ symbol: String, _ tint: Color) { (self.title, self.symbol, self.tint) = (title, symbol, tint) }
+/// The design's sidebar: the Spark at the top, page groups, API Access and power at the foot. Flat #F3F3F5, no vibrancy.
+private struct Sidebar: View {
+    @Binding var selection: Pane?
+
     var body: some View {
-        Label { Text(title) } icon: { IconTile(symbol: symbol, tint: tint) }
+        VStack(alignment: .leading, spacing: 0) {
+            // Room for the window's traffic lights, which sit over the sidebar (the window has no title bar).
+            Color.clear.frame(height: 28).contentShape(Rectangle()).gesture(WindowDragGesture())
+            DeviceHeader()
+            Spacer().frame(height: 10)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    row("Chat", "bubble.left", .chat)
+                    row("Models", "cube", .models)
+                    group("Engines")
+                    row("TensorFold", "square.stack.3d.up", .tensorfold)
+                    row("vLLM", "cube", .vllm)
+                    row("Ollama", "tray", .discovered)
+                    row("Hugging Face", "face.smiling", .huggingFace)
+                    row("ComfyUI", "photo", .comfy)
+                    group("Monitor")
+                    row("Overview", "gauge.with.needle", .spark)
+                    row("Requests", "arrow.left.arrow.right", .requests)
+                    row("Usage", "chart.bar", .usage)
+                    row("Logs", "doc.text", .logs)
+                    group("Device")
+                    row("Terminal", "apple.terminal", .terminal)
+                    row("SSH Keys", "key", .sshKeys)
+                    row("Wi-Fi", "wifi", .wifi)
+                }
+            }
+            .scrollIndicators(.never)
+            Spacer(minLength: 20)
+            HStack(spacing: 4) {
+                row("API Access", "powerplug", .connect)
+                ShutdownButton().frame(width: 28, height: 28)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 14)
+        .background(Color.sidebar)
+    }
+
+    private func group(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Color.text2)
+            .padding(.horizontal, 8)
+            .padding(.top, 16)
+            .padding(.bottom, 4)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private func row(_ title: String, _ symbol: String, _ pane: Pane) -> some View {
+        let on = selection == pane
+        return Button { selection = pane } label: {
+            HStack(spacing: 9) {
+                LineIcon(symbol: symbol).foregroundStyle(Color.brand)
+                Text(title).font(.system(size: 13, weight: on ? .medium : .regular)).foregroundStyle(Color.text)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 30)
+            .background(on ? Color.black.opacity(0.075) : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .hoverFill(Color.black.opacity(0.04), active: on)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 
-private struct ConnectionFooter: View {
+/// The Spark this window controls, and whether it answers. The menu holds Settings.
+private struct DeviceHeader: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
-        HStack(spacing: 10) {
-            ZStack {
-                Circle().fill(tint.opacity(0.15)).frame(width: 30, height: 30)
-                Image(systemName: state.route?.symbol ?? "bolt.horizontal.circle")
-                    .font(.footnote.weight(.semibold)).foregroundStyle(tint)
+        Menu {
+            SettingsLink { Text("Settings…") }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "bolt")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(Color.ink, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(alignment: .bottomTrailing) {
+                        Circle().fill(dot).frame(width: 9, height: 9)
+                            .overlay(Circle().stroke(Color.sidebar, lineWidth: 2))
+                            .offset(x: 2, y: 2)
+                    }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.text).lineLimit(1)
+                    Text(status).font(.system(size: 11.5)).foregroundStyle(Color.text2).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 10, weight: .medium)).foregroundStyle(Color.text2)
             }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(state.route?.label ?? "Spark Unreachable").font(.callout.weight(.semibold))
-                Text(Demo.on ? "spark.local" : state.route.flatMap { r in state.config.device?.host(r) } ?? "Check Settings")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-            SettingsLink { Image(systemName: "gearshape.fill").foregroundStyle(.secondary) }
-                .buttonStyle(.borderless)
-                .help("Settings")
-            ShutdownButton()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .hoverFill(Color.black.opacity(0.04), radius: 9)
+            .contentShape(Rectangle())
         }
-        .card(padding: 12, radius: 14)
-        .padding(10)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .help(state.route.flatMap { r in state.config.device.map { "\($0.host(r)) over \(r.label)" } } ?? "")
     }
 
-    private var tint: Color { state.route == nil ? .red : state.runningRecipes.isEmpty ? .secondary : .green }
+    private var name: String {
+        if Demo.on { return "spark" }
+        guard let d = state.config.device, !d.base.isEmpty else { return "No Spark" }
+        return d.base
+    }
+
+    private var status: String {
+        if state.config.device == nil { return "Not set up" }
+        if state.offline { return "DGX Spark · Offline" }
+        return state.route == nil ? "DGX Spark · Connecting…" : "DGX Spark · Online"
+    }
+
+    private var dot: Color { state.offline || state.config.device == nil ? .red : state.route == nil ? .orange : Color.running }
 }

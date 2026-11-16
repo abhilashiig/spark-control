@@ -45,7 +45,7 @@ final class ChatStore {
     var selection: UUID?
     var streamingChat: UUID?
     @ObservationIgnored private var task: Task<Void, Never>?
-    private static let url = Store.dir.appending(path: "chats.json")
+    static let url = Store.dir.appending(path: "chats.json")
     private static let session: URLSession = {
         let c = URLSessionConfiguration.ephemeral
         c.timeoutIntervalForRequest = 900 // model switches and long prefills can take minutes
@@ -73,10 +73,11 @@ final class ChatStore {
         return c.id
     }
 
-    func delete(_ id: UUID) {
-        if streamingChat == id { stop() }
-        chats.removeAll { $0.id == id }
-        if selection == id { selection = chats.first?.id }
+    /// Attachments are stored inline in chats.json, so removing a chat removes its uploads too.
+    func delete(_ ids: Set<UUID>) {
+        if let s = streamingChat, ids.contains(s) { stop() }
+        chats.removeAll { ids.contains($0.id) }
+        if let s = selection, ids.contains(s) { selection = chats.first?.id }
         save()
     }
 
@@ -314,13 +315,15 @@ struct ChatView: View {
     @Environment(ChatStore.self) private var store
     @AppStorage("chatListWidth") private var listWidth = 260.0
     @State private var dragStart: Double?
+    @State private var picked: Set<UUID> = []
+    @State private var toDelete: Set<UUID> = []
 
     var body: some View {
         @Bindable var store = store
         // Not an HSplitView: it re-split on every chat switch (the conversation is rebuilt by .id), so the list jumped.
         // The list keeps the width dragged on its divider, shrinking only when the window is too narrow.
         HStack(spacing: 0) {
-            List(selection: $store.selection) {
+            List(selection: $picked) {
                 ForEach(store.chats) { chat in
                     let recipe = state.config.recipes.first { $0.apiID == chat.model }
                     HStack(spacing: 10) {
@@ -334,11 +337,18 @@ struct ChatView: View {
                     }
                     .padding(.vertical, 3)
                     .tag(chat.id)
-                    .contextMenu {
-                        Button("Delete Chat", role: .destructive) { store.delete(chat.id) }
-                    }
                 }
             }
+            // ⌘/⇧-click picks several chats; the conversation shows the one picked last on its own.
+            .contextMenu(forSelectionType: UUID.self) { ids in
+                if !ids.isEmpty {
+                    Button(ids.count == 1 ? "Delete Chat" : "Delete \(ids.count) Chats…", role: .destructive) { delete(ids) }
+                }
+            }
+            .onDeleteCommand { delete(picked) }
+            .onAppear { picked = store.selection.map { [$0] } ?? [] }
+            .onChange(of: picked) { if picked.count == 1 { store.selection = picked.first } }
+            .onChange(of: store.selection) { if !(store.selection.map(picked.contains) ?? picked.isEmpty) { picked = store.selection.map { [$0] } ?? [] } }
             .frame(minWidth: 170, maxWidth: listWidth)
             .layoutPriority(1) // sized first; the HStack still reserves the conversation's minimum width
 
@@ -371,7 +381,29 @@ struct ChatView: View {
         .toolbar {
             Button { store.newChat(model: defaultModel, profiles: state.config.profiles) } label: { Label("New Chat", systemImage: "square.and.pencil") }
                 .help("New Chat")
+            Menu {
+                Button("Show Chat Files in Finder") {
+                    let file = ChatStore.url
+                    if FileManager.default.fileExists(atPath: file.path) { NSWorkspace.shared.activateFileViewerSelecting([file]) }
+                    else { NSWorkspace.shared.open(Store.dir) }
+                }
+                Divider()
+                Button("Delete All Chats…", role: .destructive) { toDelete = Set(store.chats.map(\.id)) }
+                    .disabled(store.chats.isEmpty)
+            } label: { Label("More", systemImage: "ellipsis.circle") }
+                .help("More")
         }
+        .confirmationDialog(toDelete.count == store.chats.count ? "Delete all \(toDelete.count) chats?" : "Delete \(toDelete.count) chats?",
+                            isPresented: Binding(get: { !toDelete.isEmpty }, set: { if !$0 { toDelete = [] } })) {
+            Button("Delete", role: .destructive) { store.delete(toDelete); toDelete = [] }
+        } message: {
+            Text("Their messages and attachments are removed. This can't be undone.")
+        }
+    }
+
+    /// One chat goes at once, as before; several ask first.
+    private func delete(_ ids: Set<UUID>) {
+        if ids.count == 1 { store.delete(ids) } else if !ids.isEmpty { toDelete = ids }
     }
 
     private var defaultModel: String {

@@ -6,6 +6,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ## [Unreleased]
 
 ### Added
+- Chat page: ⌘- or ⇧-click several chats and delete them together (right-click or the Delete key), delete all chats from the toolbar's More menu, and open the folder holding your chats and their attachments in Finder.
 - Wi-Fi page: see the networks the Spark's Wi-Fi can reach, with signal, security and which ones it has saved, and switch it to another. When you reach the Spark over its Wi-Fi (directly or over Tailscale), you're told first how you could lose access: the new network has to be one this Mac joins too, or have internet access for Tailscale. If the Spark can't join the new network, it goes back to the one it was on. The Spark only lets you scan for networks over SSH with your password, so without it the list is from the Spark's last scan, and Scan with Password… gets a fresh one.
 
 ### Changed

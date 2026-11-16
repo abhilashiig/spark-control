@@ -431,6 +431,8 @@ enum WiFi {
     static func switchScript(_ ssid: String) -> String {
         let job = """
         exec >"$3" 2>&1
+        # connect only looks in the last scan, which goes stale without one (a scan over SSH needs this job's rights).
+        nmcli device wifi list --rescan yes >/dev/null 2>&1
         old=$(nmcli -t -f UUID,TYPE connection show --active | awk -F: '$2 ~ /wireless/ {print $1; exit}')
         r=$(if [ -n "$2" ]; then nmcli -w 45 device wifi connect "$1" password "$2"; else nmcli -w 45 device wifi connect "$1"; fi 2>&1) && { echo "Joined $1."; exit; }
         r=$(printf '%s' "$r" | tail -n 1)

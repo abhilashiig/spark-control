@@ -88,6 +88,13 @@ enum TensorFold {
               drafter: Repo(id: "z-lab/Qwen3.8-27B-DFlash2"),
               flags: ["--vision"],
               note: "orcarouter's abliterated (refusals removed) MLX 4-bit, with images and the DFlash2 drafter. Downloads only the 4-bit weights (16 GB), with the Spark's hf tool."),
+        // Nous Research's value-alignment fine-tune of Qwen3.8-27B; same 2,180 tensor names and 4-bit affine
+        // quantization as TensorFold's MLX 4-bit, so it serves the same way.
+        Model(id: "arete-27b", name: "Arete 27B",
+              repo: Repo(id: "Duckets/Arete-27B-MLX-4bit", revision: "bd3f7163ded581ead599600681f3400e7e5634e0"),
+              drafter: Repo(id: "z-lab/Qwen3.8-27B-DFlash2"),
+              flags: ["--vision"],
+              note: "Nous Research's Arete (value-aligned Qwen3.8 27B) in MLX 4-bit, with images and the DFlash2 drafter."),
         Model(id: "qwen3.6-35b-a3b", name: "Qwen3.6 35B-A3B",
               repo: Repo(id: "TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP", revision: "81169a9bc511a27c1b4eedb77a2cd98ced431847"),
               // On CUDA the MTP layer drafts only when --drafter names the checkpoint itself; without it the

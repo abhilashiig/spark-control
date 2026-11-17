@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Added
+- TensorFold: Arete 27B (Nous Research's fine-tune of Qwen3.8 27B), MLX 4-bit with images and the DFlash2 drafter.
+
 ### Fixed
 - The sidebar lists running models under Models again, as before the redesign; click one to open it.
 - The sidebar can be resized again: drag its edge. The width is remembered.

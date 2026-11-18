@@ -450,3 +450,47 @@ enum WiFi {
         """
     }
 }
+
+/// Caps the Spark's GPU clock with a systemd unit that runs `nvidia-smi -lgc` at boot, so the cap survives reboots.
+/// Stock max is 3003 MHz; capping lowers heat and power for a smaller loss in speed.
+enum GPUCap {
+    static let mhz = 2200
+    static let unitName = "gpu-clock-limit"
+
+    static let unit = """
+    [Unit]
+    Description=Cap GPU clock at \(mhz) MHz
+    After=nvidia-persistenced.service
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    ExecStart=/usr/bin/nvidia-smi -lgc 0,\(mhz)
+    ExecStop=/usr/bin/nvidia-smi -rgc
+
+    [Install]
+    WantedBy=multi-user.target
+    """
+
+    /// `bash -c script _ on|off`. Reads the Spark password for sudo from stdin (may be empty). Changes nothing, and
+    /// needs no sudo, when the Spark is already as asked. Prints __OK__ (plus __CHANGED__ if it changed something),
+    /// or __NEEDS_SUDO__ when sudo needs a (right) password.
+    static let script = #"""
+    IFS= read -r sp
+    f=/etc/systemd/system/\#(unitName).service
+    unit=\#(SSH.quote(unit))
+    if [ "$1" = on ]; then
+      [ "$(cat "$f" 2>/dev/null)" = "$unit" ] && systemctl is-enabled -q \#(unitName) && systemctl is-active -q \#(unitName) && { echo __OK__; exit; }
+      [ -x /usr/bin/nvidia-smi ] || { echo "nvidia-smi isn't installed on the Spark."; exit 1; }
+    else
+      [ -e "$f" ] || { echo __OK__; exit; }
+    fi
+    sudo -n true 2>/dev/null || { [ -n "$sp" ] && printf '%s\n' "$sp" | sudo -S -p '' -v 2>/dev/null; } || { echo __NEEDS_SUDO__; exit 3; }
+    if [ "$1" = on ]; then
+      printf '%s\n' "$unit" | sudo -n tee "$f" >/dev/null && sudo -n systemctl daemon-reload \
+        && sudo -n systemctl enable -q \#(unitName) && sudo -n systemctl restart \#(unitName)
+    else
+      sudo -n systemctl disable -q --now \#(unitName); sudo -n rm -f "$f" && sudo -n systemctl daemon-reload
+    fi && echo __CHANGED__ && echo __OK__
+    """#
+}

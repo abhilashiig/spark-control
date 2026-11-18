@@ -14,6 +14,7 @@ struct SettingsView: View {
 
 private struct DeviceSettings: View {
     @Environment(AppState.self) private var state
+    @State private var askPassword = false
 
     var body: some View {
         @Bindable var state = state
@@ -39,6 +40,27 @@ private struct DeviceSettings: View {
                     Text("Terminal")
                 } footer: {
                     Text("Uses this Mac's SSH key, so no password is asked once SSH shows a green check above.")
+                }
+                Section {
+                    Toggle(isOn: $state.config.gpuCap) {
+                        Text("Cap GPU clock at \(GPUCap.mhz) MHz")
+                        Text("Runs less hot and quieter for a small loss in speed. Checked on every connect and kept across reboots.")
+                    }
+                    if let e = state.gpuCapError {
+                        LabeledContent {
+                            Button("Enter Password…") { askPassword = true }
+                        } label: {
+                            Label(e, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        }
+                    }
+                } header: {
+                    Text("GPU")
+                }
+                .sheet(isPresented: $askPassword) {
+                    SudoPasswordSheet(title: state.config.gpuCap ? "Cap GPU Clock" : "Remove GPU Clock Cap",
+                                      button: state.config.gpuCap ? "Cap" : "Remove", target: state.sshTarget ?? "", error: nil) {
+                        await state.syncGPUCap(password: $0)
+                    }
                 }
                 Section("Advanced") {
                     TextField("Local address", text: d.localOverride, prompt: Text(d.wrappedValue.base + ".local"))

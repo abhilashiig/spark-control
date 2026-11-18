@@ -7,6 +7,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ### Added
 - TensorFold: Arete 27B (Nous Research's fine-tune of Qwen3.8 27B), MLX 4-bit with images and the DFlash2 drafter.
+- Settings → Spark: optionally cap the Spark's GPU clock at 2200 MHz (stock 3003) so it runs cooler and quieter. Off by default. Once on, it's checked every time the app connects and kept across reboots; turning it off removes the cap. Asks for your Spark password only if sudo needs one.
 
 ### Fixed
 - The sidebar lists running models under Models again, as before the redesign; click one to open it.

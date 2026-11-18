@@ -688,4 +688,10 @@ check(Jobs.parse(bash(Jobs.lines("hf"), env: jobEnv).1, "hf").map(\.id) == ["bad
 check(bash(Jobs.dismiss(HF.key("bad/repo")), env: jobEnv).0 == 0 && Jobs.parse(bash(Jobs.lines("hf"), env: jobEnv).1, "hf").isEmpty, "dismiss clears a failed job")
 try? FileManager.default.removeItem(at: jobHome)
 
+// GPU cap: does nothing (and asks for no sudo) when the Mac-side test box has no unit and no nvidia-smi.
+check(bash(GPUCap.script, syntaxOnly: true).0 == 0, "GPU cap script parses")
+check(bash("exec </dev/null; set -- off\n" + GPUCap.script).1.contains("__OK__"), "uncapping with no unit is a no-op")
+check(!bash("exec </dev/null; set -- on\n" + GPUCap.script).1.contains("__NEEDS_SUDO__"), "capping checks nvidia-smi before sudo")
+check(GPUCap.unit.contains("-lgc 0,\(GPUCap.mhz)") && GPUCap.unit.contains("-rgc"), "unit caps on start, resets on stop")
+
 print("All checks passed")

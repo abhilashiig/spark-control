@@ -106,6 +106,8 @@ final class AppState {
     var bench: (recipe: UUID, lines: [String], pid: Int?, running: Bool)?
     var benchResults = Store.loadBenchmarks()
     var gatewayError: String?
+    /// Why the GPU clock cap couldn't be set or removed, shown in Settings until it works.
+    var gpuCapError: String?
     var showSetup: Bool
     var launchAtLogin = SMAppService.mainApp.status == .enabled {
         didSet {
@@ -201,6 +203,7 @@ final class AppState {
             gateway?.start(port: config.gateway.port, lan: config.gateway.allowLAN)
         }
         if config.device != old.device { networkChanged() }
+        if config.gpuCap != old.gpuCap { Task { await syncGPUCap() } }
         if config.recipes != old.recipes || config.gateway.port != old.gateway.port || config.gateway.apiKey != old.gateway.apiKey {
             syncTools()
         }
@@ -261,7 +264,10 @@ final class AppState {
         if new != route {
             route = new
             event(new.map { "Connected via \($0.label) (\(d.host($0)))" } ?? "Spark is unreachable on both routes")
-            if new != nil { await pullModels() }
+            if new != nil {
+                await pullModels()
+                if config.gpuCap { await syncGPUCap() }
+            }
         }
     }
 
@@ -680,6 +686,27 @@ final class AppState {
         external = nil
         offline = true
         return nil
+    }
+
+    /// Makes the Spark match the GPU clock cap setting: installs the cap's boot service when on, removes it when off.
+    /// Without a password it only tries passwordless sudo; with one, `sudo -S` over stdin (never stored).
+    /// Returns an error message, or nil.
+    @discardableResult
+    func syncGPUCap(password: String? = nil) async -> String? {
+        guard let target = sshTarget else { return "The Spark is unreachable." }
+        let on = config.gpuCap
+        let res = await SSH.run(target, "bash -c \(SSH.quote(GPUCap.script)) _ \(on ? "on" : "off")", timeout: 30, input: password ?? "")
+        guard config.gpuCap == on else { return nil }  // flipped again meanwhile; that run reports instead
+        let out = res.output
+        if out.contains("__CHANGED__") {
+            event(on ? "Capped the Spark's GPU clock at \(GPUCap.mhz) MHz" : "Removed the Spark's GPU clock cap")
+        }
+        gpuCapError = out.contains("__OK__") ? nil
+            : out.contains("__NEEDS_SUDO__")
+                ? (password == nil ? "The Spark needs your password to \(on ? "cap" : "uncap") its GPU clock." : "That password didn't work.")
+                : "Couldn't change the GPU clock cap: " + out.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let e = gpuCapError { event(e) }
+        return gpuCapError
     }
 
     // MARK: Notifications

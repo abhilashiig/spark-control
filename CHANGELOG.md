@@ -15,6 +15,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ### Changed
 - Uses less memory: image thumbnails in Chat are kept small, and the Requests page keeps at most about 4 MB of request bodies (older requests drop off sooner when prompts are long).
+- Less text on every page: explanations that repeated what the controls already show are gone, and the rest are shorter. Warnings that prevent surprises (gated models, slow first starts, what a delete removes) stay.
 
 ## [1.12.0-beta.1] - 2026-11-17
 

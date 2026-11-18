@@ -43,14 +43,9 @@ struct ModelView: View {
                 TextField("Spark port", value: r.port, format: .number.grouping(.never),
                           prompt: Text("\((state.config.device?.backendPort ?? 18300).formatted(.number.grouping(.never))) (default)"))
                 TextField("Startup timeout (seconds)", value: r.timeout, format: .number.grouping(.never))
-                Toggle(isOn: r.enabled) {
-                    Text("Enabled")
-                    Text("Only enabled models can be started or requested through the API.")
-                }
+                Toggle("Enabled", isOn: r.enabled)
             } header: {
                 Text("Recipe")
-            } footer: {
-                Text("Commands run on the Spark through your shell, exactly as typed, so aliases and functions work.")
             }
 
             Section {
@@ -73,7 +68,7 @@ struct ModelView: View {
             } header: {
                 Text("API")
             } footer: {
-                Text("Clients ask for “\(r.wrappedValue.apiID)” at \(state.apiBaseURL). That name is fixed once the model is added or first started, so renaming the model doesn't break clients: add it again for a different one. It's renamed to the backend model ID before reaching the Spark. Reasoning and Image input are guessed from the model until you set them, and tell coding tools (Connect → Coding Tools) what the model can do. For TensorFold models Image input adds --vision to the start command, applied at the next start.")
+                Text("The API name stays fixed, so renaming the model doesn't break clients.")
             }
 
             Section {
@@ -84,7 +79,7 @@ struct ModelView: View {
             } header: {
                 Text("Pricing")
             } footer: {
-                Text("USD per 1M tokens. Cached prompt tokens use the cache read price. Used for usage totals and usage.cost. Nothing is billed.")
+                Text("USD per 1M tokens.")
             }
 
             Section {
@@ -92,7 +87,7 @@ struct ModelView: View {
             } header: {
                 Text("Parameter Rules")
             } footer: {
-                Text("Requests pass through unchanged unless a rule applies. Default fills in a missing value, Override always replaces it, and Remove strips it. Values are JSON (0.6, true, {\"enable_thinking\": false}) or plain text.")
+                Text("Default fills in a missing value, Override always replaces it, Remove strips it. Values are JSON or plain text.")
             }
 
             Section {
@@ -265,7 +260,7 @@ private struct TensorFoldSection: View {
                     recipe.startCommand = TensorFold.withDrafts(recipe.startCommand, $0)
                 }) {
                     Text("Speculative drafts (\(source))")
-                    Text("Faster decoding with the same replies. Off decodes one token at a time, also without copy drafts.")
+                    Text("Faster decoding, same replies.")
                 }
             }
         } header: {
@@ -276,11 +271,9 @@ private struct TensorFoldSection: View {
     }
 
     private func footer(_ c: TensorFold.Context) -> String {
-        var s = "Changes apply at the next start; the startup line in Logs shows the context and drafts in use."
-        s += " TensorFold runs as many requests at once as fit in memory at this window; if not even one fits, it refuses to start and Logs name the window that does."
-        if case .engineDefault = c { s += " TensorFold's default is 16k to 32k tokens, depending on the model." }
+        var s = "Changes apply at the next start."
         if case .yarn = c {
-            s += " YaRN changes replies at every length, not only long prompts: leave it off unless prompts go past \(model.window.formatted()) tokens. At 1M tokens a GB10 runs two requests at once, and a 1M-token prompt takes about 26 minutes to prefill."
+            s += " YaRN changes replies at every length: leave it off unless prompts go past \(model.window.formatted()) tokens."
         }
         return s
     }
@@ -312,12 +305,11 @@ private struct VLLMSection: View {
                 }
             } label: {
                 Text("MTP drafts")
-                Text("Tokens the MTP head drafts per step. Same replies, faster decoding; more isn't always faster because later drafts are accepted less often.")
             }
         } header: {
             Text("vLLM")
         } footer: {
-            Text("Changes apply at the next start. MTP also takes some memory from the KV cache (about 20% fewer cached tokens measured on a GB10). Run a benchmark after changing drafts to see which is fastest for your prompts.")
+            Text("Changes apply at the next start. More drafts aren't always faster; run a benchmark to compare.")
         }
     }
 }

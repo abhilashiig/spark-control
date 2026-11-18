@@ -29,8 +29,6 @@ struct ConnectView: View {
                 if let model { CopyRow(title: "Model name", value: model.apiID) }
             } header: {
                 Text("OpenAI-Compatible API")
-            } footer: {
-                Text("Use these in any app that supports a custom OpenAI endpoint. A request for a stopped model starts it automatically.")
             }
 
             Section {
@@ -167,14 +165,11 @@ private struct ToolsSection: View {
                     Text(tool.file.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
                 }
             }
-            Toggle(isOn: $state.config.gateway.syncTools) {
-                Text("Keep models up to date")
-                Text("When you add, rename, enable or reprice a model, tools that already list Spark Control are updated.")
-            }
+            Toggle("Keep models up to date", isOn: $state.config.gateway.syncTools)
         } header: {
             Text("Coding Tools")
         } footer: {
-            Text("Adds a “Spark Control” provider with your enabled models, their prices, and whether each reasons and takes images (set on each model's page). Kilo Code uses the OpenRouter SDK so it shows each request's cost. The previous file is kept beside it as .spark-control.bak. Restart the tool, or reload its window, to see the change.")
+            Text("Restart the tool, or reload its window, to see the change. The previous file is kept as .spark-control.bak.")
         }
     }
 

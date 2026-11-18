@@ -363,7 +363,7 @@ struct SSHKeysView: View {
     var body: some View {
         Form {
             Section {
-                Text("Each key below can log in to the Spark as you, without a password. Remove any key you don't recognise. A copy of the file from before each removal is kept as ~/.ssh/authorized_keys.spark-control.bak on the Spark.")
+                Text("Each key can log in to the Spark as you without a password. Remove any you don't recognise.")
                     .foregroundStyle(.secondary)
             }
             if let keys {

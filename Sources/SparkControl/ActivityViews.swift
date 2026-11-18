@@ -174,8 +174,6 @@ struct UsageView: View {
                     }
                 }
                 .padding(.vertical, 6)
-            } footer: {
-                Text("Counted like Kilo: In excludes cached tokens, Out excludes reasoning.")
             }
 
             Section {
@@ -208,7 +206,7 @@ struct UsageView: View {
             } header: {
                 Text("Performance")
             } footer: {
-                Text("From streamed requests. Decode counts generated tokens after the first; prefill counts uncached prompt tokens over time to first token, so heavily cached requests show low prefill. Averages are token-weighted.")
+                Text("Heavily cached requests show low prefill.")
             }
 
             Section("By Model") {
@@ -278,15 +276,11 @@ struct UsageView: View {
                 }
             } header: {
                 Text("By Client")
-            } footer: {
-                Text("Kilo Code, Pi and Hermes are named when set up from Connect → Coding Tools; other apps by the name they send (X-Title or User-Agent). Unknown = before clients were tracked.")
             }
 
             Section {
                 Button("Reset Usage…", role: .destructive) { confirmReset = true }
                     .disabled(state.usage.isEmpty)
-            } footer: {
-                Text("Costs are computed from each model's prices. Nothing is billed.")
             }
         }
         .page()

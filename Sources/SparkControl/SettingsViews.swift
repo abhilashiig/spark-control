@@ -38,13 +38,11 @@ private struct DeviceSettings: View {
                     }
                 } header: {
                     Text("Terminal")
-                } footer: {
-                    Text("Uses this Mac's SSH key, so no password is asked once SSH shows a green check above.")
                 }
                 Section {
                     Toggle(isOn: $state.config.gpuCap) {
                         Text("Cap GPU clock at \(GPUCap.mhz) MHz")
-                        Text("Runs less hot and quieter for a small loss in speed. Checked on every connect and kept across reboots.")
+                        Text("Cooler and quieter, slightly slower.")
                     }
                     if let e = state.gpuCapError {
                         LabeledContent {
@@ -203,10 +201,6 @@ struct DeviceSetupView: View {
                     .foregroundStyle(.tint)
                     .padding(.bottom, 4)
                 Text("Connect to Your Spark").font(.title2.weight(.semibold))
-                Text("Spark Control talks to your Spark over SSH and its model port. Nothing is installed on the Spark.")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 40)
             .padding(.top, 28)
@@ -277,16 +271,13 @@ private struct GatewaySettingsView: View {
             Section("Behavior") {
                 Toggle(isOn: g.autoSwap) {
                     Text("Switch models automatically")
-                    Text("A request for a stopped model stops the current one and starts it. Cold starts take a few minutes.")
+                    Text("A request for a stopped model stops the current one and starts it.")
                 }
                 Toggle(isOn: g.injectCost) {
                     Text("Add cost to responses")
-                    Text("Adds usage.cost to each response. Turn off if a client rejects extra fields.")
+                    Text("Turn off if a client rejects extra fields.")
                 }
-                Toggle(isOn: g.streamUsage) {
-                    Text("Ask for usage in streamed responses")
-                    Text("Sets stream_options.include_usage when the client didn't, so streamed requests can be costed.")
-                }
+                Toggle("Ask for usage in streamed responses", isOn: g.streamUsage)
             }
         }
         .page()

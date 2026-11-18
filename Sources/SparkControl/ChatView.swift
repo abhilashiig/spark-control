@@ -625,11 +625,7 @@ private struct Conversation: View {
                 .background(Color.pageBackground)
                 .overlay {
                     if chat?.messages.isEmpty ?? true {
-                        VStack(spacing: 6) {
-                            Text("Start a conversation").font(.system(size: 19, weight: .semibold)).foregroundStyle(Color.text)
-                            Text("Drop or paste images, PDFs or text files here to attach them.")
-                                .font(.system(size: 13)).foregroundStyle(Color.text2)
-                        }
+                        Text("Start a conversation").font(.system(size: 19, weight: .semibold)).foregroundStyle(Color.text)
                     }
                 }
                 .onChange(of: chat?.messages.last?.content.count) { proxy.scrollTo("bottom", anchor: .bottom) }
@@ -1035,7 +1031,6 @@ private struct ProfilesEditor: View {
                 .fixedSize()
                 .help("Bring back a built-in profile, or reset its prompt")
                 Spacer()
-                Text("Shared with every Mac using this Spark.").font(.caption).foregroundStyle(.secondary)
                 Button("Done") { dismiss() }.buttonStyle(.borderedProminent)
             }
             .buttonStyle(.borderless)
@@ -1086,7 +1081,6 @@ private struct ChatStats: View {
                     row("Cost", s.cost.usd)
                 }
                 .monospacedDigit()
-                Text("Speeds are token-weighted averages over the chat's replies.").font(.caption).foregroundStyle(.secondary)
             }
         }
         .frame(minWidth: 260, alignment: .leading)

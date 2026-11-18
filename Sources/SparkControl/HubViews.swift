@@ -192,7 +192,7 @@ struct HuggingFaceView: View {
                     IconTile(symbol: "person.crop.circle.fill", tint: .blue, size: 40)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(accountTitle).font(.headline)
-                        Text("Gated models (Llama, Gemma, some NVIDIA builds) download only when the Spark is signed in to an account that accepted their terms.")
+                        Text("Needed for gated models like Llama and Gemma.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -231,8 +231,6 @@ struct HuggingFaceView: View {
                 ForEach(repos.filter { $0.state != .downloading }) { RepoRow(repo: $0, deleting: $deleting) }
             } header: {
                 Text("Downloaded")
-            } footer: {
-                Text("Everything in the Spark's Hugging Face cache, whoever downloaded it: TensorFold, vLLM, ComfyUI's setup or you. A repo that's serving or downloading can't be deleted.")
             }
 
             if state.hfSearching || state.hfResults != nil {
@@ -246,7 +244,7 @@ struct HuggingFaceView: View {
                 } header: {
                     Text(state.hfQuery.isEmpty ? "Most Downloaded on Hugging Face" : "Results for “\(state.hfQuery)”")
                 } footer: {
-                    Text("Download fetches every file in the repo into the Spark's cache, so check the size: repos of GGUF files often hold every quantization. To run a model, add it from TensorFold or vLLM, or as a custom model.")
+                    Text("Download fetches every file in the repo, so check the size.")
                 }
             }
         }
@@ -399,7 +397,7 @@ private struct HFSignInSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Sign In to Hugging Face").font(.headline)
-            Text("Paste an access token (Read is enough). It's checked with Hugging Face, then saved on the Spark where hf, TensorFold and vLLM's downloads find it. Spark Control doesn't keep it.")
+            Text("Paste an access token (Read is enough). It's saved on the Spark, not this Mac.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Link("Create a token on huggingface.co", destination: URL(string: "https://huggingface.co/settings/tokens")!)

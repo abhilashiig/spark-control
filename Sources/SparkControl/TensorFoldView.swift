@@ -349,18 +349,17 @@ struct TensorFoldView: View {
         VStack(alignment: .leading, spacing: 0) {
             EngineRow(removing: $removing, manual: $manual)
             CatalogSection("Tested on one GB10",
-                           "Models from TensorFold \(TensorFold.version)'s tested list, with speculative drafts and long contexts. Downloads go to the Spark's Hugging Face cache, with the drafter when TensorFold names one.") {
+                           "From TensorFold \(TensorFold.version)'s tested list.") {
                 ForEach(TensorFold.catalog.filter { !$0.untested }) { m in
                     ModelRow(item: .tf(m), selection: $selection, deleting: $deleting)
                 }
             }
             CatalogSection("Not tested on one GB10",
-                           "TensorFold reads these checkpoints but hasn't recorded them on a single GB10, so they may refuse to start or run slower than expected. If the files are already on the Spark, Download only checks them against Hugging Face.") {
+                           "May refuse to start or run slower than expected.") {
                 ForEach(TensorFold.catalog.filter(\.untested)) { m in
                     ModelRow(item: .tf(m), selection: $selection, deleting: $deleting)
                 }
             }
-            CatalogFootnote("Downloads continue while your Mac sleeps.")
         }
         .catalogPage("TensorFold", deleting: $deleting)
         .task { if state.tfLatest == nil { state.tfLatest = await TensorFold.latestStable() } }
@@ -379,12 +378,12 @@ struct VLLMView: View {
         VStack(alignment: .leading, spacing: 0) {
             VLLMEngineRow(removing: $removing)
             CatalogSection("Models for vLLM",
-                           "Each fits on one GB10 and drafts tokens ahead for faster replies; each model's page sets how many. Downloads are shared with TensorFold.") {
+                           "Each fits on one GB10. Downloads are shared with TensorFold.") {
                 ForEach(VLLM.catalog) { m in
                     ModelRow(item: .vllm(m), selection: $selection, deleting: $deleting)
                 }
             }
-            CatalogFootnote("Downloads continue while your Mac sleeps. A model's first start compiles kernels and can take 10–15 minutes.")
+            CatalogFootnote("A model's first start compiles kernels and can take 10–15 minutes.")
         }
         .catalogPage("vLLM", deleting: $deleting)
         .confirmationDialog("Remove vLLM from the Spark?", isPresented: $removing) {
@@ -422,13 +421,11 @@ struct ComfyView: View {
                     Button("Remove…") { removing = true }
                         .buttonStyle(PillButtonStyle(large: true, tint: .danger)).disabled(state.route == nil)
                 }
-            } log: {
-                Text("Installs into ~/.local/share/spark-control/comfyui on the Spark, following NVIDIA's DGX Spark ComfyUI playbook.")
-            }
+            } log: {}
 
             if installed {
                 CatalogSection("Server",
-                               "ComfyUI listens only on the Spark and opens on this Mac at 127.0.0.1:\(ComfyUI.localPort) through SSH, so nobody else on the network can reach it. It shares the GB10's memory with models: starting it stops the running model, and starting a model (a chat request included) stops ComfyUI.") {
+                               "Starting ComfyUI stops the running model, and starting a model (a chat request included) stops ComfyUI.") {
                     HStack(spacing: 12) {
                         Circle().fill(state.tf.comfyRunning ? Color.running : Color.clear)
                             .overlay { if !state.tf.comfyRunning { Circle().strokeBorder(Color(light: 0xAEAEB2, dark: 0x636366), lineWidth: 1.5) } }
@@ -450,7 +447,7 @@ struct ComfyView: View {
             }
 
             CatalogSection("Starter models",
-                           "Downloaded straight onto the Spark, into ComfyUI's models folder, and resumable. ComfyUI's own Download button for missing models saves to this Mac instead, so other models are easiest to add here or on the Spark with curl or hf.") {
+                           "ComfyUI's own Download button saves to this Mac, not the Spark, so add models here instead.") {
                 ForEach(ComfyUI.catalog) { m in
                     ModelRow(item: .comfy(m), selection: $selection, deleting: $deleting)
                 }
@@ -524,7 +521,7 @@ private struct EngineRow: View {
 
     var body: some View {
         EngineHero(symbol: "square.stack.3d.up", title: "TensorFold",
-                   description: "Builds tested on one GB10, with speculative drafts and long contexts. A good default for one person chatting or coding.",
+                   description: "Tested on one GB10. A good default for one person chatting or coding.",
                    meta: meta) {
             if state.tfBusy {
                 ProgressView().controlSize(.small)
@@ -567,8 +564,6 @@ private struct EngineRow: View {
                 Text("Installed by you, so Spark Control uses it but never updates or removes it.")
             } else if case .managed = state.tf.engine, !state.tf.jpeg {
                 Text("Image models refuse JPEG until libjpeg-turbo \(TensorFold.jpegVersion) is added (More → Add JPEG Support).")
-            } else {
-                Text("Installs into ~/.local/share/spark-control on the Spark after checking the release checksum and signature.")
             }
         }
         .sheet(isPresented: Binding { updating != nil } set: { if !$0 { updating = nil } }) {
@@ -953,7 +948,7 @@ private struct UpdateSheet: View {
                 }
             }
             Link("All TensorFold releases on GitHub", destination: URL(string: "https://github.com/ashhart/TensorFold/releases")!)
-            Text("The release is checked against TensorFold's signing key and test-run before it replaces the installed version, which is kept so you can switch back. Running models keep their version until restarted."
+            Text("The current version is kept so you can switch back. Running models keep it until restarted."
                  + (target == TensorFold.version ? "" : " Spark Control's model list was tested with \(TensorFold.version)."))
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1037,9 +1032,6 @@ private struct ManualSetupSheet: View {
             }
             .padding(10)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-            Text("Spark Control finds tensorfold-native on your PATH. It uses a copy you installed but never updates or removes it.")
-                .font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             HStack {
                 if checking { ProgressView().controlSize(.small) }
                 if case .user(let path, _) = state.tf.engine { Label("Found at \(path)", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }

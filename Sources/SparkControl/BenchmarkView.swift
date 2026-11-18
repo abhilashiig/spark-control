@@ -129,7 +129,7 @@ struct BenchmarkSection: View {
         } header: {
             Text("Benchmark")
         } footer: {
-            Text("Runs on the Spark: one request each at 32k, 64k, 128k and 200k-token prompts (sizes past the model's context are replaced by the largest that fits), then 1, 2 and 4 concurrent 1k-token requests, 128 output tokens each. Starts the model if needed, and other models can't be switched to until it finishes. Each run is also saved on the Spark in ~/spark-bench-results.")
+            Text("Starts the model if needed. Other models can't start until it finishes.")
         }
     }
 
@@ -210,8 +210,6 @@ private struct RunComparison: View {
             }
             .monospacedDigit()
             .font(.callout)
-            Text("Decode and prefill average the single-request sizes; TTFT is at the smallest prompt; Concurrent is the best total decode. Click a run to see its details, right-click to delete it.")
-                .font(.caption).foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
     }

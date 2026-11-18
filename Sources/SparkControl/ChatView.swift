@@ -454,7 +454,10 @@ struct ChatView: View {
     /// "14:05" today, "Thu" this week, "3 Nov" before that.
     private static func day(_ d: Date) -> String {
         if Calendar.current.isDateInToday(d) { return d.formatted(date: .omitted, time: .shortened) }
-        if d > Date().addingTimeInterval(-6 * 86400) { return d.formatted(.dateTime.weekday(.abbreviated)) }
+        let cal = Calendar.current
+        if let week = cal.date(byAdding: .day, value: -6, to: cal.startOfDay(for: .now)), d >= week {
+            return d.formatted(.dateTime.weekday(.abbreviated))
+        }
         return d.formatted(.dateTime.day().month(.abbreviated))
     }
 
@@ -475,6 +478,7 @@ private struct Conversation: View {
     var onDeleteAll: () -> Void = {}
     @State private var text = ""
     @State private var showStats = false
+    @State private var controlsWidth: CGFloat = 0
     @State private var pending: [ChatAttachment] = []
     @State private var importing = false
     @State private var problem: String?
@@ -492,49 +496,21 @@ private struct Conversation: View {
         VStack(spacing: 0) {
             HStack(spacing: 2) {
                 Spacer()
-                Menu {
-                    Picker("Profile", selection: Binding(
-                        get: { chat?.profile },
-                        set: { p in store.update(chatID) { $0.profile = p } })) {
-                        ForEach(state.config.profiles) { Text($0.name.isEmpty ? "Untitled" : $0.name).tag(Optional($0.id)) }
-                        Text("No Profile").tag(UUID?.none)
-                    }
-                    .pickerStyle(.inline)
-                    Divider()
-                    Button("Edit Profiles…") { editingProfiles = true }
-                } label: {
-                    HStack(spacing: 6) {
-                        LineIcon(symbol: "person", size: 15)
-                        Text(profile?.name ?? "No Profile").font(.system(size: 12.5))
-                    }
-                    .foregroundStyle(Color.text3)
-                    .padding(.horizontal, 10)
-                    .frame(height: 28)
-                    .hoverFill(Color.overlay(0.05))
-                    .contentShape(Rectangle())
-                }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("Profile: the system prompt this chat uses")
-                .sheet(isPresented: $editingProfiles) { ProfilesEditor(selection: chat?.profile ?? state.config.profiles.first?.id) }
-                if current?.hasReasoning == true || chat?.effort != nil {
-                    let effort = ThinkingEffort(chat?.effort)
+                HStack(spacing: 2) {
                     Menu {
-                        Section("Thinking Effort") {
-                            ForEach(ThinkingEffort.allCases) { e in
-                                Toggle(isOn: Binding(get: { effort == e },
-                                                     set: { _ in store.update(chatID) { $0.effort = e == .high ? nil : e.rawValue } })) {
-                                    Text(e.label)
-                                    Text(e.detail)
-                                }
-                            }
+                        Picker("Profile", selection: Binding(
+                            get: { chat?.profile },
+                            set: { p in store.update(chatID) { $0.profile = p } })) {
+                            ForEach(state.config.profiles) { Text($0.name.isEmpty ? "Untitled" : $0.name).tag(Optional($0.id)) }
+                            Text("No Profile").tag(UUID?.none)
                         }
+                        .pickerStyle(.inline)
+                        Divider()
+                        Button("Edit Profiles…") { editingProfiles = true }
                     } label: {
                         HStack(spacing: 6) {
-                            LineIcon(symbol: "lightbulb", size: 15)
-                            Text(effort == .off ? "Thinking off" : "\(effort.label) effort").font(.system(size: 12.5))
+                            LineIcon(symbol: "person", size: 15)
+                            Text(profile?.name ?? "No Profile").font(.system(size: 12.5))
                         }
                         .foregroundStyle(Color.text3)
                         .padding(.horizontal, 10)
@@ -546,58 +522,89 @@ private struct Conversation: View {
                     .buttonStyle(.plain)
                     .menuIndicator(.hidden)
                     .fixedSize()
-                    .help("Thinking effort: how long the model reasons before answering. Less is faster, more is more careful.")
-                }
-                Button { editingSystem.toggle() } label: {
-                    Label("Chat Instructions", systemImage: "slider.horizontal.3")
-                }
-                .buttonStyle(GhostIconStyle())
-                .overlay(alignment: .topTrailing) {
-                    if chat?.system.isEmpty == false { Circle().fill(Color.brand).frame(width: 6, height: 6).offset(x: -3, y: 3) }
-                }
-                .help("Extra instructions for this chat")
-                .popover(isPresented: $editingSystem, arrowEdge: .bottom) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Instructions for This Chat").font(.headline)
-                        Text(profile.map { "Sent after the \($0.name) profile's prompt." } ?? "Sent as the system prompt.")
-                            .font(.caption).foregroundStyle(.secondary)
-                        TextEditor(text: Binding(
-                            get: { chat?.system ?? "" },
-                            set: { s in store.update(chatID) { $0.system = s } }))
-                            .font(.body)
-                            .frame(width: 380, height: 160)
-                            .scrollContentBackground(.hidden)
-                            .padding(6)
-                            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                    .help("Profile: the system prompt this chat uses")
+                    .sheet(isPresented: $editingProfiles) { ProfilesEditor(selection: chat?.profile ?? state.config.profiles.first?.id) }
+                    if current?.hasReasoning == true || chat?.effort != nil {
+                        let effort = ThinkingEffort(chat?.effort)
+                        Menu {
+                            Section("Thinking Effort") {
+                                ForEach(ThinkingEffort.allCases) { e in
+                                    Toggle(isOn: Binding(get: { effort == e },
+                                                         set: { _ in store.update(chatID) { $0.effort = e == .high ? nil : e.rawValue } })) {
+                                        Text(e.label)
+                                        Text(e.detail)
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                LineIcon(symbol: "lightbulb", size: 15)
+                                Text(effort == .off ? "Thinking off" : "\(effort.label) effort").font(.system(size: 12.5))
+                            }
+                            .foregroundStyle(Color.text3)
+                            .padding(.horizontal, 10)
+                            .frame(height: 28)
+                            .hoverFill(Color.overlay(0.05))
+                            .contentShape(Rectangle())
+                        }
+                        .menuStyle(.button)
+                        .buttonStyle(.plain)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("Thinking effort: how long the model reasons before answering. Less is faster, more is more careful.")
                     }
-                    .padding(14)
-                }
-                Menu {
-                    Button("Chat Statistics") { showStats = true }
-                    Button("Show Chat Files in Finder") {
-                        let file = ChatStore.url
-                        if FileManager.default.fileExists(atPath: file.path) { NSWorkspace.shared.activateFileViewerSelecting([file]) }
-                        else { NSWorkspace.shared.open(Store.dir) }
+                    Button { editingSystem.toggle() } label: {
+                        Label("Chat Instructions", systemImage: "slider.horizontal.3")
                     }
-                    Divider()
-                    Button("Delete Chat", role: .destructive) { store.delete([chatID]) }
-                    Button("Delete All Chats…", role: .destructive, action: onDeleteAll)
-                } label: {
-                    LineIcon(symbol: "ellipsis").foregroundStyle(Color.text3)
-                        .frame(width: 28, height: 28)
-                        .hoverFill(Color.overlay(0.05))
-                        .contentShape(Rectangle())
+                    .buttonStyle(GhostIconStyle())
+                    .overlay(alignment: .topTrailing) {
+                        if chat?.system.isEmpty == false { Circle().fill(Color.brand).frame(width: 6, height: 6).offset(x: -3, y: 3) }
+                    }
+                    .help("Extra instructions for this chat")
+                    .popover(isPresented: $editingSystem, arrowEdge: .bottom) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Instructions for This Chat").font(.headline)
+                            Text(profile.map { "Sent after the \($0.name) profile's prompt." } ?? "Sent as the system prompt.")
+                                .font(.caption).foregroundStyle(.secondary)
+                            TextEditor(text: Binding(
+                                get: { chat?.system ?? "" },
+                                set: { s in store.update(chatID) { $0.system = s } }))
+                                .font(.body)
+                                .frame(width: 380, height: 160)
+                                .scrollContentBackground(.hidden)
+                                .padding(6)
+                                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                        }
+                        .padding(14)
+                    }
+                    Menu {
+                        Button("Chat Statistics") { showStats = true }
+                        Button("Show Chat Files in Finder") {
+                            let file = ChatStore.url
+                            if FileManager.default.fileExists(atPath: file.path) { NSWorkspace.shared.activateFileViewerSelecting([file]) }
+                            else { NSWorkspace.shared.open(Store.dir) }
+                        }
+                        Divider()
+                        Button("Delete Chat", role: .destructive) { store.delete([chatID]) }
+                        Button("Delete All Chats…", role: .destructive, action: onDeleteAll)
+                    } label: {
+                        LineIcon(symbol: "ellipsis").foregroundStyle(Color.text3)
+                            .frame(width: 28, height: 28)
+                            .hoverFill(Color.overlay(0.05))
+                            .contentShape(Rectangle())
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("More")
+                    .popover(isPresented: $showStats, arrowEdge: .bottom) {
+                        ChatStats(messages: chat?.messages ?? [], window: current?.contextWindow).padding(14)
+                    }
                 }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("More")
-                .popover(isPresented: $showStats, arrowEdge: .bottom) {
-                    ChatStats(messages: chat?.messages ?? [], window: current?.contextWindow).padding(14)
-                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { controlsWidth = $0 }
             }
-            .overlay { modelMenu(chat) }
+            .overlay { modelMenu(chat).padding(.horizontal, controlsWidth + 8) }
             .padding(.leading, 16).padding(.trailing, 12).padding(.vertical, 6)
             .frame(minHeight: 52)
             .background { Color.pageBackground.gesture(WindowDragGesture()) }
@@ -672,12 +679,12 @@ private struct Conversation: View {
         } label: {
             VStack(spacing: 0) {
                 HStack(spacing: 4) {
-                    Text(current?.name ?? "Choose a model").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.text)
+                    Text(current?.name ?? "Choose a model").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.text).lineLimit(1)
                     Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.text2)
                 }
                 if let r = current {
                     let p = state.phase(for: r)
-                    Text(p == .ready ? "Running" : p == .stopped ? (state.config.gateway.autoSwap ? "Not loaded · loads when you send" : "Not loaded") : p.label)
+                    Text(state.offline ? Phase.offline.label : p == .stopped ? "Not loaded" : p.label)
                         .font(.system(size: 11)).foregroundStyle(p.isFailure ? Color.danger : Color.text2).lineLimit(1)
                 }
             }
@@ -689,12 +696,12 @@ private struct Conversation: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
-        .fixedSize()
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     /// What sending will load and unload, when the chat's model isn't running yet.
     private var swapNote: String? {
-        guard let r = current, state.phase(for: r) == .stopped, state.config.gateway.autoSwap else { return nil }
+        guard !state.offline, let r = current, state.phase(for: r) == .stopped, state.config.gateway.autoSwap else { return nil }
         let size = state.memoryNeed(r).map { String(format: " (%.0f GB)", Double($0) / 1e9) } ?? ""
         let stops = state.stopsToStart(r).map(\.name)
         return "Sending loads \(r.name)\(size)" + (stops.isEmpty ? "." : " and unloads \(stops.formatted(.list(type: .and))).")

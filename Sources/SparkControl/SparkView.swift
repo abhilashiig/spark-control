@@ -362,22 +362,25 @@ struct SSHKeysView: View {
 
     var body: some View {
         Form {
-            Section {
-                Text("Each key can log in to the Spark as you without a password. Remove any you don't recognise.")
-                    .foregroundStyle(.secondary)
-            }
             if let keys {
+                Section {
+                    Text("Each key can log in to the Spark as you without a password. Remove any you don't recognise.")
+                        .foregroundStyle(.secondary)
+                }
                 Section("\(keys.count) authorized key\(keys.count == 1 ? "" : "s")") {
                     if keys.isEmpty { Text("No keys.").foregroundStyle(.secondary) }
                     ForEach(keys) { row($0) }
                 }
-            } else if state.sshTarget == nil {
-                ContentUnavailableView("Spark unreachable", systemImage: "key.slash")
-            } else if failed {
+            } else if state.sshTarget != nil, !failed {
+                ProgressView().frame(maxWidth: .infinity)
+            }
+        }
+        .overlay {
+            if keys == nil, state.sshTarget == nil {
+                ContentUnavailableView("Spark unreachable", systemImage: "bolt.horizontal.circle")
+            } else if keys == nil, failed {
                 ContentUnavailableView("Couldn't read the keys", systemImage: "key.slash",
                                        description: Text("The Spark didn't answer in time. Try Refresh."))
-            } else {
-                ProgressView().frame(maxWidth: .infinity)
             }
         }
         .page()
@@ -489,13 +492,16 @@ struct WiFiView: View {
                         }
                     }
                 }
-            } else if state.sshTarget == nil {
-                ContentUnavailableView("Spark unreachable", systemImage: "wifi.slash")
-            } else if failed {
+            } else if state.sshTarget != nil, !failed {
+                ProgressView().frame(maxWidth: .infinity)
+            }
+        }
+        .overlay {
+            if status == nil, state.sshTarget == nil {
+                ContentUnavailableView("Spark unreachable", systemImage: "bolt.horizontal.circle")
+            } else if status == nil, failed {
                 ContentUnavailableView("Couldn't read the Wi-Fi", systemImage: "wifi.exclamationmark",
                                        description: Text("The Spark didn't answer in time. Try Refresh."))
-            } else {
-                ProgressView().frame(maxWidth: .infinity)
             }
         }
         .page()

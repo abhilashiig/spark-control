@@ -405,7 +405,7 @@ struct ComfyView: View {
         VStack(alignment: .leading, spacing: 0) {
             EngineHero(symbol: "photo", title: "ComfyUI",
                        description: "Image generation and editing on the Spark, opened in your browser.",
-                       meta: state.route == nil ? "The Spark is unreachable"
+                       meta: state.route == nil ? "Spark unreachable"
                            : installed ? "Version \(state.tf.comfyVersion ?? "")  ·  Installed by Spark Control"
                            : "Version \(ComfyUI.version)  ·  About 10 GB  ·  PyTorch for CUDA 13.0, no sudo") {
                 if state.tfBusy {
@@ -572,7 +572,7 @@ private struct EngineRow: View {
     }
 
     private var meta: String {
-        if state.route == nil { return "The Spark is unreachable" }
+        if state.route == nil { return "Spark unreachable" }
         switch state.tf.engine {
         case .none: return "Version \(state.tfTarget)  ·  Not installed  ·  No sudo"
         case .managed(let v): return "Version \(v)  ·  Installed by Spark Control"
@@ -806,7 +806,7 @@ private struct VLLMEngineRow: View {
     }
 
     private var meta: String {
-        if state.route == nil { return "The Spark is unreachable" }
+        if state.route == nil { return "Spark unreachable" }
         return "Version \(VLLM.version)  ·  26 GB  ·  " + (state.tf.vllm == "ready" ? "Installed" : "Runs in Docker, no sudo")
     }
 }

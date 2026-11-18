@@ -12,6 +12,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ### Fixed
 - The sidebar lists running models under Models again, as before the redesign; click one to open it.
 - The sidebar can be resized again: drag its edge. The width is remembered.
+- Chat: the model name no longer runs into the profile and effort buttons in a narrow window, and says "Spark unreachable" instead of promising to load the model while the Spark is offline.
+- Chat list: a chat from six days ago shows its weekday like the rest of that day's chats, not its date.
+- Wi-Fi and SSH Keys show "Spark unreachable" centred on the page, like Terminal, instead of in a card.
 
 ### Changed
 - Uses less memory: image thumbnails in Chat are kept small, and the Requests page keeps at most about 4 MB of request bodies (older requests drop off sooner when prompts are long).

@@ -92,7 +92,7 @@ private struct Sidebar: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     row("Chat", "bubble.left", .chat)
-                    row("Models", "cube", .models)
+                    row("Models", "cpu", .models)
                     // Only what's running (or starting, stopping, failed), and the open one; the rest is on Models.
                     ForEach(state.config.recipes.filter { state.phase(for: $0) != .stopped || selection == .model($0.id) }) { r in
                         item(r.name.isEmpty ? "Untitled" : r.name, .model(r.id)) {

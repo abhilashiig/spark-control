@@ -131,7 +131,7 @@ struct TerminalPage: View {
                     // The view form: a plain colour background would extend under the sidebar and toolbar glass and tint them.
                     .background { Color(nsColor: TerminalTheme.named(themeName).backgroundColor) }
             } else if state.sshTarget == nil {
-                ContentUnavailableView("Spark unreachable", systemImage: "terminal")
+                ContentUnavailableView("Spark unreachable", systemImage: "bolt.horizontal.circle")
             } else {
                 ContentUnavailableView {
                     Label("No shells open", systemImage: "terminal")

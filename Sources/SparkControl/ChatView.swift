@@ -489,7 +489,7 @@ private struct Conversation: View {
     private var chat: Chat? { store.index(chatID).map { store.chats[$0] } }
     private var profile: ChatProfile? { state.config.profiles.first { $0.id == chat?.profile } }
     private var streaming: Bool { store.streamingChat == chatID }
-    private var models: [Recipe] { state.config.recipes.filter(\.enabled) }
+    private var models: [Recipe] { state.config.recipes.filter { $0.enabled && !$0.isEmbedding } }
 
     var body: some View {
         let chat = chat

@@ -60,6 +60,9 @@ final class AppState {
     var notice: String?
     /// Bumped after writing a tool's config, so the Connect page re-reads its status.
     var toolsChanged = Date()
+    /// Setting up Kilo's codebase indexing: true while the embedding model starts, then nil or what went wrong.
+    var indexingBusy = false
+    var indexingError: String?
     @ObservationIgnored private var toolSync: Task<Void, Never>?
     /// A model is serving on the Spark that no recipe matches.
     var external: String?
@@ -209,7 +212,8 @@ final class AppState {
         }
     }
 
-    var toolModels: [Recipe] { config.recipes.filter { $0.enabled && !$0.isBlank } }
+    var toolModels: [Recipe] { config.recipes.filter { $0.enabled && !$0.isBlank && !$0.isEmbedding } }
+    var embeddingModel: Recipe? { config.recipes.first { $0.enabled && !$0.isBlank && $0.isEmbedding } }
     var toolGateway: ClientTool.Gateway {
         // Most clients refuse an empty key, so give them a harmless one when none is set.
         .init(baseURL: apiBaseURL, apiKey: config.gateway.apiKey.isEmpty ? "sk-local" : config.gateway.apiKey)
@@ -224,6 +228,33 @@ final class AppState {
             event("⚠︎ Couldn't update \(tool.name): \(error.localizedDescription)")
         }
         toolsChanged = Date()
+    }
+
+    /// Sends one embedding through the gateway, starting the model if it must, to learn its vector size (and that it
+    /// works), then points Kilo's codebase indexing at it.
+    func setUpKiloIndexing(_ r: Recipe) async {
+        indexingBusy = true
+        indexingError = nil
+        defer { indexingBusy = false; toolsChanged = Date() }
+        do {
+            let g = toolGateway
+            var req = URLRequest(url: URL(string: g.baseURL + "/embeddings")!, timeoutInterval: r.timeout + 120)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue("Bearer \(g.apiKey)", forHTTPHeaderField: "Authorization")
+            req.setValue(ClientTool.kilo.name, forHTTPHeaderField: ClientTool.header)
+            req.httpBody = Transform.serialize(["model": r.apiID, "input": "func main() {}"])
+            let (data, _) = try await URLSession.shared.data(for: req)
+            let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            guard let v = (obj?["data"] as? [[String: Any]])?.first?["embedding"] as? [Any], !v.isEmpty else {
+                throw AppError(((obj?["error"] as? [String: Any])?["message"] as? String) ?? "\(r.name) didn't return an embedding.")
+            }
+            try ClientTool.kilo.write { try ClientTool.kiloIndexing($0, model: r.apiID, dimension: v.count, gateway: g) }
+            event("Kilo Code now indexes codebases with \(r.name) (\(v.count) dimensions)")
+        } catch {
+            indexingError = error.localizedDescription
+            event("⚠︎ Couldn't set up Kilo's indexing: \(error.localizedDescription)")
+        }
     }
 
     /// Keeps tools that already list Spark Control on the current models, a moment after the last edit.

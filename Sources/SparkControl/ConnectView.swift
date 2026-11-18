@@ -137,6 +137,7 @@ private struct CopyRow: View {
 /// reasons and takes images.
 private struct ToolsSection: View {
     @Environment(AppState.self) private var state
+    @State private var replacing: String?
 
     var body: some View {
         @Bindable var state = state
@@ -165,11 +166,57 @@ private struct ToolsSection: View {
                     Text(tool.file.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
                 }
             }
+            if FileManager.default.fileExists(atPath: ClientTool.kilo.folder.path) {
+                indexing(gateway)
+            }
             Toggle("Keep models up to date", isOn: $state.config.gateway.syncTools)
         } header: {
             Text("Coding Tools")
         } footer: {
             Text("Restart the tool, or reload its window, to see the change. The previous file is kept as .spark-control.bak.")
+        }
+    }
+
+    /// One click points Kilo's codebase indexing at the first enabled embedding model, after a warning when that
+    /// replaces indexing settings of its own.
+    @ViewBuilder private func indexing(_ g: ClientTool.Gateway) -> some View {
+        let model = state.embeddingModel
+        let ix = ClientTool.kiloIndexing(in: (try? String(contentsOf: ClientTool.kilo.file, encoding: .utf8)) ?? "")
+        let current = (ix?["model"] as? String).map { m in ((ix?["provider"] as? String).map { $0 + " · " } ?? "") + m }
+        let usesSpark = model != nil && ix?["enabled"] as? Bool == true && ix?["model"] as? String == model?.apiID
+            && (ix?["openai-compatible"] as? [String: Any])?["baseUrl"] as? String == g.baseURL
+        LabeledContent {
+            HStack(spacing: 8) {
+                if state.indexingBusy {
+                    ProgressView().controlSize(.small)
+                    Text("Starting \(model?.name ?? "model")…").foregroundStyle(.secondary)
+                } else if let model, usesSpark {
+                    Text(model.name).foregroundStyle(.secondary)
+                } else if let model {
+                    Button("Set Up") {
+                        if let current { replacing = current } else { Task { await state.setUpKiloIndexing(model) } }
+                    }
+                } else {
+                    Text("No embedding model").foregroundStyle(.secondary)
+                }
+            }
+        } label: {
+            Text("Kilo Code indexing")
+            if let e = state.indexingError, !state.indexingBusy {
+                Text(e).foregroundStyle(.red)
+            } else if model == nil {
+                Text("Add Qwen3 Embedding 0.6B from the vLLM catalog to index codebases on the Spark.")
+            } else {
+                Text("Semantic codebase search, with embeddings made on the Spark.")
+            }
+        }
+        .alert("Replace Kilo Code's indexing settings?", isPresented: Binding { replacing != nil } set: { if !$0 { replacing = nil } }) {
+            Button("Replace", role: .destructive) {
+                if let model { Task { await state.setUpKiloIndexing(model) } }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Kilo Code indexes with \(replacing ?? "another provider") now. It will use \(model?.name ?? "the Spark") instead, for every workspace, and re-index each codebase from scratch. The previous file is kept as .spark-control.bak.")
         }
     }
 

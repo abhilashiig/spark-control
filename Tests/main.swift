@@ -481,6 +481,20 @@ check(kp["other"] != nil && kj["model"] as? String == "openrouter/x" && sc["npm"
 check(try! ClientTool.kilo.apply(to: kiloOut, models: [vl, textOnly], gateway: gw) == kiloOut && ClientTool.kilo.isAdded(kiloOut),
       "Kilo: applying twice changes nothing")
 
+let ixIn = #"{"indexing": {"provider": "openrouter", "model": "openai/text-embedding-3-small", "dimension": 1536, "vectorStore": "lancedb", "openrouter": {"apiKey": "k"}}, "model": "x"}"#
+let ix = ClientTool.kiloIndexing(in: try! ClientTool.kiloIndexing(ixIn, model: "qwen3-embedding-0.6b", dimension: 1024, gateway: gw))!
+check(ix["enabled"] as? Bool == true && ix["provider"] as? String == "openai-compatible" && ix["model"] as? String == "qwen3-embedding-0.6b"
+      && ix["dimension"] as? Int == 1024 && (ix["openai-compatible"] as? [String: Any])?["baseUrl"] as? String == "http://localhost:18080/v1"
+      && ix["vectorStore"] as? String == "lancedb" && (ix["openrouter"] as? [String: Any])?["apiKey"] as? String == "k"
+      && ClientTool.kiloIndexing(in: "") == nil,
+      "Kilo indexing: provider, model and dimension replaced; other providers' keys and the vector store kept")
+let emb = VLLM.model("qwen3-embedding-0.6b")!
+let embStart = VLLM.startCommand(emb, port: 1, name: "e")
+check(embStart.contains("--runner pooling") && !embStart.contains("--speculative-config") && !embStart.contains("--enable-prefix-caching")
+      && Recipe(name: "E", startCommand: "x", stopCommand: "", vllm: emb.id).isEmbedding
+      && Recipe(name: "nomic-embed-text", startCommand: "x", stopCommand: "").isEmbedding && !vl.isEmbedding,
+      "embedding models: served with the pooling runner, without drafts; told apart from chat models")
+
 let piOut = try! ClientTool.pi.apply(to: #"{"providers": {"homelab": {"baseUrl": "http://x"}}}"#, models: [vl], gateway: gw)
 let pp = (try! JSONSerialization.jsonObject(with: Data(piOut.utf8)) as! [String: Any])["providers"] as! [String: Any]
 let pm = ((pp["spark-control"] as! [String: Any])["models"] as! [[String: Any]])[0]

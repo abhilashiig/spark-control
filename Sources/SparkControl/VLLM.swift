@@ -34,6 +34,8 @@ enum VLLM {
         /// a fixed size (memory minus this), which skips vLLM's start-up memory profiling: on the GB10's unified
         /// memory that check fails ("Error in memory profiling") whenever free memory moves while it measures.
         var footprintGB: Double?
+        /// An embedding model (served with the pooling runner, for /v1/embeddings) rather than a chat model.
+        var embedding = false
         var note: String
 
         /// Download records live in TensorFold's data folder, so they get a prefix no TensorFold model has.
@@ -74,6 +76,12 @@ enum VLLM {
               repo: .init(id: "nvidia/Gemma-4-26B-A4B-NVFP4", revision: "a19cfe00be84568a6867111c9a68c9c44fdcffe6"),
               drafter: .init(id: "google/gemma-4-26B-A4B-it-assistant"), memoryGB: 45,
               note: "NVIDIA NVFP4 with Google's MTP assistant. Two drafted tokens measured 1.7–1.8× over none on a GB10, and beat four."),
+        // 1.2 GB of BF16 weights; 6 GB is the least the memory setting goes to. Code chunks are short, so 8k
+        // tokens is plenty, and many sequences at once because indexers send batches of chunks.
+        Model(id: "qwen3-embedding-0.6b", name: "Qwen3 Embedding 0.6B",
+              repo: .init(id: "Qwen/Qwen3-Embedding-0.6B", revision: "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"),
+              suggested: 0, window: 32_768, startWindow: 8_192, memoryGB: 6, maxSeqs: 64, embedding: true,
+              note: "Small embedding model for codebase indexing (1024 dimensions). Set it up for Kilo Code on the Connect page."),
     ]
 
     static func model(_ id: String?) -> Model? { catalog.first { $0.id == id } }
@@ -147,7 +155,7 @@ enum VLLM {
                     "-e HF_HUB_OFFLINE=1", image,
                     m.repo.id] + (m.repo.revision.map { ["--revision", $0] } ?? [])
         args += ["--served-model-name", name, "--api-key", "\"$(cat \"\(TensorFold.dataDir)/api-key\")\"",
-                 "--max-num-seqs \(m.maxSeqs)", "--enable-prefix-caching"]
+                 "--max-num-seqs \(m.maxSeqs)", m.embedding ? "--runner pooling" : "--enable-prefix-caching"]
         args += m.parsers + m.flags
         let cmd = withMemory(withContext(args.joined(separator: " "), m.startWindow ?? m.window), m.memoryGB, total: total,
                              footprint: m.footprintGB)

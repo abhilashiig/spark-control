@@ -296,7 +296,7 @@ private struct VLLMSection: View {
                     Text($0 == model.window ? "Full window (\($0.formatted()))" : "\($0.formatted()) tokens").tag($0)
                 }
             }
-            Picker(selection: Binding { drafts } set: {
+            if !model.embedding { Picker(selection: Binding { drafts } set: {
                 recipe.startCommand = VLLM.withDrafts(recipe.startCommand, $0, model: model)
             }) {
                 Text("Off").tag(0)
@@ -305,7 +305,7 @@ private struct VLLMSection: View {
                 }
             } label: {
                 Text("MTP drafts")
-            }
+            } }
         } header: {
             Text("vLLM")
         } footer: {

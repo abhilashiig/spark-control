@@ -119,6 +119,9 @@ struct Recipe: Codable, Identifiable, Hashable {
             : images ?? ids.contains(#/qwen3\.[6-9]|gemma-?\s?4|[-\s]vl\b|vision/#)
     }
 
+    /// Serves /v1/embeddings, not chat: kept out of chat model lists, offered for codebase indexing.
+    var isEmbedding: Bool { VLLM.model(vllm)?.embedding ?? ids.contains("embed") }
+
     /// Added with + but never given a start command: never saved or shared.
     var isBlank: Bool { startCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 

@@ -72,6 +72,27 @@ enum ClientTool: String, CaseIterable, Identifiable {
         }
     }
 
+    // MARK: Kilo codebase indexing
+
+    /// Points Kilo's codebase indexing at an embedding model on the gateway, on for every workspace. Kilo knows no
+    /// dimensions for OpenAI-compatible models, so it's given. Other providers' keys and the vector store stay.
+    static func kiloIndexing(_ text: String, model: String, dimension: Int, gateway: Gateway) throws -> String {
+        try mergeJSON(text) { root in
+            var ix = root["indexing"] as? [String: Any] ?? [:]
+            ix["enabled"] = true
+            ix["provider"] = "openai-compatible"
+            ix["model"] = model
+            ix["dimension"] = dimension
+            ix["openai-compatible"] = ["baseUrl": gateway.baseURL, "apiKey": gateway.apiKey]
+            root["indexing"] = ix
+        }
+    }
+
+    /// Kilo's `indexing` settings; nil when there are none or the file can't be read.
+    static func kiloIndexing(in text: String) -> [String: Any]? {
+        (try? JSONSerialization.jsonObject(with: Data(text.utf8), options: .json5Allowed) as? [String: Any])?["indexing"] as? [String: Any]
+    }
+
     // MARK: Per-tool provider entries
 
     /// Kilo (an OpenCode fork) only shows a request's cost with OpenRouter's SDK, which reads `usage.cost` from the
@@ -222,8 +243,12 @@ enum ClientTool: String, CaseIterable, Identifiable {
 
     /// Writes the provider in, keeping the previous file as `<name>.spark-control.bak`.
     func write(models: [Recipe], gateway: Gateway) throws {
+        try write { try apply(to: $0, models: models, gateway: gateway) }
+    }
+
+    func write(_ edit: (String) throws -> String) throws {
         let old = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
-        let new = try apply(to: old, models: models, gateway: gateway)
+        let new = try edit(old)
         guard new != old else { return }
         if !old.isEmpty {
             try old.write(to: file.appendingPathExtension("spark-control.bak"), atomically: true, encoding: .utf8)

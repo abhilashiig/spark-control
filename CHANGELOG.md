@@ -6,6 +6,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ## [Unreleased]
 
 ### Added
+- Codebase indexing on the Spark: add Qwen3 Embedding 0.6B (a small embedding model) from the vLLM catalog, then click Set Up next to Kilo Code indexing on the Connect page. It replaces Kilo Code's indexing provider (after a warning if one is set) and turns indexing on for every workspace. Embedding models stay out of Chat and the coding tools' model lists.
 - TensorFold: Arete 27B (Nous Research's fine-tune of Qwen3.8 27B), MLX 4-bit with images and the DFlash2 drafter.
 - Settings → Spark: optionally cap the Spark's GPU clock at 2200 MHz (stock 3003) so it runs cooler and quieter. Off by default. Once on, it's checked every time the app connects and kept across reboots; turning it off removes the cap. Asks for your Spark password only if sudo needs one.
 

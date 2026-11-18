@@ -5,6 +5,10 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-11-18
+
+The redesign is out of beta. This release includes everything in 1.12.0-beta.1, plus:
+
 ### Added
 - Codebase indexing on the Spark: pull a small embedding model with Ollama (say `qwen3-embedding:0.6b`), then click Set Up next to Kilo Code indexing on the Connect page. Any model with "embed" in its name is offered, from a menu when there are several; it's added and turned on if needed. It replaces Kilo Code's indexing provider (after a warning if one is set) and turns indexing on for every workspace. Embedding models stay out of Chat and the coding tools' model lists.
 - TensorFold: Arete 27B (Nous Research's fine-tune of Qwen3.8 27B), MLX 4-bit with images and the DFlash2 drafter.

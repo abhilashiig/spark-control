@@ -6,7 +6,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ## [Unreleased]
 
 ### Added
-- Codebase indexing on the Spark: pull a small embedding model with Ollama (say `qwen3-embedding:0.6b`), add it, then click Set Up next to Kilo Code indexing on the Connect page. It replaces Kilo Code's indexing provider (after a warning if one is set) and turns indexing on for every workspace. Embedding models stay out of Chat and the coding tools' model lists.
+- Codebase indexing on the Spark: pull a small embedding model with Ollama (say `qwen3-embedding:0.6b`), then click Set Up next to Kilo Code indexing on the Connect page. Any model with "embed" in its name is offered, from a menu when there are several; it's added and turned on if needed. It replaces Kilo Code's indexing provider (after a warning if one is set) and turns indexing on for every workspace. Embedding models stay out of Chat and the coding tools' model lists.
 - TensorFold: Arete 27B (Nous Research's fine-tune of Qwen3.8 27B), MLX 4-bit with images and the DFlash2 drafter.
 - Settings → Spark: optionally cap the Spark's GPU clock at 2200 MHz (stock 3003) so it runs cooler and quieter. Off by default. Once on, it's checked every time the app connects and kept across reboots; turning it off removes the cap. Asks for your Spark password only if sudo needs one.
 
@@ -18,7 +18,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - Wi-Fi and SSH Keys show "Spark unreachable" centred on the page, like Terminal, instead of in a card.
 
 ### Changed
-- Models added from Ollama use port 11434, Ollama's default, so they can run beside models on the Spark's model port. Ollama on the Spark must listen on `0.0.0.0:11434`.
+- Models added from Ollama work with a stock Ollama install: they use port 11434, Ollama's default, so they can run beside models on the Spark's model port, and start and stop through Ollama's API instead of `ollama-start` / `ollama-stop` shell commands. Installing Ollama from the app now opens it to your Mac on that port; an existing install needs `OLLAMA_HOST=0.0.0.0:11434` set for its service.
 - Uses less memory: image thumbnails in Chat are kept small, and the Requests page keeps at most about 4 MB of request bodies (older requests drop off sooner when prompts are long).
 - Less text on every page: explanations that repeated what the controls already show are gone, and the rest are shorter. Warnings that prevent surprises (gated models, slow first starts, what a delete removes) stay.
 

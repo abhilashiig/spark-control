@@ -246,6 +246,20 @@ enum Ollama {
     /// on the Spark so this Mac can reach it.
     static let defaultPort = 11434
 
+    /// Start and stop commands that need nothing but a stock install: start the service if it's down (the way pulls
+    /// do), then load the model and keep it loaded until stopped. Embedding models only accept /api/embed; others
+    /// load with an empty /api/generate. Stopping unloads the model and leaves the service up.
+    static func commands(_ name: String, embedding: Bool) -> (start: String, stop: String) {
+        let api = "http://localhost:\(defaultPort)/api"
+        func call(_ keep: Int) -> String {
+            let body = embedding ? #"{"model":"\#(name)","input":"x","keep_alive":\#(keep)}"# : #"{"model":"\#(name)","keep_alive":\#(keep)}"#
+            return "curl -sSf \(api)/\(embedding ? "embed" : "generate") -d \(SSH.quote(body)) >/dev/null"
+        }
+        let start = "curl -sf \(api)/version >/dev/null || sudo -n systemctl start ollama; "
+            + "for i in $(seq 60); do curl -sf \(api)/version >/dev/null && break; sleep 1; done; " + call(-1)
+        return (start, call(0))
+    }
+
     struct Tag: Hashable {
         /// What `ollama pull` takes, e.g. qwen3.8:27b-q4_K_M.
         var name: String
@@ -367,5 +381,10 @@ enum Ollama {
     static func dismissScript(_ name: String) -> String { Jobs.dismiss(key(name)) }
 
     /// ollama.com's installer, run as root: it adds a system service, which over SSH can't ask for a password midway.
-    static let installCommand = "sh -c " + SSH.quote("curl -fsSL https://ollama.com/install.sh | sh")
+    /// The service listens only on localhost by default; the drop-in opens it to this Mac on the default port.
+    static let installCommand = "sh -c " + SSH.quote("""
+        curl -fsSL https://ollama.com/install.sh | sh && mkdir -p /etc/systemd/system/ollama.service.d \
+        && printf '[Service]\\nEnvironment="OLLAMA_HOST=0.0.0.0:\(defaultPort)"\\n' > /etc/systemd/system/ollama.service.d/spark-control.conf \
+        && systemctl daemon-reload && systemctl restart ollama
+        """)
 }

@@ -491,6 +491,12 @@ check(ix["enabled"] as? Bool == true && ix["provider"] as? String == "openai-com
 check(Recipe(name: "qwen3-embedding", startCommand: "x", stopCommand: "").isEmbedding
       && Recipe(name: "nomic-embed-text", startCommand: "x", stopCommand: "").isEmbedding && !vl.isEmbedding,
       "embedding models are told apart from chat models")
+let oe = Ollama.commands("qwen3-embedding:0.6b", embedding: true), oc = Ollama.commands("qwen3:8b", embedding: false)
+check(oe.start.hasSuffix(#"/api/embed -d '{"model":"qwen3-embedding:0.6b","input":"x","keep_alive":-1}' >/dev/null"#)
+      && oe.stop.hasSuffix(#""keep_alive":0}' >/dev/null"#)
+      && oc.start.hasSuffix(#"/api/generate -d '{"model":"qwen3:8b","keep_alive":-1}' >/dev/null"#)
+      && oc.start.hasPrefix("curl -sf http://localhost:11434/api/version >/dev/null || sudo -n systemctl start ollama;"),
+      "Ollama models load and unload through its API: embedding models through /api/embed")
 
 let piOut = try! ClientTool.pi.apply(to: #"{"providers": {"homelab": {"baseUrl": "http://x"}}}"#, models: [vl], gateway: gw)
 let pp = (try! JSONSerialization.jsonObject(with: Data(piOut.utf8)) as! [String: Any])["providers"] as! [String: Any]

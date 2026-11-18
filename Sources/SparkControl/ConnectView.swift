@@ -138,6 +138,7 @@ private struct CopyRow: View {
 private struct ToolsSection: View {
     @Environment(AppState.self) private var state
     @State private var replacing: String?
+    @State private var picked: String?
 
     var body: some View {
         @Bindable var state = state
@@ -177,24 +178,36 @@ private struct ToolsSection: View {
         }
     }
 
-    /// One click points Kilo's codebase indexing at the first enabled embedding model, after a warning when that
-    /// replaces indexing settings of its own.
+    /// Points Kilo's codebase indexing at an embedding model (any with "embed" in its name), picked from a menu when
+    /// there are several, after a warning when that replaces the indexing settings Kilo has.
     @ViewBuilder private func indexing(_ g: ClientTool.Gateway) -> some View {
-        let model = state.embeddingModel
+        let all = state.embedders
         let ix = ClientTool.kiloIndexing(in: (try? String(contentsOf: ClientTool.kilo.file, encoding: .utf8)) ?? "")
         let current = (ix?["model"] as? String).map { m in ((ix?["provider"] as? String).map { $0 + " · " } ?? "") + m }
-        let usesSpark = model != nil && ix?["enabled"] as? Bool == true && ix?["model"] as? String == model?.apiID
-            && (ix?["openai-compatible"] as? [String: Any])?["baseUrl"] as? String == g.baseURL
+        let inUse = ix?["enabled"] as? Bool == true && (ix?["openai-compatible"] as? [String: Any])?["baseUrl"] as? String == g.baseURL
+            ? all.first { $0.recipe?.apiID == ix?["model"] as? String } : nil
+        let chosen = all.first { $0.id == picked } ?? inUse ?? all.first
         LabeledContent {
             HStack(spacing: 8) {
                 if state.indexingBusy {
                     ProgressView().controlSize(.small)
-                    Text("Starting \(model?.name ?? "model")…").foregroundStyle(.secondary)
-                } else if let model, usesSpark {
-                    Text(model.name).foregroundStyle(.secondary)
-                } else if let model {
-                    Button("Set Up") {
-                        if let current { replacing = current } else { Task { await state.setUpKiloIndexing(model) } }
+                    Text("Starting \(chosen?.name ?? "model")…").foregroundStyle(.secondary)
+                } else if let chosen {
+                    if all.count > 1 {
+                        Picker("Embedding model", selection: Binding { chosen.id } set: { picked = $0 }) {
+                            ForEach(all) { Text($0.name).tag($0.id) }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    } else {
+                        Text(chosen.name).foregroundStyle(.secondary)
+                    }
+                    if chosen == inUse {
+                        Text("In use").foregroundStyle(.secondary)
+                    } else {
+                        Button(inUse == nil ? "Set Up" : "Switch") {
+                            if let current { replacing = current } else { Task { await state.setUpKiloIndexing(chosen) } }
+                        }
                     }
                 } else {
                     Text("No embedding model").foregroundStyle(.secondary)
@@ -204,19 +217,20 @@ private struct ToolsSection: View {
             Text("Kilo Code indexing")
             if let e = state.indexingError, !state.indexingBusy {
                 Text(e).foregroundStyle(.red)
-            } else if model == nil {
-                Text("Pull an embedding model with Ollama (say qwen3-embedding:0.6b) and add it to index codebases on the Spark.")
+            } else if all.isEmpty {
+                Text("Pull a model with \"embed\" in its name on the Ollama page, say qwen3-embedding:0.6b.")
             } else {
                 Text("Semantic codebase search, with embeddings made on the Spark.")
             }
         }
+        .task { if state.discovered == nil { await state.discover() } }
         .alert("Replace Kilo Code's indexing settings?", isPresented: Binding { replacing != nil } set: { if !$0 { replacing = nil } }) {
             Button("Replace", role: .destructive) {
-                if let model { Task { await state.setUpKiloIndexing(model) } }
+                if let chosen { Task { await state.setUpKiloIndexing(chosen) } }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Kilo Code indexes with \(replacing ?? "another provider") now. It will use \(model?.name ?? "the Spark") instead, for every workspace, and re-index each codebase from scratch. The previous file is kept as .spark-control.bak.")
+            Text("Kilo Code indexes with \(replacing ?? "another provider") now. It will use \(chosen?.name ?? "the Spark") instead, for every workspace, and re-index each codebase from scratch. The previous file is kept as .spark-control.bak.")
         }
     }
 

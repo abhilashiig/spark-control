@@ -213,7 +213,19 @@ final class AppState {
     }
 
     var toolModels: [Recipe] { config.recipes.filter { $0.enabled && !$0.isBlank && !$0.isEmbedding } }
-    var embeddingModel: Recipe? { config.recipes.first { $0.enabled && !$0.isBlank && $0.isEmbedding } }
+
+    /// A model that makes embeddings: added here (`recipe`), or pulled with Ollama but not added yet.
+    struct Embedder: Identifiable, Hashable {
+        var id: String
+        var name: String
+        var recipe: Recipe?
+    }
+
+    var embedders: [Embedder] {
+        config.recipes.filter { !$0.isBlank && $0.isEmbedding }.map { Embedder(id: $0.id.uuidString, name: $0.name, recipe: $0) }
+            + (discovered ?? []).filter { $0.lowercased().contains("embed") && recipeID(forOllama: $0) == nil }
+                .map { Embedder(id: "ollama:" + $0, name: $0, recipe: nil) }
+    }
     var toolGateway: ClientTool.Gateway {
         // Most clients refuse an empty key, so give them a harmless one when none is set.
         .init(baseURL: apiBaseURL, apiKey: config.gateway.apiKey.isEmpty ? "sk-local" : config.gateway.apiKey)
@@ -230,9 +242,13 @@ final class AppState {
         toolsChanged = Date()
     }
 
-    /// Sends one embedding through the gateway, starting the model if it must, to learn its vector size (and that it
-    /// works), then points Kilo's codebase indexing at it.
-    func setUpKiloIndexing(_ r: Recipe) async {
+    /// Adds the model if it was only pulled and turns it on, sends one embedding through the gateway, starting the
+    /// model if it must, to learn its vector size (and that it works), then points Kilo's codebase indexing at it.
+    func setUpKiloIndexing(_ e: Embedder) async {
+        let id = e.recipe?.id ?? addRecipe(fromOllama: e.name)
+        guard let i = config.recipes.firstIndex(where: { $0.id == id }) else { return }
+        config.recipes[i].enabled = true
+        let r = config.recipes[i]
         indexingBusy = true
         indexingError = nil
         defer { indexingBusy = false; toolsChanged = Date() }
@@ -797,9 +813,9 @@ final class AppState {
 
     func addRecipe(fromOllama name: String) -> UUID {
         let short = name.split(separator: "/").last.map { String($0.split(separator: ":")[0]) } ?? name
-        var r = Recipe(name: short, startCommand: "ollama-start \(name)", stopCommand: "ollama-stop",
-                       upstreamModel: name, enabled: false)
+        var r = Recipe(name: short, startCommand: "", stopCommand: "", upstreamModel: name, enabled: false)
         r.port = Ollama.defaultPort
+        (r.startCommand, r.stopCommand) = Ollama.commands(name, embedding: r.isEmbedding)
         config.recipes.append(r)
         return r.id
     }

@@ -53,7 +53,7 @@ Chats get a title automatically, and you can edit and resend any message.
 - **Connect** gives you the URL, the API key and ready-to-paste code.
 - **Coding tools set up in one click:** adds your models to **Kilo Code**, **Pi** and **Hermes**, with
   prices and whether each model reasons or takes images, and keeps them up to date. One more click points
-  Kilo Code's codebase indexing at a small embedding model on the Spark (Qwen3 Embedding 0.6B, from the vLLM catalog).
+  Kilo Code's codebase indexing at a small embedding model on the Spark, pulled with Ollama.
 - Only apps on your Mac can reach it, unless you choose to allow other devices.
 
 ### 📊 See what's happening

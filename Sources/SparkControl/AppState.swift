@@ -797,8 +797,9 @@ final class AppState {
 
     func addRecipe(fromOllama name: String) -> UUID {
         let short = name.split(separator: "/").last.map { String($0.split(separator: ":")[0]) } ?? name
-        let r = Recipe(name: short, startCommand: "ollama-start \(name)", stopCommand: "ollama-stop",
+        var r = Recipe(name: short, startCommand: "ollama-start \(name)", stopCommand: "ollama-stop",
                        upstreamModel: name, enabled: false)
+        r.port = Ollama.defaultPort
         config.recipes.append(r)
         return r.id
     }

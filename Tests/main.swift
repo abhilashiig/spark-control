@@ -488,12 +488,9 @@ check(ix["enabled"] as? Bool == true && ix["provider"] as? String == "openai-com
       && ix["vectorStore"] as? String == "lancedb" && (ix["openrouter"] as? [String: Any])?["apiKey"] as? String == "k"
       && ClientTool.kiloIndexing(in: "") == nil,
       "Kilo indexing: provider, model and dimension replaced; other providers' keys and the vector store kept")
-let emb = VLLM.model("qwen3-embedding-0.6b")!
-let embStart = VLLM.startCommand(emb, port: 1, name: "e")
-check(embStart.contains("--runner pooling") && !embStart.contains("--speculative-config") && !embStart.contains("--enable-prefix-caching")
-      && Recipe(name: "E", startCommand: "x", stopCommand: "", vllm: emb.id).isEmbedding
+check(Recipe(name: "qwen3-embedding", startCommand: "x", stopCommand: "").isEmbedding
       && Recipe(name: "nomic-embed-text", startCommand: "x", stopCommand: "").isEmbedding && !vl.isEmbedding,
-      "embedding models: served with the pooling runner, without drafts; told apart from chat models")
+      "embedding models are told apart from chat models")
 
 let piOut = try! ClientTool.pi.apply(to: #"{"providers": {"homelab": {"baseUrl": "http://x"}}}"#, models: [vl], gateway: gw)
 let pp = (try! JSONSerialization.jsonObject(with: Data(piOut.utf8)) as! [String: Any])["providers"] as! [String: Any]

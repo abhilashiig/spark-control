@@ -120,7 +120,7 @@ struct Recipe: Codable, Identifiable, Hashable {
     }
 
     /// Serves /v1/embeddings, not chat: kept out of chat model lists, offered for codebase indexing.
-    var isEmbedding: Bool { VLLM.model(vllm)?.embedding ?? ids.contains("embed") }
+    var isEmbedding: Bool { ids.contains("embed") }
 
     /// Added with + but never given a start command: never saved or shared.
     var isBlank: Bool { startCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }

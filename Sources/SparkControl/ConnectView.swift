@@ -205,7 +205,7 @@ private struct ToolsSection: View {
             if let e = state.indexingError, !state.indexingBusy {
                 Text(e).foregroundStyle(.red)
             } else if model == nil {
-                Text("Add Qwen3 Embedding 0.6B from the vLLM catalog to index codebases on the Spark.")
+                Text("Pull an embedding model with Ollama (say qwen3-embedding:0.6b) and add it to index codebases on the Spark.")
             } else {
                 Text("Semantic codebase search, with embeddings made on the Spark.")
             }

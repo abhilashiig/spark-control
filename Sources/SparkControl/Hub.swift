@@ -242,6 +242,10 @@ enum HF {
 /// Ollama on the Spark: install, search ollama.com's library with each tag's download size, and pull. ollama.com has
 /// no search API, so results are read from its pages.
 enum Ollama {
+    /// Ollama's own default, so it can run beside models on the Spark's model port. Set OLLAMA_HOST=0.0.0.0:11434
+    /// on the Spark so this Mac can reach it.
+    static let defaultPort = 11434
+
     struct Tag: Hashable {
         /// What `ollama pull` takes, e.g. qwen3.8:27b-q4_K_M.
         var name: String

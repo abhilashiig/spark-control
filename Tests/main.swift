@@ -701,7 +701,9 @@ let hfJobs = Jobs.parse(jobOut, "hf")
 check((try? String(contentsOf: jobHome.appending(path: "hf-args"), encoding: .utf8)).map { $0.hasPrefix("download ") } == true, "the download runs hf download")
 check(hfJobs.count == 2 && hfJobs.contains { $0.id == "ok/repo" && $0.state == .done }
       && hfJobs.contains { $0.id == "bad/repo" && $0.state == .failed && $0.last.contains("33%") }, "jobs report done and failed with the last progress line: \(jobOut)")
-check(Jobs.parse(bash(Jobs.lines("hf"), env: jobEnv).1, "hf").map(\.id) == ["bad/repo"], "a finished job's records are removed once reported")
+let jobAgain = bash(Jobs.lines("hf"), env: jobEnv)
+check(Jobs.parse(jobAgain.1, "hf").map(\.id) == ["bad/repo"], "a finished job's records are removed once reported")
+check(jobAgain.0 == 0, "the job report exits 0 when the last job isn't done, or the refresh drops it")
 check(bash(Jobs.dismiss(HF.key("bad/repo")), env: jobEnv).0 == 0 && Jobs.parse(bash(Jobs.lines("hf"), env: jobEnv).1, "hf").isEmpty, "dismiss clears a failed job")
 try? FileManager.default.removeItem(at: jobHome)
 

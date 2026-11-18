@@ -15,6 +15,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - The sidebar can be resized again: drag its edge. The width is remembered.
 - Chat: the model name no longer runs into the profile and effort buttons in a narrow window, and says "Spark unreachable" instead of promising to load the model while the Spark is offline.
 - Chat list: a chat from six days ago shows its weekday like the rest of that day's chats, not its date.
+- Ollama pulls and Hugging Face downloads now show their progress. A pull that was still running or had failed stopped the page from updating, so it looked like nothing was happening.
 - Wi-Fi and SSH Keys show "Spark unreachable" centred on the page, like Terminal, instead of in a card.
 
 ### Changed

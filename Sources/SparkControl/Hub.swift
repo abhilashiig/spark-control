@@ -36,7 +36,7 @@ enum Jobs {
           if [ -f "$D/$k.pid" ] && kill -0 "$(cat "$D/$k.pid")" 2>/dev/null; then st=running
           elif [ -f "$D/$k.ok" ]; then st=done; else st=failed; fi
           echo "JOB|\#(prefix)|${k#\#(prefix)-}|$st|$(tail -c 3000 "$l" | tr '\r' '\n' | sed 's/\x1b\[[0-9;?]*[A-Za-z]//g' | grep -v '^[[:space:]]*$' | tail -1)"
-          [ $st = done ] && rm -f "${D:?}/${k:?}.log" "${D:?}/${k:?}.pid" "${D:?}/${k:?}.ok"
+          if [ $st = done ]; then rm -f "${D:?}/${k:?}.log" "${D:?}/${k:?}.pid" "${D:?}/${k:?}.ok"; fi
         done
         """#
     }

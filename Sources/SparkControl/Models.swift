@@ -110,13 +110,13 @@ struct Recipe: Codable, Identifiable, Hashable {
     private var ids: String { (name + " " + upstreamModel).lowercased() }
     // ponytail: name heuristics for common Spark models; the toggles on the model's page override them.
     var hasReasoning: Bool {
-        reasoning ?? ids.contains(#/qwen3|nemotron|deepseek|gpt-oss|gemma-?\s?4|glm|kimi|think|laguna/#)
+        reasoning ?? (startCommand.contains("--reasoning-parser") || ids.contains(#/qwen3|nemotron|deepseek|gpt-oss|gemma-?\s?4|glm|kimi|think|laguna/#))
     }
     /// TensorFold serves images only with --vision, so its start command decides; elsewhere the toggle,
     /// else families that ship a vision encoder.
     var takesImages: Bool {
         tensorfold != nil ? startCommand.contains(" --vision")
-            : images ?? ids.contains(#/qwen3\.[6-9]|gemma-?\s?4|[-\s]vl\b|vision/#)
+            : images ?? ids.contains(#/qwen3\.[6-9]|gemma-?\s?4|[-\s]vl\b|vision|inkling/#)
     }
 
     /// Serves /v1/embeddings, not chat: kept out of chat model lists, offered for codebase indexing.

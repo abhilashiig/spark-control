@@ -346,6 +346,10 @@ check(viStart.contains(vi.image! + " thinkingmachines/Inkling-2-Mini") && !viSta
       && VLLM.downloadScript(vi).contains("docker pull " + vi.image!) && VLLM.deleteScript(vi).contains("docker rmi " + vi.image!)
       && VLLM.statusLines.contains("IMG='" + vi.image! + "' m 'vllm-inkling-2-mini'") && !VLLM.downloadScript(vg).contains("docker pull"),
       "Inkling runs, downloads and deletes with its own image; other models use the shared one")
+var viRecipe = Recipe(name: "Inkling 2 Mini", startCommand: viStart, stopCommand: "", upstreamModel: "inkling-2-mini")
+check(viRecipe.hasReasoning && viRecipe.takesImages, "Inkling counts as reasoning (its --reasoning-parser) and takes images")
+viRecipe.reasoning = false
+check(!viRecipe.hasReasoning, "the reasoning toggle still overrides the guess")
 for (name, s) in [("vllm start", vqStart), ("inkling download", VLLM.downloadScript(vi)), ("inkling delete", VLLM.deleteScript(vi)), ("status", TensorFold.statusScript()), ("vllm stop", VLLM.stopCommand("q")), ("tf stop", TensorFold.stopCommand(port: 18301)), ("vllm pull", VLLM.pullScript), ("vllm remove", VLLM.removeScript),
                   ("vllm download", VLLM.downloadScript(vg)), ("vllm delete", VLLM.deleteScript(vg))] {
     let (code, out) = bash(s, syntaxOnly: true)

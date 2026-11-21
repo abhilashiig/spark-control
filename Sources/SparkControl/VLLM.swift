@@ -19,8 +19,12 @@ enum VLLM {
         var repo: TensorFold.Repo
         /// A separate MTP drafter (Gemma 4's assistant checkpoints); nil drafts from the model's own MTP head.
         var drafter: TensorFold.Repo?
+        /// Its own vLLM image, for a model no vLLM release serves yet: Download pulls it, Delete removes it.
+        var image: String?
         /// Drafted tokens per step that measured fastest on a Spark, or 2 where nobody has published a sweep.
         var suggested = 2
+        /// The --speculative-config entries besides the drafter and the token count.
+        var spec = #""method":"mtp""#
         var parsers: [String] = []
         var flags: [String] = []
         var window = 262_144
@@ -39,6 +43,7 @@ enum VLLM {
         /// Download records live in TensorFold's data folder, so they get a prefix no TensorFold model has.
         var key: String { "vllm-" + id }
         var downloads: [TensorFold.Repo] { [repo] + (drafter.map { [$0] } ?? []) }
+        var runImage: String { image ?? VLLM.image }
     }
 
     static let qwenParsers = ["--reasoning-parser", "qwen3", "--enable-auto-tool-choice", "--tool-call-parser", "qwen3_coder"]
@@ -74,6 +79,15 @@ enum VLLM {
               repo: .init(id: "nvidia/Gemma-4-26B-A4B-NVFP4", revision: "a19cfe00be84568a6867111c9a68c9c44fdcffe6"),
               drafter: .init(id: "google/gemma-4-26B-A4B-it-assistant"), memoryGB: 45,
               note: "NVIDIA NVFP4 with Google's MTP assistant. Two drafted tokens measured 1.7–1.8× over none on a GB10, and beat four."),
+        // No vLLM release serves it yet (0.35.0 will): vLLM's inkling-2-mini image, pinned by digest. Flags and
+        // drafts from vLLM's DGX Spark recipe; memory is the default, not measured here yet.
+        Model(id: "inkling-2-mini", name: "Inkling 2 Mini 26B-A3B",
+              repo: .init(id: "thinkingmachines/Inkling-2-Mini", revision: "ed40e7da625f594fc9c4990f5f66be24873c22d7"),
+              image: "vllm/vllm-openai@sha256:c2dc759f5984f69c1e2418c6af7c26eb756f5ed2a8934c768ae1253645d1449e",
+              suggested: 7, spec: #""method":"dspark","draft_sample_method":"probabilistic""#,
+              parsers: ["--reasoning-parser", "inkling", "--enable-auto-tool-choice", "--tool-call-parser", "inkling"],
+              window: 1_048_576, startWindow: 262_144,
+              note: "Thinking Machines' looped MoE with images, NVFP4 + MXFP8, 1M-token window; starts at 262k. Runs on vLLM's preview image (11 GB more), which Download pulls and Delete removes; the vLLM install above isn't needed."),
     ]
 
     static func model(_ id: String?) -> Model? { catalog.first { $0.id == id } }
@@ -84,7 +98,7 @@ enum VLLM {
     static var statusLines: String {
         "docker image inspect \(image) >/dev/null 2>&1 && echo 'VLLM|ready' || { command -v docker >/dev/null && echo 'VLLM|none' || echo 'VLLM|nodocker'; }\n"
             + catalog.map { m in
-                "m \(SSH.quote(m.key)) " + m.downloads.map { SSH.quote($0.cacheName + "@" + $0.snapshot) }.joined(separator: " ") + "\n"
+                (m.image.map { "IMG=\(SSH.quote($0)) " } ?? "") + "m \(SSH.quote(m.key)) " + m.downloads.map { SSH.quote($0.cacheName + "@" + $0.snapshot) }.joined(separator: " ") + "\n"
             }.joined()
     }
 
@@ -110,9 +124,12 @@ enum VLLM {
         }.joined(separator: " && ")
         // The container's HOME is /tmp, so it can't see `hf auth login`'s token: mount it read-only (gated repos
         // need it) and pass HF_TOKEN through when set, keeping the token itself out of the process list.
-        let job = """
+        let pull = m.image.map { i in
+            "echo '› Pulling its vLLM image'; docker pull \(i) 2>&1 | grep --line-buffered -v -E 'Waiting|Downloading|Extracting|Verifying|Pulling fs layer' || true\n"
+        } ?? ""
+        let job = pull + """
         T="${HF_TOKEN_PATH:-${HF_HOME:-$HOME/.cache/huggingface}/token}"; A=(); [ -f "$T" ] && A=(-v "$T:/tmp/hf-token:ro" -e HF_TOKEN_PATH=/tmp/hf-token)
-        docker run --rm --user "$(id -u):$(id -g)" --entrypoint bash -v "$H:/hub" -e HF_HUB_CACHE=/hub -e HOME=/tmp -e HF_TOKEN "${A[@]}" \(image) -c \(SSH.quote(pulls)) && touch "$D/\(m.key).ok"
+        docker run --rm --user "$(id -u):$(id -g)" --entrypoint bash -v "$H:/hub" -e HF_HUB_CACHE=/hub -e HOME=/tmp -e HF_TOKEN "${A[@]}" \(m.runImage) -c \(SSH.quote(pulls)) && touch "$D/\(m.key).ok"
         """
         return """
         export D="\(TensorFold.dataDir)" H="\(TensorFold.hubDir)"
@@ -132,6 +149,7 @@ enum VLLM {
                 let n = SSH.quote($0.cacheName)
                 return "grep -qxF \(n) \"$D/\(m.key).keep\" 2>/dev/null && echo \"› Kept \"\(n)\" (it was there before)\" || hfrm \(n)\n"
             }.joined()
+            + (m.image.map { "docker rmi \($0) >/dev/null 2>&1 && echo '› Removed its vLLM image'\n" } ?? "")
             + "rm -f \"$D/\(m.key)\".ok \"$D/\(m.key)\".log \"$D/\(m.key)\".pid \"$D/\(m.key)\".keep\n"
     }
 
@@ -144,7 +162,7 @@ enum VLLM {
                     "--gpus all --ipc=host -p \(port):8000",
                     "-v \"\(TensorFold.hubDir):/root/.cache/huggingface/hub\"",
                     "-v \"$HOME/.cache/spark-control-vllm:/root/.cache\"",
-                    "-e HF_HUB_OFFLINE=1", image,
+                    "-e HF_HUB_OFFLINE=1", m.runImage,
                     m.repo.id] + (m.repo.revision.map { ["--revision", $0] } ?? [])
         args += ["--served-model-name", name, "--api-key", "\"$(cat \"\(TensorFold.dataDir)/api-key\")\"",
                  "--max-num-seqs \(m.maxSeqs)", "--enable-prefix-caching"]
@@ -213,7 +231,7 @@ enum VLLM {
         let plain = command.replacing(try! Regex(" --speculative-config '[^']*'"), with: "")
         guard n > 0 else { return plain }
         let draft = m.drafter.map { #""model":"\#($0.id)","# } ?? ""
-        return plain + #" --speculative-config '{"method":"mtp",\#(draft)"num_speculative_tokens":\#(n)}'"#
+        return plain + #" --speculative-config '{\#(m.spec),\#(draft)"num_speculative_tokens":\#(n)}'"#
     }
 
     private static func flagValue(_ flag: String, in command: String) -> String? {

@@ -339,7 +339,14 @@ check(VLLM.startCommand(vg, port: 1, name: "g").contains(#"'{"method":"mtp","mod
       "Gemma drafts from its assistant checkpoint")
 check(VLLM.catalog.allSatisfy { $0.repo.revision?.count == 40 } && Set(VLLM.catalog.map(\.key)).isDisjoint(with: tfIDs),
       "vLLM models are pinned and their records don't clash with TensorFold's")
-for (name, s) in [("vllm start", vqStart), ("vllm stop", VLLM.stopCommand("q")), ("tf stop", TensorFold.stopCommand(port: 18301)), ("vllm pull", VLLM.pullScript), ("vllm remove", VLLM.removeScript),
+// A model on its own vLLM image: started, downloaded, deleted and checked with that image, and drafts its own way
+let vi = VLLM.model("inkling-2-mini")!, viStart = VLLM.startCommand(vi, port: 1, name: "i")
+check(viStart.contains(vi.image! + " thinkingmachines/Inkling-2-Mini") && !viStart.contains(VLLM.image)
+      && viStart.contains(#"'{"method":"dspark","draft_sample_method":"probabilistic","num_speculative_tokens":7}'"#) && VLLM.drafts(of: viStart) == 7
+      && VLLM.downloadScript(vi).contains("docker pull " + vi.image!) && VLLM.deleteScript(vi).contains("docker rmi " + vi.image!)
+      && VLLM.statusLines.contains("IMG='" + vi.image! + "' m 'vllm-inkling-2-mini'") && !VLLM.downloadScript(vg).contains("docker pull"),
+      "Inkling runs, downloads and deletes with its own image; other models use the shared one")
+for (name, s) in [("vllm start", vqStart), ("inkling download", VLLM.downloadScript(vi)), ("inkling delete", VLLM.deleteScript(vi)), ("status", TensorFold.statusScript()), ("vllm stop", VLLM.stopCommand("q")), ("tf stop", TensorFold.stopCommand(port: 18301)), ("vllm pull", VLLM.pullScript), ("vllm remove", VLLM.removeScript),
                   ("vllm download", VLLM.downloadScript(vg)), ("vllm delete", VLLM.deleteScript(vg))] {
     let (code, out) = bash(s, syntaxOnly: true)
     check(code == 0, "\(name) script parses: \(out)")

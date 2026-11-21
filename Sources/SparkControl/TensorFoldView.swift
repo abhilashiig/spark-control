@@ -154,7 +154,7 @@ extension AppState {
         guard route != nil else { return false }
         switch i {
         case .tf: return tf.engine != .none
-        case .vllm: return tf.vllm == "ready"
+        case .vllm(let m): return tf.vllm == "ready" || (m.image != nil && tf.vllm == "none")
         case .comfy: return tf.comfyVersion != nil
         }
     }
@@ -503,7 +503,9 @@ private struct CatalogPage: ViewModifier {
         let size = (state.tf.models[m.key]?.bytes ?? 0).formatted(.byteCount(style: .file))
         let what = m.sources.joined(separator: " and ")
         if case .comfy = m { return "Deletes \(what) (\(size)) from ComfyUI's models folder on the Spark. This can't be undone." }
-        return "Deletes \(what) (\(size)) from the Spark's Hugging Face cache and removes the model from Spark Control. Files that were already on the Spark before Spark Control first downloaded this model are kept. This can't be undone."
+        var image = ""
+        if case .vllm(let v) = m, v.image != nil { image = " Its own vLLM image is removed too." }
+        return "Deletes \(what) (\(size)) from the Spark's Hugging Face cache and removes the model from Spark Control.\(image) Files that were already on the Spark before Spark Control first downloaded this model are kept. This can't be undone."
     }
 }
 

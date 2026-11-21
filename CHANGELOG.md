@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Added
+- vLLM: Inkling 2 Mini (Thinking Machines' 26B-A3B with images and a 1M-token window). No vLLM release serves it yet, so it runs on vLLM's own preview image: Download pulls that image (11 GB) along with the model, and Delete removes both. It doesn't need the vLLM install at the top of the page. Settings come from vLLM's DGX Spark recipe and haven't been measured here yet.
+
 ## [1.12.0] - 2026-11-18
 
 The redesign is out of beta. This release includes everything in 1.12.0-beta.1, plus:

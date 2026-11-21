@@ -211,7 +211,8 @@ enum TensorFold {
           # Done only while every repo is there: a drafter added to a model's entry later still needs downloading.
           all=1; for x in "${dirs[@]}"; do [ -d "$x" ] || all=0; done
           if [ -f "$D/$id.pid" ] && kill -0 "$(cat "$D/$id.pid")" 2>/dev/null; then st=running
-          elif [ -f "$D/$id.ok" ] && [ $all = 1 ]; then st=done
+          # A model with its own vLLM image (IMG) is done only while that image is there too.
+          elif [ -f "$D/$id.ok" ] && [ $all = 1 ] && { [ -z "$IMG" ] || docker image inspect "$IMG" >/dev/null 2>&1; }; then st=done
           elif [ -f "$D/$id.ok" ]; then st=none
           elif [ -f "$D/$id.log" ]; then st=failed
           else st=none; fi

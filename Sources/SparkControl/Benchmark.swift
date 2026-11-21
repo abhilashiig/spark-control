@@ -258,9 +258,11 @@ def main():
         print(f"Skipping prompts past the {ctx}-token context: {', '.join(map(str, skipped))}")
     print("=" * 96)
 
+    # Past a full prefill chunk (vLLM's is 2048) and a few decode steps, so the first timed request doesn't pay for
+    # kernels the server compiles on first use; a prompt shorter than one chunk leaves them uncompiled.
     print("Warming up")
-    w, _ = builder.build(256)
-    stream_completion(base, model, w, 8, args.timeout)
+    w, _ = builder.build(4096)
+    stream_completion(base, model, w, 32, args.timeout)
 
     print("\nSingle Request Results")
     print("-" * 96)
@@ -294,6 +296,8 @@ def main():
         print(f"{'Batch':<8}{'tg TPS':>12}{'Speedup':>10}{'pp TPS':>14}{'pp TPS/req':>14}"
               f"{'TTFT(ms)':>11}{'E2E(s)':>9}")
         single_tg = None
+        # Untimed: the batch prompt size is new to the server after the long single prompts and can compile kernels.
+        stream_completion(base, model, builder.build(args.batch_pp)[0], 16, args.timeout)
         for b in [1] + batches:
             try:
                 prompts = [builder.build(args.batch_pp)[0] for _ in range(b)]

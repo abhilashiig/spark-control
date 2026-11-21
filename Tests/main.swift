@@ -349,6 +349,13 @@ check(viStart.contains(vi.image! + " thinkingmachines/Inkling-2-Mini") && !viSta
 var viRecipe = Recipe(name: "Inkling 2 Mini", startCommand: viStart, stopCommand: "", upstreamModel: "inkling-2-mini")
 check(VLLM.contextOptions(vi) == [32_768, 65_536, 131_072, 262_144, 524_288, 1_048_576] && !VLLM.contextOptions(vq).contains(524_288),
       "1M-window models offer 512k; 262k models don't")
+// Inkling's memory follows its context: 262k fits the default 50 GB, 512k and 1M raise it; saved commands are fixed on load
+let vi512 = VLLM.withContext(viStart, 524_288), viRaised = VLLM.synced(vi512, model: vi.id)
+check(VLLM.memoryFraction(of: viStart) == 0.38 && VLLM.memoryFraction(of: VLLM.fitted(vi512, vi))! * VLLM.gb10Memory / 1e9 >= 53
+      && VLLM.memoryFraction(of: VLLM.fitted(VLLM.withContext(viStart, 1_048_576), vi))! * VLLM.gb10Memory / 1e9 >= 77
+      && viRaised == VLLM.fitted(vi512, vi) && VLLM.synced(viRaised, model: vi.id) == viRaised
+      && VLLM.fitted(VLLM.withMemory(vi512, 90), vi) == VLLM.withMemory(vi512, 90) && VLLM.fitted(vqStart, vq) == vqStart,
+      "a larger context raises memory to fit one full request, never lowers it, and leaves unmeasured models alone")
 check(viRecipe.hasReasoning && viRecipe.takesImages, "Inkling counts as reasoning (its --reasoning-parser) and takes images")
 viRecipe.reasoning = false
 check(!viRecipe.hasReasoning, "the reasoning toggle still overrides the guess")

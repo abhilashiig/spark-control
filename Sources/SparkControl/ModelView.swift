@@ -290,7 +290,7 @@ private struct VLLMSection: View {
         let drafts = VLLM.drafts(of: recipe.startCommand)
         Section {
             Picker("Context", selection: Binding { ctx } set: {
-                recipe.startCommand = VLLM.withContext(recipe.startCommand, $0)
+                recipe.startCommand = VLLM.fitted(VLLM.withContext(recipe.startCommand, $0), model)
             }) {
                 ForEach(options.contains(ctx) ? options : (options + [ctx]).sorted(), id: \.self) {
                     Text($0 == model.window ? "Full window (\($0.formatted()))" : "\($0.formatted()) tokens").tag($0)

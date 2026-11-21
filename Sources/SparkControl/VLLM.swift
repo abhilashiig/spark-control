@@ -38,6 +38,10 @@ enum VLLM {
         /// a fixed size (memory minus this), which skips vLLM's start-up memory profiling: on the GB10's unified
         /// memory that check fails ("Error in memory profiling") whenever free memory moves while it measures.
         var footprintGB: Double?
+        /// Measured on a GB10 with vLLM's own KV cache sizing: memory besides the KV cache, and the KV cache one 1M-token
+        /// request needs, in GB. With both, picking a context raises Memory to what that context needs.
+        var baseGB: Double?
+        var kvGBPerMillion: Double?
         var note: String
 
         /// Download records live in TensorFold's data folder, so they get a prefix no TensorFold model has.
@@ -86,7 +90,8 @@ enum VLLM {
               image: "vllm/vllm-openai@sha256:c2dc759f5984f69c1e2418c6af7c26eb756f5ed2a8934c768ae1253645d1449e",
               suggested: 7, spec: #""method":"dspark","draft_sample_method":"probabilistic""#,
               parsers: ["--reasoning-parser", "inkling", "--enable-auto-tool-choice", "--tool-call-parser", "inkling"],
-              window: 1_048_576, startWindow: 262_144,
+              // 512k at 0.38: 46.22 GiB granted, 21.69 GiB left for the KV cache, 22.41 GiB needed (2026-11-21).
+              window: 1_048_576, startWindow: 262_144, baseGB: 26.3, kvGBPerMillion: 48.1,
               note: "Thinking Machines' looped MoE with images, NVFP4 + MXFP8, 1M-token window; starts at 262k. Runs on vLLM's preview image (11 GB more), which Download pulls and Delete removes; the vLLM install above isn't needed."),
     ]
 
@@ -169,7 +174,21 @@ enum VLLM {
         args += m.parsers + m.flags
         let cmd = withMemory(withContext(args.joined(separator: " "), m.startWindow ?? m.window), m.memoryGB, total: total,
                              footprint: m.footprintGB)
-        return withDrafts(cmd, m.suggested, model: m)
+        return withDrafts(fitted(cmd, m, total: total), m.suggested, model: m)
+    }
+
+    /// Memory one request at `context` tokens needs, with 2 GB of headroom, when the entry has measurements.
+    static func memoryNeeded(_ m: Model, context: Int) -> Double? {
+        guard let b = m.baseGB, let k = m.kvGBPerMillion else { return nil }
+        return (b + k * Double(context) / 1_048_576 + 2).rounded(.up)
+    }
+
+    /// Raises the command's memory when its context needs more: vLLM refuses to start when one full-length request
+    /// doesn't fit in what's left after the weights. Never lowers it.
+    static func fitted(_ command: String, _ m: Model, total: Double = gb10Memory) -> String {
+        guard let n = context(of: command), let need = memoryNeeded(m, context: n),
+              (memoryFraction(of: command) ?? 0) * total / 1e9 < need - 0.5 else { return command }
+        return withMemory(command, need, total: total, footprint: m.footprintGB)
     }
 
     static func stopCommand(_ served: String) -> String {
@@ -194,7 +213,8 @@ enum VLLM {
     /// the memory the command already has); once, when that first appears, the request limit; and flags an earlier
     /// version added that measured no gain. Other models' commands are left as they are.
     static func synced(_ command: String, model id: String?) -> String {
-        guard let m = model(id), m.footprintGB != nil else { return command }
+        guard let m = model(id) else { return command }
+        guard m.footprintGB != nil else { return fitted(command, m) }
         var c = command
         if !c.contains("--kv-cache-memory-bytes") {
             c = c.replacing(try! Regex(" --max-num-seqs(=| +)[0-9]+"), with: " --max-num-seqs \(m.maxSeqs)")

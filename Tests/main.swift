@@ -347,6 +347,8 @@ check(viStart.contains(vi.image! + " thinkingmachines/Inkling-2-Mini") && !viSta
       && VLLM.statusLines.contains("IMG='" + vi.image! + "' m 'vllm-inkling-2-mini'") && !VLLM.downloadScript(vg).contains("docker pull"),
       "Inkling runs, downloads and deletes with its own image; other models use the shared one")
 var viRecipe = Recipe(name: "Inkling 2 Mini", startCommand: viStart, stopCommand: "", upstreamModel: "inkling-2-mini")
+check(VLLM.contextOptions(vi) == [32_768, 65_536, 131_072, 262_144, 524_288, 1_048_576] && !VLLM.contextOptions(vq).contains(524_288),
+      "1M-window models offer 512k; 262k models don't")
 check(viRecipe.hasReasoning && viRecipe.takesImages, "Inkling counts as reasoning (its --reasoning-parser) and takes images")
 viRecipe.reasoning = false
 check(!viRecipe.hasReasoning, "the reasoning toggle still overrides the guess")

@@ -218,7 +218,7 @@ enum VLLM {
     }
 
     static func contextOptions(_ m: Model) -> [Int] {
-        Set([32_768, 65_536, 131_072, m.startWindow ?? m.window, m.window].filter { $0 <= m.window }).sorted()
+        Set([32_768, 65_536, 131_072, 524_288, m.startWindow ?? m.window, m.window].filter { $0 <= m.window }).sorted()
     }
 
     /// Drafted tokens per step in the command's --speculative-config; 0 when there is none.

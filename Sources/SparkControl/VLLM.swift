@@ -25,6 +25,8 @@ enum VLLM {
         var suggested = 2
         /// The --speculative-config entries besides the drafter and the token count.
         var spec = #""method":"mtp""#
+        /// The drafter only takes `suggested` (DSpark: its block size - 1), so the page offers just that or off.
+        var fixedDrafts = false
         var parsers: [String] = []
         var flags: [String] = []
         var window = 262_144
@@ -88,7 +90,7 @@ enum VLLM {
         Model(id: "inkling-2-mini", name: "Inkling 2 Mini 26B-A3B",
               repo: .init(id: "thinkingmachines/Inkling-2-Mini", revision: "ed40e7da625f594fc9c4990f5f66be24873c22d7"),
               image: "vllm/vllm-openai@sha256:c2dc759f5984f69c1e2418c6af7c26eb756f5ed2a8934c768ae1253645d1449e",
-              suggested: 7, spec: #""method":"dspark","draft_sample_method":"probabilistic""#,
+              suggested: 7, spec: #""method":"dspark","draft_sample_method":"probabilistic""#, fixedDrafts: true,
               parsers: ["--reasoning-parser", "inkling", "--enable-auto-tool-choice", "--tool-call-parser", "inkling"],
               // 512k at 0.38: 46.22 GiB granted, 21.69 GiB left for the KV cache, 22.41 GiB needed (2026-11-21).
               window: 1_048_576, startWindow: 262_144, baseGB: 26.3, kvGBPerMillion: 48.1,

@@ -300,7 +300,7 @@ private struct VLLMSection: View {
                 recipe.startCommand = VLLM.withDrafts(recipe.startCommand, $0, model: model)
             }) {
                 Text("Off").tag(0)
-                ForEach(Array(Set([1, 2, 3, drafts, model.suggested])).filter { $0 > 0 }.sorted(), id: \.self) { n in
+                ForEach(Array(Set(model.fixedDrafts ? [model.suggested] : [1, 2, 3, drafts, model.suggested])).filter { $0 > 0 }.sorted(), id: \.self) { n in
                     Text(n == model.suggested ? "\(n) tokens (suggested)" : "\(n) token\(n == 1 ? "" : "s")").tag(n)
                 }
             } label: {

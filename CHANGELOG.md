@@ -11,6 +11,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ### Changed
 - vLLM models started with a reasoning parser now count as reasoning models in Chat and the coding tools without flipping the toggle, and Inkling models count as taking images.
 - vLLM models with a 1M-token window (Inkling 2 Mini, Nemotron 3.5 Lightning) offer a 524,288-token context too.
+- Inkling 2 Mini: its MTP drafts setting offers only Off or 7 tokens, the one count its drafter accepts; other counts made it fail to start.
 - Inkling 2 Mini: choosing a larger context raises its Memory to what that context needs (about 53 GB for 512k, 77 GB for 1M), so it no longer fails to start with "KV cache is needed, which is larger than the available KV cache memory". A model already set to a context that doesn't fit gets the extra memory the next time the app opens.
 
 ## [1.12.0] - 2026-11-18

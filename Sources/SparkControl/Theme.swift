@@ -4,7 +4,7 @@ import AppKit
 // MARK: Palette
 
 extension Color {
-    /// `nvidia` overrides the dark value under the NVIDIA and Ember themes (Ember swaps its green for orange);
+    /// `nvidia` overrides the dark value under the NVIDIA and Nebula themes (Nebula swaps its green for violet);
     /// without it, a cool Graphite grey turns neutral.
     init(light: UInt32, dark: UInt32, nvidia: UInt32? = nil) {
         func ns(_ v: UInt32) -> NSColor {
@@ -15,7 +15,7 @@ extension Color {
             return $0.bestMatch(from: [.darkAqua, .vibrantDark]) == nil
                 ? ns(mode == .softLight ? Self.soften(light, floor: 0, ceiling: 0xE6) : light)
                 : ns(mode == .softDark ? Self.soften(dark, floor: 0x2A, ceiling: 0xFF)
-                     : mode.sharp ? nvidia.map { mode == .ember ? Self.ember($0) : $0 } ?? Self.neutral(dark) : dark)
+                     : mode.sharp ? nvidia.map { mode == .nebula ? Self.nebula($0) : $0 } ?? Self.neutral(dark) : dark)
         })
     }
 
@@ -27,8 +27,8 @@ extension Color {
         return c.map { floor + $0 * (ceiling - floor) / 255 }.reduce(0) { $0 << 8 | $1 }
     }
 
-    /// Ember: NVIDIA green and its lighter link green become orange.
-    static func ember(_ v: UInt32) -> UInt32 { [0x76B900: 0xFF7A1A, 0x9BD12E: 0xFFA149][v] ?? v }
+    /// Nebula: NVIDIA green and its lighter link green become violet.
+    static func nebula(_ v: UInt32) -> UInt32 { [0x76B900: 0x9B7BFF, 0x9BD12E: 0xC4B5FD][v] ?? v }
 
     static func neutral(_ v: UInt32) -> UInt32 {
         let c = [v >> 16 & 0xff, v >> 8 & 0xff, v & 0xff]
@@ -78,18 +78,20 @@ extension Color {
 
 /// The app's light or dark look: the system's by default, or fixed in Settings → General.
 enum Appearance: String, CaseIterable, Identifiable {
-    case system, light, softLight, softDark, dark, nvidia, ember
+    case system, light, softLight, softDark, dark, nvidia
+    case nebula = "ember"  // renamed from Ember; the old raw value keeps saved choices
     static let key = "appearance"
     /// Read while colours resolve, so it holds from the first frame (before `apply` runs).
     static var current: Appearance { UserDefaults.standard.string(forKey: key).flatMap(Appearance.init) ?? .system }
     var id: Self { self }
-    /// NVIDIA and Ember: black, square corners, uppercase condensed titles.
-    var sharp: Bool { self == .nvidia || self == .ember }
+    /// NVIDIA and Nebula: black, square corners, uppercase condensed titles.
+    var sharp: Bool { self == .nvidia || self == .nebula }
     var label: String {
         switch self {
         case .softLight: "Soft Light"
         case .softDark: "Soft Dark"
         case .nvidia: "NVIDIA"
+        case .nebula: "Nebula"
         default: rawValue.capitalized
         }
     }
@@ -98,7 +100,7 @@ enum Appearance: String, CaseIterable, Identifiable {
         switch self {
         case .system: nil
         case .light, .softLight: .light
-        case .dark, .softDark, .nvidia, .ember: .dark
+        case .dark, .softDark, .nvidia, .nebula: .dark
         }
     }
 
@@ -107,7 +109,7 @@ enum Appearance: String, CaseIterable, Identifiable {
         NSApp.appearance = switch mode {
         case .system: nil
         case .light, .softLight: NSAppearance(named: .aqua)
-        case .softDark, .dark, .nvidia, .ember: NSAppearance(named: .darkAqua)
+        case .softDark, .dark, .nvidia, .nebula: NSAppearance(named: .darkAqua)
         }
     }
 }
@@ -139,7 +141,7 @@ enum VizColor {
 }
 
 extension CGFloat {
-    /// Every rounded rectangle's radius: as designed, or near-square under NVIDIA and Ember.
+    /// Every rounded rectangle's radius: as designed, or near-square under NVIDIA and Nebula.
     static func corner(_ r: CGFloat) -> CGFloat { Appearance.current.sharp ? Swift.min(r, 2) : r }
 }
 

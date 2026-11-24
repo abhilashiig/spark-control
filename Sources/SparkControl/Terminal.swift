@@ -230,15 +230,15 @@ struct TerminalTheme: Identifiable {
         TerminalTheme(name: "NVIDIA", background: 0x000000, foreground: 0xEEEEEE, cursor: 0x76B900, ansi: [
             0x1A1A1A, 0xF87171, 0x76B900, 0xFBBF24, 0x60A5FA, 0xF472B6, 0x5EEAD4, 0xD6D6D6,
             0x474747, 0xFCA5A5, 0x9BD12E, 0xFCD34D, 0x93C5FD, 0xF9A8D4, 0x99F6E4, 0xFFFFFF]),
-        TerminalTheme(name: "Ember", background: 0x000000, foreground: 0xEEEEEE, cursor: 0xFF7A1A, ansi: [
-            0x1A1A1A, 0xF87171, 0x4ADE80, 0xFF7A1A, 0x60A5FA, 0xF472B6, 0x5EEAD4, 0xD6D6D6,
-            0x474747, 0xFCA5A5, 0x86EFAC, 0xFFA149, 0x93C5FD, 0xF9A8D4, 0x99F6E4, 0xFFFFFF]),
+        TerminalTheme(name: "Nebula", background: 0x000000, foreground: 0xEEEEEE, cursor: 0x9B7BFF, ansi: [
+            0x1A1A1A, 0xF87171, 0x4ADE80, 0xFBBF24, 0x60A5FA, 0x9B7BFF, 0x5EEAD4, 0xD6D6D6,
+            0x474747, 0xFCA5A5, 0x86EFAC, 0xFCD34D, 0x93C5FD, 0xC4B5FD, 0x99F6E4, 0xFFFFFF]),
     ]
     private static let solarized: [UInt32] = [
         0x073642, 0xDC322F, 0x859900, 0xB58900, 0x268BD2, 0xD33682, 0x2AA198, 0xEEE8D5,
         0x002B36, 0xCB4B16, 0x586E75, 0x657B83, 0x839496, 0x6C71C4, 0x93A1A1, 0xFDF6E3]
 
-    static func named(_ name: String) -> TerminalTheme { all.first { $0.name == name } ?? all[0] }
+    static func named(_ name: String) -> TerminalTheme { all.first { $0.name == (name == "Ember" ? "Nebula" : name) } ?? all[0] }  // Ember was renamed
     static var current: TerminalTheme { named(UserDefaults.standard.string(forKey: key) ?? "") }
 
     var backgroundColor: NSColor { background.map(Self.ns) ?? .textBackgroundColor }

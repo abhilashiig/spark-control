@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Changed
+- The Ember theme is now Nebula, with a cool violet in place of orange, in both Appearance and the Terminal. If you chose Ember, you get Nebula automatically.
+
 ## [1.13.0] - 2026-11-24
 
 ### Changed

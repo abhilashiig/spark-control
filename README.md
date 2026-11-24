@@ -38,19 +38,18 @@ pick a model, press play, and point your tools at `http://localhost:18080/v1`.
 - **Per-model settings:** context window, speculative decoding, memory, and rules that fill in or override
   request parameters (say, a default temperature).
 
-<img src="docs/screenshots/tensorfold.png" width="860" alt="The TensorFold page: install the engine and download models tested on one GB10">
+<img src="docs/screenshots/model.png" width="860" alt="A model's page: memory, requests and benchmark at the top, and the recipe Spark Control uses to start and stop it">
+
+<img src="docs/screenshots/tensorfold.png" width="860" alt="The TensorFold page: models tested on one GB10, ready to download or add">
 
 ### 💬 Chat
-
-<img src="docs/screenshots/chat.png" width="860" alt="The Chat page with a list of conversations">
-
 Built-in chat with any of your models. Attach images, PDFs and text files, or paste a screenshot with ⌘V.
 Chats get a title automatically, and you can edit and resend any message.
 
 ### 🔌 One API for everything
 - An **OpenAI-compatible endpoint on your Mac** (`http://localhost:18080/v1`) that forwards to whichever
   model you ask for. **Ask for a model that's stopped and it starts automatically.**
-- **Connect** gives you the URL, the API key and ready-to-paste code.
+- **API Access** gives you the URL, the API key and ready-to-paste code.
 - **Coding tools set up in one click:** adds your models to **Kilo Code**, **Pi** and **Hermes**, with
   prices and whether each model reasons or takes images, and keeps them up to date. One more click points
   Kilo Code's codebase indexing at a small embedding model on the Spark, pulled with Ollama.
@@ -58,20 +57,22 @@ Chats get a title automatically, and you can edit and resend any message.
 
 ### 📊 See what's happening
 
-<img src="docs/screenshots/spark.png" width="860" alt="The Spark page: live memory, CPU, GPU and temperature charts">
+<img src="docs/screenshots/overview.png" width="860" alt="The Overview page: live memory, CPU, GPU and temperature charts, memory by process and storage">
 
-- **Spark:** live CPU, GPU, memory, power and temperatures, plus disk usage.
+- **Overview:** live CPU, GPU, memory, power and temperatures, plus disk usage.
   The **DGX Dashboard** button opens NVIDIA's dashboard with no manual tunnel.
 - **Requests:** every API call with its model, app, tokens, speed and errors, searchable.
 - **Usage:** tokens, cache hits, decode and prefill speed, and what it would have cost, by model and app.
 - **Benchmark** a model on the Spark: prefill and decode speed across context lengths and batch sizes.
 - A **menu bar icon** shows what's running and lets you stop a model or copy the API URL.
 
-<img src="docs/screenshots/usage.png" width="860" alt="The Usage page: cost, requests, cache hit rate, speed and a per-model breakdown">
+<img src="docs/screenshots/requests.png" width="860" alt="The Requests page: live API calls with tokens, latency and speed, and one request's timing in detail">
+
+<img src="docs/screenshots/usage.png" width="860" alt="The Usage page: cost, requests, cache hit rate, speed and breakdowns by model and client">
 
 ### 🖥️ Work on the Spark
 
-<img src="docs/screenshots/terminal.png" width="860" alt="The Terminal page: a shell on the Spark showing nvidia-smi, in the Solarized Light theme">
+<img src="docs/screenshots/terminal.png" width="860" alt="The Terminal page: a shell on the Spark in a tab">
 
 - **Terminal:** real shells on the Spark in tabs, with colour, mouse and resizing, so vim, htop and tmux
   just work. Five colour themes and the shortcuts you know from Terminal.app (⌘T, ⌘W, ⌘K, ⌘1–9, ⌘+ ⌘−).
@@ -81,6 +82,8 @@ Chats get a title automatically, and you can edit and resend any message.
   switch could cut you off (you reach it over that Wi-Fi, or over Tailscale riding on it), and a network it
   can't join sends it back to the one it was on.
 - **ComfyUI** for image generation: installed and started on the Spark, opened in your browser.
+
+<img src="docs/screenshots/comfyui.png" width="860" alt="The ComfyUI page: start the server and download starter image models">
 
 ## Getting started
 
@@ -98,7 +101,7 @@ Chats get a title automatically, and you can edit and resend any message.
 
 ## Use it from other apps
 
-Any app that accepts a custom OpenAI endpoint works. Model names and the key are on the Connect page.
+Any app that accepts a custom OpenAI endpoint works. Model names and the key are on the API Access page.
 
 ```bash
 curl http://localhost:18080/v1/chat/completions \
@@ -110,7 +113,7 @@ curl http://localhost:18080/v1/chat/completions \
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:18080/v1", api_key="<key from the Connect page>")
+client = OpenAI(base_url="http://localhost:18080/v1", api_key="<key from the API Access page>")
 reply = client.chat.completions.create(model="qwen3.8-27b", messages=[{"role": "user", "content": "Hello!"}])
 print(reply.choices[0].message.content)
 ```

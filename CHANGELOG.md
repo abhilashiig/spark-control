@@ -20,6 +20,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - Requests: Copy as cURL asks for the model by its API name, so the copied command works against Spark Control's API.
 - TensorFold's Check for Updates says Up to Date (or Couldn't Check) instead of doing nothing visible.
 - Set Up Spark (in Settings) can be cancelled and opens with your current Spark filled in.
+- Starting a model, and everything else the app runs on the Spark, works when the Spark's login shell is zsh. It failed with "no matches found: /tmp/spark-control/start-…-*.log" even though the model had started.
 - Activity: a streamed reply whose output arrived all at once (vLLM sends tool calls that way) shows "—" for TTFT and Decode instead of an impossible speed like 11,000 tok/s, and no longer skews the Decode and Prefill averages.
 - vLLM models now report cached prompt tokens, so Cached and Prefill on the Activity page are real instead of always 0. Takes effect the next time each model starts.
 

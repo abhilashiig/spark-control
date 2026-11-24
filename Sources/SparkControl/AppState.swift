@@ -138,7 +138,7 @@ final class AppState {
         gateway = g
         g.start(port: loaded.gateway.port, lan: loaded.gateway.allowLAN)
         monitor.pathUpdateHandler = { [weak self] _ in
-            Task { @MainActor in self?.networkChanged() }
+            Task { @MainActor in self?.networkChanged("the Mac's network changed") }
         }
         monitor.start(queue: .main)
         Task {
@@ -284,8 +284,20 @@ final class AppState {
         }
     }
 
-    private func networkChanged() {
-        if let d = config.device { Route.allCases.forEach { SSH.disconnect(d.sshTarget($0)) } }
+    /// With a reason, the shared SSH connection on the current route is kept while it still answers: closing it
+    /// kills every command riding it, such as an install mid-download. Without one (the device changed), all close.
+    private func networkChanged(_ reason: String? = nil) {
+        if let d = config.device {
+            let current = reason == nil ? nil : sshTarget
+            for r in Route.allCases where d.sshTarget(r) != current { SSH.disconnect(d.sshTarget(r)) }
+            if let current, let reason {
+                Task {
+                    guard await SSH.run(current, "true", timeout: 5).code != 0 else { return }
+                    log("Reconnecting SSH to the Spark: \(reason), and the old connection stopped answering")
+                    SSH.disconnect(current)
+                }
+            }
+        }
         debounce?.cancel()
         debounce = Task {
             try? await Task.sleep(for: .seconds(1))
@@ -295,7 +307,7 @@ final class AppState {
         }
     }
 
-    func networkTrouble() { networkChanged() }
+    func networkTrouble(_ reason: String) { networkChanged(reason) }
 
     func selectRoute() async {
         guard let d = config.device else { route = nil; return }

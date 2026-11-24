@@ -51,7 +51,7 @@ extension AppState {
         event("Installing TensorFold \(v) on the Spark")
         let res = await tfRun(TensorFold.installScript(v), timeout: 900, stream: true)
         event(res?.code == 0 ? "TensorFold \(v) installed" + (runningRecipes.contains { $0.tensorfold != nil } ? "; running models switch to it when restarted" : "")
-                             : "TensorFold \(v) install failed" + (res?.code == 255 ? " because the SSH connection to the Spark dropped" : "") + "; the installed version is unchanged")
+                             : "TensorFold \(v) install failed (" + (res?.code == 255 ? "the SSH connection to the Spark dropped" : "exit \(res?.code ?? -1)") + "); the installed version is unchanged")
         await tfRefresh()
     }
 

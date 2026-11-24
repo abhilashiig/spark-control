@@ -645,7 +645,7 @@ struct WiFiView: View {
         let cutOff = status?.reachedOverWiFi == true
         Task {
             try? await Task.sleep(for: .seconds(cutOff ? 12 : 8))
-            if cutOff { state.networkTrouble() }  // the shared SSH connection rode the old Wi-Fi
+            if cutOff { state.networkTrouble("the Spark switched Wi-Fi") }  // the shared SSH connection rode the old Wi-Fi
             try? await Task.sleep(for: .seconds(3))
             note = nil
             await load()

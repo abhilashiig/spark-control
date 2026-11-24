@@ -274,6 +274,7 @@ enum TensorFold {
         V=\(v); A=\(archive(v)); E="\(engineDir)"
         say() { echo "› $*"; }
         fail() { echo "✗ $*"; exit 1; }
+        trap 'echo "✗ Stopped at: $BASH_COMMAND (exit $?)"' ERR
         \(jpegFunction)
         say "Checking the Spark"
         [ "$(uname -m)" = aarch64 ] || fail "This machine's CPU is $(uname -m); the GB10 release needs aarch64."

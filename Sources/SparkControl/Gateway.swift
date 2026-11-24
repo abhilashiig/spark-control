@@ -263,7 +263,7 @@ final class Gateway: @unchecked Sendable {
         } catch {
             if status == 0 {
                 await sendError(c, 502, "Request to the Spark failed: \(error.localizedDescription)", type: "server_error")
-                await state.networkTrouble()
+                await state.networkTrouble("a request through the gateway failed (\(error.localizedDescription))")
             }
             await state.finishRequest(entry, status: status == 0 ? 502 : status, usage: usage, recipe: recipe,
                                       duration: Date().timeIntervalSince(started), error: error.localizedDescription)

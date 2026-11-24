@@ -391,6 +391,10 @@ private struct RequestDetail: View {
                 .foregroundStyle(Color.link)
             }
             .overlay(alignment: .bottom) { Hairline() }
+            if tab == .request {
+                Text("As forwarded to the Spark, with the API name swapped for the backend model ID.")
+                    .font(.system(size: 12)).foregroundStyle(Color.text2)
+            }
             ScrollView(.horizontal) {
                 Text(text(e, tab))
                     .font(.system(size: 12, design: .monospaced))
@@ -426,7 +430,13 @@ private struct RequestDetail: View {
     }
 
     private func curl(_ e: RequestEntry) -> String {
-        let body = Self.pretty(e.forwarded).replacingOccurrences(of: "'", with: "'\\''")
+        // The forwarded body names the backend model; the gateway only knows the API name.
+        var json = e.forwarded
+        if var obj = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any], obj["model"] != nil {
+            obj["model"] = e.model
+            if let data = try? JSONSerialization.data(withJSONObject: obj) { json = String(decoding: data, as: UTF8.self) }
+        }
+        let body = Self.pretty(json).replacingOccurrences(of: "'", with: "'\\''")
         return "curl \(gatewayBase)\(e.path) \\\n  -H 'Content-Type: application/json' \\\n  -d '\(body)'"
     }
 

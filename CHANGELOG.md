@@ -13,6 +13,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - Models: a Model's Own Sampling switch on each model's page (off by default). When on, the temperature, top_p, top_k, min_p and penalty values coding tools send are dropped, so the model runs with its maker's recommended defaults. Parameter Rules still apply on top.
 
 ### Fixed
+- Requests: Copy as cURL asks for the model by its API name, so the copied command works against Spark Control's API.
 - TensorFold's Check for Updates says Up to Date (or Couldn't Check) instead of doing nothing visible.
 - Set Up Spark (in Settings) can be cancelled and opens with your current Spark filled in.
 - Activity: a streamed reply whose output arrived all at once (vLLM sends tool calls that way) shows "—" for TTFT and Decode instead of an impossible speed like 11,000 tok/s, and no longer skews the Decode and Prefill averages.

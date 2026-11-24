@@ -322,6 +322,7 @@ private struct RequestDetail: View {
             TimingBar(entry: e).frame(height: 8).opacity(e.duration > 0 ? 1 : 0.3)
             HStack(alignment: .top, spacing: 0) {
                 metric("First token", e.ttft.map(Self.secs) ?? "—", swatch: TimingBar.first)
+                metric("Prefill", Speed.prefill(prompt: e.prompt, cached: e.cached ?? 0, ttft: e.ttft).map(UsageView.tps) ?? "—", swatch: nil)
                 metric("Decode", Speed.decode(completion: e.completion, decodeTime: e.decodeTime).map(UsageView.tps) ?? "—", swatch: TimingBar.decode)
                 metric("Total", e.duration > 0 ? Self.secs(e.duration) : "—", swatch: nil)
             }

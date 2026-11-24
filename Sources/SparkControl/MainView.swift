@@ -88,6 +88,7 @@ private struct Sidebar: View {
             // Room for the window's traffic lights, which sit over the sidebar (the window has no title bar).
             Color.clear.frame(height: 28).contentShape(Rectangle()).gesture(WindowDragGesture())
             DeviceCard()
+            JumpButton(selection: $selection).padding(.top, 14)
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     row("Chat", "bubble.left", .chat)
@@ -126,7 +127,7 @@ private struct Sidebar: View {
                     row("SSH Keys", "key", .sshKeys)
                     row("Wi-Fi", "wifi", .wifi)
                 }
-                .padding(.top, 14)
+                .padding(.top, 10)
             }
             .scrollIndicators(.never)
             Spacer(minLength: 16)
@@ -184,39 +185,108 @@ private struct Sidebar: View {
     }
 }
 
-/// The Spark this window controls and whether it answers; the menu sets up another.
+/// "Search or jump to…": ⌘K opens a field that filters pages and models; Return opens the first match.
+private struct JumpButton: View {
+    @Environment(AppState.self) private var state
+    @Binding var selection: Pane?
+    @State private var open = false
+
+    var body: some View {
+        Button { open = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").font(.system(size: 12))
+                Text("Search or jump to…").frame(maxWidth: .infinity, alignment: .leading)
+                Text("⌘K").font(.system(size: 11)).foregroundStyle(Color.text3)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(light: 0xD4D4D8, dark: 0x2E2E34)))
+            }
+            .font(.system(size: 13)).foregroundStyle(Color.text2)
+            .padding(.horizontal, 10).frame(height: 34)
+            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x222227)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("k", modifiers: .command)
+        .popover(isPresented: $open, arrowEdge: .trailing) { JumpList(selection: $selection, open: $open) }
+    }
+}
+
+private struct JumpList: View {
+    @Environment(AppState.self) private var state
+    @Binding var selection: Pane?
+    @Binding var open: Bool
+    @State private var query = ""
+    @FocusState private var focused: Bool
+
+    private static let pages: [(String, String, Pane)] = [
+        ("Chat", "bubble.left", .chat), ("Models", "cube", .models), ("TensorFold", "square.stack.3d.up", .tensorfold),
+        ("vLLM", "triangle", .vllm), ("Ollama", "tray", .discovered), ("Hugging Face", "face.smiling", .huggingFace),
+        ("ComfyUI", "photo", .comfy), ("Overview", "gauge.with.needle", .spark), ("Requests", "arrow.left.arrow.right", .requests),
+        ("Usage", "chart.bar", .usage), ("Logs", "doc.text", .logs), ("Terminal", "apple.terminal", .terminal),
+        ("SSH Keys", "key", .sshKeys), ("Wi-Fi", "wifi", .wifi), ("API Access", "chevron.left.forwardslash.chevron.right", .connect),
+    ]
+
+    private var matches: [(String, String, Pane)] {
+        let all = Self.pages + state.config.recipes.map { ($0.name.isEmpty ? "Untitled" : $0.name, "cpu", Pane.model($0.id)) }
+        return query.isEmpty ? all : all.filter { $0.0.localizedCaseInsensitiveContains(query) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TextField("Search or jump to…", text: $query)
+                .textFieldStyle(.plain).font(.system(size: 14)).padding(12)
+                .focused($focused)
+                .onSubmit { if let m = matches.first { go(m.2) } }
+            Hairline()
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(matches, id: \.2) { title, symbol, pane in
+                        Button { go(pane) } label: {
+                            HStack(spacing: 10) {
+                                LineIcon(symbol: symbol, size: 16).foregroundStyle(Color.text2)
+                                Text(title).lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .font(.system(size: 13)).padding(.horizontal, 10).frame(height: 30)
+                            .hoverFill(radius: 7).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(6)
+            }
+            .frame(maxHeight: 320)
+        }
+        .frame(width: 300)
+        .onAppear { focused = true }
+    }
+
+    private func go(_ pane: Pane) { selection = pane; open = false }
+}
+
+/// The Spark this window controls, and whether it answers.
 private struct DeviceCard: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
-        Menu {
-            Button("Set Up Spark…") { state.showSetup = true }
-            SettingsLink { Text("Settings…") }
-        } label: {
-            HStack(spacing: 10) {
-                BoltTile(size: 30)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.text).lineLimit(1)
-                    HStack(spacing: 6) {
-                        Circle().fill(dot).frame(width: 6, height: 6)
-                        Text(status).lineLimit(1)
-                    }
-                    .font(.system(size: 12)).foregroundStyle(Color.text3)
+        HStack(spacing: 10) {
+            BoltTile(size: 30)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.text).lineLimit(1)
+                HStack(spacing: 6) {
+                    Circle().fill(dot).frame(width: 6, height: 6)
+                    Text(status).lineLimit(1)
                 }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.up.chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(Color.text2)
+                .font(.system(size: 12)).foregroundStyle(Color.text3)
             }
-            .padding(.horizontal, 10)
-            .frame(minHeight: 48)
-            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
-            .contentShape(Rectangle())
+            Spacer(minLength: 0)
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
+        .padding(.horizontal, 10)
+        .frame(minHeight: 48)
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+        .accessibilityElement(children: .combine)
         .help(state.route.flatMap { r in state.config.device.map { "\($0.host(r)) over \(r.label)" } } ?? "")
-        .accessibilityLabel("\(name), \(status)")
     }
 
     private var name: String {

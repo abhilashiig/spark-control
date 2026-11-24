@@ -194,6 +194,7 @@ struct DeviceSetupView: View {
     @State private var device = Device()
 
     var body: some View {
+        let editing = state.config.device != nil
         VStack(spacing: 0) {
             VStack(spacing: 8) {
                 Image(systemName: "server.rack")
@@ -214,6 +215,7 @@ struct DeviceSetupView: View {
 
             HStack {
                 Spacer()
+                if editing { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction) }
                 Button("Continue") {
                     state.config.device = device
                     dismiss()
@@ -224,7 +226,9 @@ struct DeviceSetupView: View {
             .padding([.horizontal, .bottom], 20)
         }
         .frame(width: 540, height: 600)
-        .interactiveDismissDisabled()
+        .background(Color.pageBackground)
+        .interactiveDismissDisabled(!editing)
+        .onAppear { if let d = state.config.device { device = d } }
     }
 }
 

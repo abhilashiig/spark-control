@@ -344,20 +344,24 @@ struct TensorFoldView: View {
     @State private var deleting: CatalogItem?
     @State private var removing = false
     @State private var manual = false
+    @State private var filter = CatalogFilter.all
 
     var body: some View {
+        let items = TensorFold.catalog.map(CatalogItem.tf)
+        let shown = items.filter { filter.keeps($0, state) }
+        let tested = shown.filter { if case .tf(let m) = $0 { !m.untested } else { true } }
+        let untested = shown.filter { !tested.contains($0) }
         VStack(alignment: .leading, spacing: 0) {
             EngineRow(removing: $removing, manual: $manual)
-            CatalogSection("Tested on one GB10",
-                           "From TensorFold \(TensorFold.version)'s tested list.") {
-                ForEach(TensorFold.catalog.filter { !$0.untested }) { m in
-                    ModelRow(item: .tf(m), selection: $selection, deleting: $deleting)
-                }
+            CatalogSection("Tested models", state.catalogSummary(items)) {
+                ForEach(tested) { ModelRow(item: $0, selection: $selection, deleting: $deleting) }
+            } trailing: {
+                Segments(selection: $filter, options: CatalogFilter.allCases.map { ($0, $0.rawValue) })
             }
-            CatalogSection("Not tested on one GB10",
-                           "May refuse to start or run slower than expected.") {
-                ForEach(TensorFold.catalog.filter(\.untested)) { m in
-                    ModelRow(item: .tf(m), selection: $selection, deleting: $deleting)
+            if !untested.isEmpty {
+                CatalogSection("Not tested on one GB10",
+                               "May refuse to start or run slower than expected.") {
+                    ForEach(untested) { ModelRow(item: $0, selection: $selection, deleting: $deleting) }
                 }
             }
         }
@@ -373,15 +377,17 @@ struct VLLMView: View {
     @Binding var selection: Pane?
     @State private var deleting: CatalogItem?
     @State private var removing = false
+    @State private var filter = CatalogFilter.all
 
     var body: some View {
+        let items = VLLM.catalog.map(CatalogItem.vllm)
         VStack(alignment: .leading, spacing: 0) {
             VLLMEngineRow(removing: $removing)
             CatalogSection("Models for vLLM",
-                           "Each fits on one GB10. Downloads are shared with TensorFold.") {
-                ForEach(VLLM.catalog) { m in
-                    ModelRow(item: .vllm(m), selection: $selection, deleting: $deleting)
-                }
+                           state.catalogSummary(items) + " · Downloads are shared with TensorFold") {
+                ForEach(items.filter { filter.keeps($0, state) }) { ModelRow(item: $0, selection: $selection, deleting: $deleting) }
+            } trailing: {
+                Segments(selection: $filter, options: CatalogFilter.allCases.map { ($0, $0.rawValue) })
             }
             CatalogFootnote("A model's first start compiles kernels and can take 10–15 minutes.")
         }
@@ -406,8 +412,8 @@ struct ComfyView: View {
             EngineHero(symbol: "photo", title: "ComfyUI",
                        description: "Image generation and editing on the Spark, opened in your browser.",
                        meta: state.route == nil ? "Spark unreachable"
-                           : installed ? "Version \(state.tf.comfyVersion ?? "")  ·  Installed by Spark Control"
-                           : "Version \(ComfyUI.version)  ·  About 10 GB  ·  PyTorch for CUDA 13.0, no sudo") {
+                           : installed ? "v\(state.tf.comfyVersion ?? "") · installed by Spark Control"
+                           : "v\(ComfyUI.version) · about 10 GB · PyTorch for CUDA 13.0, no sudo") {
                 if state.tfBusy {
                     ProgressView().controlSize(.small)
                 } else if !installed {
@@ -425,7 +431,7 @@ struct ComfyView: View {
 
             if installed {
                 CatalogSection("Server",
-                               "Starting ComfyUI stops the running model, and starting a model (a chat request included) stops ComfyUI.") {
+                               "Starting ComfyUI stops the running model, and starting a model (a chat request included) stops ComfyUI.", grid: false) {
                     HStack(spacing: 12) {
                         Circle().fill(state.tf.comfyRunning ? Color.running : Color.clear)
                             .overlay { if !state.tf.comfyRunning { Circle().strokeBorder(Color(light: 0xAEAEB2, dark: 0x636366), lineWidth: 1.5) } }
@@ -441,8 +447,7 @@ struct ComfyView: View {
                             .buttonStyle(PillButtonStyle(filled: true))
                             .disabled(state.comfyBusy || state.route == nil || state.isBusy)
                     }
-                    .padding(.vertical, 16)
-                    .overlay(alignment: .bottom) { Hairline() }
+                    .card(padding: 18)
                 }
             }
 
@@ -471,9 +476,9 @@ private struct CatalogPage: ViewModifier {
     func body(content: Content) -> some View {
         ScrollView {
             content
-                .frame(maxWidth: 820, alignment: .leading)
-                .padding(.horizontal, 32)
-                .padding(.top, 40)
+                .frame(maxWidth: 1180, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.top, 28)
                 .padding(.bottom, 56)
                 .frame(maxWidth: .infinity)
         }
@@ -520,10 +525,11 @@ private struct EngineRow: View {
     @Binding var removing: Bool
     @Binding var manual: Bool
     @State private var updating: String?
+    @State private var checking = false
 
     var body: some View {
         EngineHero(symbol: "square.stack.3d.up", title: "TensorFold",
-                   description: "Tested on one GB10. A good default for one person chatting or coding.",
+                   description: "A good default for one person chatting or coding. Tested on one GB10.",
                    meta: meta) {
             if state.tfBusy {
                 ProgressView().controlSize(.small)
@@ -539,6 +545,13 @@ private struct EngineRow: View {
                         Button("Update to \(state.tfTarget)…") { updating = state.tfTarget }
                             .buttonStyle(PillButtonStyle(filled: true, large: true))
                             .disabled(state.route == nil)
+                    } else {
+                        Button(checking ? "Checking…" : "Check for Updates") {
+                            checking = true
+                            Task { state.tfLatest = await TensorFold.latestStable(); checking = false }
+                        }
+                        .buttonStyle(PillButtonStyle(large: true))
+                        .disabled(checking)
                     }
                     Menu {
                         if !state.tf.jpeg {
@@ -550,10 +563,13 @@ private struct EngineRow: View {
                         Divider()
                         Button("Remove…", role: .destructive) { removing = true }
                     } label: {
-                        Label("More", systemImage: "ellipsis")
+                        Text("•••").font(.system(size: 12)).foregroundStyle(Color.text3)
+                            .frame(width: 34, height: 34)
+                            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color(light: 0xD4D4D8, dark: 0x2E2E34)))
+                            .contentShape(Rectangle())
                     }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(GhostIconStyle())
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("More engine options")
                     .menuStyle(.button).menuIndicator(.hidden).fixedSize()
                     .disabled(state.route == nil)
                     .help("More")
@@ -576,8 +592,8 @@ private struct EngineRow: View {
     private var meta: String {
         if state.route == nil { return "Spark unreachable" }
         switch state.tf.engine {
-        case .none: return "Version \(state.tfTarget)  ·  Not installed  ·  No sudo"
-        case .managed(let v): return "Version \(v)  ·  Installed by Spark Control"
+        case .none: return "v\(state.tfTarget) · Not installed · No sudo"
+        case .managed(let v): return "v\(v) · installed by Spark Control · catalog from \(TensorFold.version)"
         case .user(let path, let v): return (v.isEmpty ? "" : "\(v)  ·  ") + path
         }
     }
@@ -637,41 +653,101 @@ struct ModelRow: View {
 
     var body: some View {
         let st = state.tf.models[item.key] ?? .init()
-        HStack(alignment: .center, spacing: 16) {
-            ModelAvatar(name: item.name, size: 48)
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Text(ModelAvatar.tag(item.name))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color(light: 0x3F3F46, dark: 0xD4D4D8))
+                    .minimumScaleFactor(0.6).lineLimit(1).padding(.horizontal, 2)
+                    .frame(width: 40, height: 40)
+                    .background(Color.well, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
                     Text(item.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(Color.text)
-                    Text(source).font(.system(size: 12.5)).foregroundStyle(Color.text2).lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(source).font(.system(size: 12)).foregroundStyle(Color.text2).lineLimit(1)
                 }
                 .help(item.sources.joined(separator: "\n"))
-                Text(item.note).font(.system(size: 13)).foregroundStyle(Color.text3).lineSpacing(4)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 3)
-                if st.download == .running || st.download == .failed, !st.message.isEmpty {
-                    Text(st.message)
-                        .font(.system(size: 11.5, design: .monospaced))
-                        .foregroundStyle(st.download == .failed ? Color.danger : Color.text2)
-                        .lineLimit(2)
-                        .padding(.top, 6)
-                }
-                if st.download == .failed, let repo = gatedRepo(st.message) {
+                .frame(maxWidth: .infinity, alignment: .leading)
+                let (label, color) = status(st)
+                if !label.isEmpty { Text(label).font(.system(size: 12)).foregroundStyle(color).fixedSize() }
+            }
+            Text(item.note).font(.system(size: 13)).foregroundStyle(Color.text3).lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+            if st.download == .running || st.download == .failed, !st.message.isEmpty {
+                Text(st.message)
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .foregroundStyle(st.download == .failed ? Color.danger : Color.text2)
+                    .lineLimit(2)
+            }
+            if st.download == .failed, let repo = gatedRepo(st.message) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("This model is gated on Hugging Face. Access is per repository: open this exact model's page signed in as the account the Spark uses (`hf auth whoami` on the Spark), accept its terms, then Retry. If the Spark isn't signed in, run `hf auth login` on it first.")
                         .font(.system(size: 12)).foregroundStyle(Color.text2)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 6)
                     Link("Open \(repo) on Hugging Face", destination: URL(string: "https://huggingface.co/\(repo)")!)
-                        .font(.system(size: 12))
-                        .padding(.top, 2)
+                        .font(.system(size: 12)).tint(.link)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 12) { actions(st) }
-                .font(.system(size: 12.5))
-                .fixedSize()
+            if !tags.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(tags, id: \.self) { t in
+                        Text(t).font(.system(size: 12)).foregroundStyle(Color(light: 0x52525B, dark: 0xC4C4CC))
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Color(light: 0xF4F4F5, dark: 0x1C1C21), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+            HStack(spacing: 10) { actions(st) }
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(Color(light: 0x52525B, dark: 0xC4C4CC))
+                .frame(minHeight: 32)
+                .padding(.top, 12)
+                .overlay(alignment: .top) { Hairline() }
         }
-        .padding(.vertical, 16)
-        .overlay(alignment: .bottom) { Hairline() }
+        .padding(18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.cardBorder))
+    }
+
+    /// The corner label: where the model stands, or a warning that it leaves little memory for anything else.
+    private func status(_ st: TensorFold.ModelStatus) -> (String, Color) {
+        switch st.download {
+        case .running: return ("Downloading", Color.link)
+        case .failed: return ("Failed", Color.danger)
+        default: break
+        }
+        if state.isOnSpark(item) {
+            if case .comfy = item { return ("Downloaded", Color.text3) }
+            return state.catRecipeID(item) == nil ? ("Ready to add", Color.running) : ("In library", Color.text3)
+        }
+        // ponytail: download size as a stand-in for memory need; past half the Spark's memory little else fits beside it.
+        if let size = state.tfSizes[item.key], size > state.sparkMemoryTotal / 2 { return ("Uses most memory", VizColor.warning) }
+        return ("", .clear)
+    }
+
+    /// Short facts for the chips: images, mixture of experts, drafts, weight format.
+    private var tags: [String] {
+        let text = (item.name + " " + item.sources.joined(separator: " ")).lowercased()
+        var t: [String] = []
+        switch item {
+        case .tf(let m):
+            if m.flags.contains("--vision") { t.append("Vision") }
+            if text.contains(#/-a\d+(\.\d+)?b/#) { t.append("MoE") }
+            if let d = m.drafts { t.append(d == "MTP" ? "MTP" : m.drafter?.id.contains("DFlash2") == true ? "DFlash2" : "DFlash") }
+        case .vllm(let m):
+            if item.note.lowercased().contains("image") { t.append("Vision") }
+            if text.contains(#/-a\d+(\.\d+)?b/#) { t.append("MoE") }
+            t.append(m.drafter == nil ? "MTP" : "MTP drafter")
+        case .comfy:
+            t.append("Image")
+        }
+        if text.contains("nvfp4") { t.append("NVFP4") } else if text.contains("fp8") { t.append("FP8") }
+        else if text.contains("4bit") || text.contains("4-bit") { t.append("4-bit") }
+        return t
     }
 
     /// Who publishes it: the Hugging Face owners of its repos ("nvidia", "nvidia + google").
@@ -695,14 +771,17 @@ struct ModelRow: View {
         switch st.download {
         case .running:
             progress(st.bytes, of: size)
+            Spacer(minLength: 8)
             Button("Cancel") { Task { await state.catCancel(item) } }.buttonStyle(PillButtonStyle())
         case .done:
             downloaded(st.bytes.formatted(.byteCount(style: .file)))
+            Spacer(minLength: 8)
             addOrOpen(noEngine)
             moreMenu("Delete from the Spark")
         case .none where complete:
             downloaded("On Spark")
                 .help("Already in the Spark's Hugging Face cache (\(st.bytes.formatted(.byteCount(style: .file)))), downloaded outside Spark Control.")
+            Spacer(minLength: 8)
             addOrOpen(noEngine)
         case .failed, .none:
             let missing = size.map { max(0, $0 - st.bytes) }
@@ -713,8 +792,9 @@ struct ModelRow: View {
             } else if st.bytes > 0 {
                 progress(st.bytes, of: size)
             } else if let size {
-                Text(size.formatted(.byteCount(style: .file))).foregroundStyle(Color.text2).monospacedDigit()
+                Text(size.formatted(.byteCount(style: .file))).monospacedDigit()
             }
+            Spacer(minLength: 8)
             Button(st.download == .failed ? "Retry" : st.bytes > 0 ? "Resume" : "Download") { Task { await state.catDownload(item) } }
                 .buttonStyle(PillButtonStyle())
                 .disabled(noEngine || tooBig)
@@ -724,11 +804,7 @@ struct ModelRow: View {
     }
 
     private func downloaded(_ text: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
-            Text(text).monospacedDigit()
-        }
-        .foregroundStyle(Color.text2)
+        Text("\(text) · downloaded").monospacedDigit()
     }
 
     private func moreMenu(_ delete: String) -> some View {
@@ -747,13 +823,13 @@ struct ModelRow: View {
     @ViewBuilder private func progress(_ bytes: Int64, of size: Int64?) -> some View {
         let have = bytes.formatted(.byteCount(style: .file))
         if let size, size > 0 {
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(have) of \(size.formatted(.byteCount(style: .file)))").foregroundStyle(Color.text2).monospacedDigit()
-                ProgressView(value: Double(min(bytes, size)), total: Double(size)).frame(width: 120).tint(.brand)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(have) of \(size.formatted(.byteCount(style: .file)))").monospacedDigit()
+                ProgressView(value: Double(min(bytes, size)), total: Double(size)).frame(width: 140).tint(.brand)
             }
         } else {
             ProgressView().controlSize(.small)
-            if bytes > 0 { Text(have).foregroundStyle(Color.text2).monospacedDigit() }
+            if bytes > 0 { Text(have).monospacedDigit() }
         }
     }
 
@@ -809,12 +885,11 @@ private struct VLLMEngineRow: View {
 
     private var meta: String {
         if state.route == nil { return "Spark unreachable" }
-        return "Version \(VLLM.version)  ·  26 GB  ·  " + (state.tf.vllm == "ready" ? "Installed" : "Runs in Docker, no sudo")
+        return "v\(VLLM.version) · 26 GB · " + (state.tf.vllm == "ready" ? "installed" : "runs in Docker, no sudo")
     }
 }
 
-/// An engine page's top: an 84pt dark tile, the name, what it's for, a version line, and its actions;
-/// below them the install log or a note. A hairline closes it off.
+/// An engine page's top: the name, what it's for, a version line, and its actions; below them the install log or a note.
 struct EngineHero<Actions: View, Log: View>: View {
     @Environment(AppState.self) private var state
     let symbol: String
@@ -826,21 +901,13 @@ struct EngineHero<Actions: View, Log: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .center, spacing: 22) {
-                Image(systemName: symbol)
-                    .symbolVariant(.none)
-                    .font(.system(size: 34, weight: .light))
-                    .foregroundStyle(.white)
-                    .frame(width: 84, height: 84)
-                    .background(Color.ink, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(title).font(.system(size: 26, weight: .bold)).tracking(-0.5).foregroundStyle(Color.text)
-                    Text(description).font(.system(size: 14)).foregroundStyle(Color.text3).lineSpacing(5)
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(.system(size: 24, weight: .semibold)).tracking(-0.5).foregroundStyle(Color.text)
+                    Text(description).font(.system(size: 13)).foregroundStyle(Color.text3).lineSpacing(4)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 4)
-                    Text(meta).font(.system(size: 12.5)).foregroundStyle(Color.text2).lineLimit(2).truncationMode(.middle)
-                        .padding(.top, 8)
+                    Text(meta).font(.system(size: 12, design: .monospaced)).foregroundStyle(Color.text2).lineLimit(2).truncationMode(.middle)
+                        .textSelection(.enabled)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 8) { actions }.fixedSize()
@@ -848,35 +915,84 @@ struct EngineHero<Actions: View, Log: View>: View {
             Group { log }
                 .font(.system(size: 12)).foregroundStyle(Color.text2)
                 .fixedSize(horizontal: false, vertical: true)
-            if !state.tfLog.isEmpty { LogBox(lines: state.tfLog) }
+            if !state.tfLog.isEmpty {
+                LogBox(lines: state.tfLog)
+                    .padding(12)
+                    .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.cardBorder))
+            }
         }
-        .padding(.bottom, 32)
-        .overlay(alignment: .bottom) { Hairline() }
     }
 }
 
-/// A titled run of catalog rows: 19pt title, a short explanation, then rows between hairlines.
-struct CatalogSection<Rows: View>: View {
+/// A titled run of catalog cards in an adaptive grid, with an optional control (a filter) on the right.
+/// `grid: false` lays the content out full width instead.
+struct CatalogSection<Rows: View, Trailing: View>: View {
     let title: String
     let subtitle: String
+    var grid = true
     @ViewBuilder var rows: Rows
-    init(_ title: String, _ subtitle: String, @ViewBuilder rows: () -> Rows) {
-        (self.title, self.subtitle, self.rows) = (title, subtitle, rows())
+    @ViewBuilder var trailing: Trailing
+
+    init(_ title: String, _ subtitle: String, grid: Bool = true, @ViewBuilder rows: () -> Rows, @ViewBuilder trailing: () -> Trailing) {
+        (self.title, self.subtitle, self.grid, self.rows, self.trailing) = (title, subtitle, grid, rows(), trailing())
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(title).font(.system(size: 19, weight: .semibold)).tracking(-0.2).foregroundStyle(Color.text)
-                .accessibilityAddTraits(.isHeader)
-            Text(subtitle).font(.system(size: 13)).foregroundStyle(Color.text2).lineSpacing(5)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 620, alignment: .leading)
-                .padding(.top, 6)
-            VStack(alignment: .leading, spacing: 0) { rows }
-                .overlay(alignment: .top) { Hairline() }
-                .padding(.top, 16)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Color.text)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(subtitle).font(.system(size: 13)).foregroundStyle(Color.text3).lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                trailing.fixedSize()
+            }
+            if grid {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 12, alignment: .top)], spacing: 12) { rows }
+            } else {
+                rows
+            }
         }
         .padding(.top, 32)
+    }
+}
+
+extension CatalogSection where Trailing == EmptyView {
+    init(_ title: String, _ subtitle: String, grid: Bool = true, @ViewBuilder rows: () -> Rows) {
+        self.init(title, subtitle, grid: grid, rows: rows) { EmptyView() }
+    }
+}
+
+/// The catalog's All / Downloaded / Vision filter.
+enum CatalogFilter: String, CaseIterable, Hashable {
+    case all = "All", downloaded = "Downloaded", vision = "Vision"
+
+    @MainActor func keeps(_ i: CatalogItem, _ state: AppState) -> Bool {
+        switch self {
+        case .all: true
+        case .downloaded: state.isOnSpark(i)
+        case .vision:
+            switch i {
+            case .tf(let m): m.flags.contains("--vision")
+            case .vllm: i.note.lowercased().contains("image")
+            case .comfy: true
+            }
+        }
+    }
+}
+
+extension AppState {
+    /// "4 downloaded · 111 GB free for models right now".
+    func catalogSummary(_ items: [CatalogItem]) -> String {
+        let n = items.filter(isOnSpark).count
+        var out = "\(n) downloaded"
+        if let avail = spark.last?.memAvailable {
+            out += " · \(Int((Double(max(0, avail - Self.systemReserve)) / 1e9).rounded())) GB free for models right now"
+        }
+        return out
     }
 }
 

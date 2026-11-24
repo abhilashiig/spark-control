@@ -2,9 +2,15 @@ import SwiftUI
 
 struct ModelView: View {
     @Environment(AppState.self) private var state
+    @Environment(ChatStore.self) private var chats
     let id: UUID
     @Binding var selection: Pane?
     @State private var confirmDelete = false
+    @State private var tab = Tab.configuration
+    @State private var keyTarget: String?
+    @State private var width: CGFloat = 1000
+
+    enum Tab: String, CaseIterable { case configuration = "Configuration", api = "API", pricing = "Pricing", benchmark = "Benchmark", logs = "Logs" }
 
     /// Looked up by id so deleting the model can't leave a stale index behind.
     private var recipe: Binding<Recipe> {
@@ -17,89 +23,33 @@ struct ModelView: View {
 
     var body: some View {
         let r = recipe
-        Form {
-            if let n = state.notice { Section { NoticeBanner(text: n) } }
-            Section { ModelHeader(recipe: r.wrappedValue) }
-
-            Section {
-                MemoryField(recipe: r)
-            } footer: {
-                Text(memoryFooter(r.wrappedValue))
-            }
-
-            if let m = TensorFold.model(r.wrappedValue.tensorfold) {
-                TensorFoldSection(recipe: r, model: m)
-            }
-            if let m = VLLM.model(r.wrappedValue.vllm) {
-                VLLMSection(recipe: r, model: m)
-            }
-
-            BenchmarkSection(recipe: r.wrappedValue)
-
-            Section {
-                TextField("Name", text: r.name)
-                CodeField(title: "Start command", text: r.startCommand, prompt: "qwen-start")
-                CodeField(title: "Stop command", text: r.stopCommand, prompt: "qwen-stop")
-                TextField("Spark port", value: r.port, format: .number.grouping(.never),
-                          prompt: Text("\((state.config.device?.backendPort ?? 18300).formatted(.number.grouping(.never))) (default)"))
-                TextField("Startup timeout (seconds)", value: r.timeout, format: .number.grouping(.never))
-                Toggle("Enabled", isOn: r.enabled)
-            } header: {
-                Text("Recipe")
-            }
-
-            Section {
-                LabeledContent("API model name") {
-                    HStack(spacing: 6) {
-                        Text(r.wrappedValue.apiID).monospaced().textSelection(.enabled)
-                        CopyButton(text: r.wrappedValue.apiID)
+        VStack(spacing: 0) {
+            topBar(r.wrappedValue)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    if let n = state.notice { NoticeBanner(text: n) }
+                    hero(r.wrappedValue)
+                    stats(r.wrappedValue)
+                    tabBar
+                    if width > 860 {
+                        HStack(alignment: .top, spacing: 24) {
+                            main(r).frame(maxWidth: .infinity, alignment: .leading)
+                            side(r.wrappedValue).frame(width: 300)
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 24) { main(r); side(r.wrappedValue) }
                     }
                 }
-                if r.wrappedValue.servedName != nil {
-                    LabeledContent("Backend model ID") { Text(r.wrappedValue.upstreamModel).monospaced().textSelection(.enabled) }
-                } else {
-                    CodeField(title: "Backend model ID", text: r.upstreamModel, prompt: "Detected on first start")
-                }
-                Toggle("Reasoning", isOn: Binding { r.wrappedValue.hasReasoning } set: { r.wrappedValue.reasoning = $0 })
-                Toggle("Image input", isOn: Binding { r.wrappedValue.takesImages } set: {
-                    r.wrappedValue.images = $0
-                    if r.wrappedValue.tensorfold != nil { r.wrappedValue.startCommand = TensorFold.withVision(r.wrappedValue.startCommand, $0) }
-                })
-                Toggle("Model's Own Sampling", isOn: r.modelSampling)
-                    .help("Ignores the temperature, top_p and other sampling values clients send, so the model maker's defaults apply.")
-            } header: {
-                Text("API")
-            } footer: {
-                Text("The API name stays fixed, so renaming the model doesn't break clients.")
-            }
-
-            Section {
-                TextField("Input", value: r.priceIn, format: .number.precision(.fractionLength(0...4)))
-                TextField("Output", value: r.priceOut, format: .number.precision(.fractionLength(0...4)))
-                TextField("Cache read", value: r.priceCache, format: .number.precision(.fractionLength(0...4)),
-                          prompt: Text("Same as input"))
-            } header: {
-                Text("Pricing")
-            } footer: {
-                Text("USD per 1M tokens.")
-            }
-
-            Section {
-                RulesEditor(rules: r.rules)
-            } header: {
-                Text("Parameter Rules")
-            } footer: {
-                Text("Default fills in a missing value, Override always replaces it, Remove strips it. Values are JSON or plain text.")
-            }
-
-            Section {
-                Button("Delete Model…", role: .destructive) { confirmDelete = true }
+                .padding(.horizontal, 28)
+                .padding(.top, 28)
+                .padding(.bottom, 56)
+                .frame(maxWidth: 1080)
+                .frame(maxWidth: .infinity)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width = $0 }
             }
         }
-        .page()
-        .pageHeader(r.wrappedValue.name.isEmpty ? "Untitled" : r.wrappedValue.name) {
-            Button { selection = .models } label: { Label("Back to Models", systemImage: "xmark") }.help("Back to Models")
-        }
+        .textFieldStyle(.plain)
+        .toggleStyle(.switch)
         .confirmationDialog("Delete “\(r.wrappedValue.name)”?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) {
                 selection = .models
@@ -108,49 +58,476 @@ struct ModelView: View {
         } message: {
             Text("This removes the recipe from Spark Control. Nothing on the Spark is changed.")
         }
+        .sheet(item: $keyTarget) { target in
+            KeyLoginSheet(target: target) { state.start(r.wrappedValue) }
+        }
+    }
+
+    // MARK: Header
+
+    private func topBar(_ r: Recipe) -> some View {
+        let phase = state.phase(for: r)
+        return HStack(spacing: 8) {
+            Button("Models") { selection = .models }.buttonStyle(.plain).foregroundStyle(Color.text3)
+            Text("/").foregroundStyle(Color(light: 0xA1A1AA, dark: 0x4A4A52))
+            Text(r.name.isEmpty ? "Untitled" : r.name).fontWeight(.medium).foregroundStyle(Color.text).lineLimit(1)
+            Spacer(minLength: 12)
+            Group {
+                if case .failed(let m) = phase, m.contains("Permission denied"), let target = state.sshTarget {
+                    Button("Set Up Key Login…") { keyTarget = target }.buttonStyle(DesignButtonStyle(prominent: false, height: 34))
+                }
+                Button("View logs") { tab = .logs }.buttonStyle(DesignButtonStyle(prominent: false, height: 34))
+                if phase.busy {
+                    ProgressView().controlSize(.small).padding(.horizontal, 8)
+                } else if phase == .ready {
+                    Button("Stop") { state.stop(r) }.buttonStyle(DesignButtonStyle(prominent: false, height: 34))
+                    if !r.isEmbedding {
+                        Button("Open in Chat") {
+                            chats.selection = chats.newChat(model: r.apiID, profiles: state.config.profiles)
+                            selection = .chat
+                        }
+                        .buttonStyle(DesignButtonStyle(height: 34))
+                        .disabled(!r.enabled)
+                    }
+                } else {
+                    Button(phase.isFailure ? "Try again" : "Load model") { state.start(r) }
+                        .buttonStyle(DesignButtonStyle(height: 34))
+                        .disabled(!canStart(r))
+                }
+            }
+            .fixedSize()
+        }
+        .font(.system(size: 13))
+        .padding(.horizontal, 28)
+        .frame(minHeight: 60)
+        .background { Color.pageBackground.gesture(WindowDragGesture()) }
+        .overlay(alignment: .bottom) { Hairline() }
+    }
+
+    private func hero(_ r: Recipe) -> some View {
+        let phase = state.phase(for: r)
+        let engine = state.engineName(r)
+        let color = statusColor(phase)
+        return HStack(spacing: 16) {
+            Text(ModelAvatar.tag(r.name))
+                .font(.system(size: 15, weight: .medium, design: .monospaced))
+                .foregroundStyle(EngineBadge.text(engine))
+                .minimumScaleFactor(0.6).lineLimit(1).padding(.horizontal, 4)
+                .frame(width: 56, height: 56)
+                .background(EngineBadge.color(engine).opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(EngineBadge.color(engine).opacity(0.3)))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 10) {
+                    Text(r.name.isEmpty ? "Untitled" : r.name).font(.system(size: 24, weight: .semibold)).tracking(-0.4)
+                        .textSelection(.enabled)
+                    EngineBadge(name: engine)
+                    ForEach(tags(r), id: \.self) { t in
+                        Text(t).font(.system(size: 12, weight: .medium)).foregroundStyle(Color(light: 0x52525B, dark: 0xC4C4CC))
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Color(light: 0xF4F4F5, dark: 0x1C1C21), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Circle().fill(color).frame(width: 7, height: 7)
+                        .background(Circle().fill(color.opacity(0.15)).padding(-3))
+                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                    Text(statusText(r, phase)).lineLimit(3).textSelection(.enabled)
+                }
+                .font(.system(size: 13))
+                .foregroundStyle(phase == .stopped ? Color.text3 : color)
+            }
+        }
+    }
+
+    private func tags(_ r: Recipe) -> [String] {
+        r.isEmbedding ? ["Embedding"] : [r.takesImages ? "Vision" : nil, r.hasReasoning ? "Reasoning" : nil].compactMap { $0 }
+    }
+
+    private func statusText(_ r: Recipe, _ p: Phase) -> String {
+        switch p {
+        case .ready: "Running on port \(state.port(of: r))"
+        case .stopped: r.enabled ? "Not loaded" : "Off"
+        default: p.label
+        }
+    }
+
+    private func statusColor(_ p: Phase) -> Color {
+        switch p {
+        case .ready: Color.running
+        case .stopped: Color.text2
+        case .failed, .offline: Color.danger
+        default: VizColor.warning
+        }
+    }
+
+    // MARK: Stats
+
+    private func stats(_ r: Recipe) -> some View {
+        let day = state.usage.filter { $0.model == r.apiID && $0.date >= Date.now.addingTimeInterval(-86_400) }
+        let topClient = Dictionary(grouping: day, by: { $0.client ?? "Unknown" }).max { $0.value.count < $1.value.count }?.key
+        let need = state.memoryNeed(r)
+        let runs = state.benchResults[r.id] ?? []
+        let benching = state.bench.map { $0.recipe == r.id && $0.running } ?? false
+        let fraction = Double(need ?? 0) / Double(max(1, state.sparkMemoryTotal))
+        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 12)], spacing: 12) {
+            statCard(r.memoryMeasured ? "Memory · measured" : "Memory") {
+                bigNumber(need.map { String(format: "%.0f", Double($0) / 1e9) } ?? "—", unit: need == nil ? nil : "GB")
+                GeometryReader { g in
+                    Capsule().fill(Color(light: 0xE4E4E7, dark: 0x222227))
+                        .overlay(alignment: .leading) {
+                            Capsule().fill(EngineBadge.color(state.engineName(r))).frame(width: g.size.width * min(1, fraction))
+                        }
+                }
+                .frame(height: 4)
+            }
+            statCard("Requests · 24h") {
+                bigNumber(day.count.formatted())
+                caption(topClient.map { "from \($0)" } ?? "None yet")
+            }
+            statCard("Input tokens · 24h") {
+                bigNumber(day.reduce(0) { $0 + $1.prompt }.compact)
+                caption("\(day.reduce(0) { $0 + $1.cost }.usd) at current pricing")
+            }
+            statCard("Benchmark") {
+                if benching {
+                    Text("Running…").font(.system(size: 15, weight: .medium)).foregroundStyle(Color.text3).padding(.vertical, 4)
+                } else if let d = runs.last?.decode {
+                    bigNumber(String(format: "%.1f", d), unit: "tok/s")
+                } else {
+                    Text("Not run yet").font(.system(size: 15, weight: .medium)).foregroundStyle(Color.text3).padding(.vertical, 4)
+                }
+                let fresh = runs.isEmpty && !benching
+                Button(fresh ? "Run benchmark →" : "View results →") {
+                    tab = .benchmark
+                    if fresh { Task { await state.runBenchmark(r) } }
+                }
+                .buttonStyle(.plain).foregroundStyle(Color.link).font(.system(size: 13, weight: .medium))
+                .disabled(fresh && !canStart(r))
+            }
+        }
+    }
+
+    private func statCard(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.system(size: 12)).foregroundStyle(Color.text3)
+            content()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.cardBorder))
+    }
+
+    private func bigNumber(_ v: String, unit: String? = nil) -> some View {
+        (Text(v).font(.system(size: 22, weight: .semibold)).foregroundStyle(Color.text)
+            + Text(unit.map { " " + $0 } ?? "").font(.system(size: 14, weight: .medium)).foregroundStyle(Color.text3))
+            .tracking(-0.3)
+    }
+
+    private func caption(_ s: String) -> some View {
+        Text(s).font(.system(size: 12)).foregroundStyle(Color.text2).lineLimit(1)
+    }
+
+    // MARK: Tabs
+
+    private var tabBar: some View {
+        HStack(spacing: 4) {
+            ForEach(Tab.allCases, id: \.self) { t in
+                let on = tab == t
+                Button { tab = t } label: {
+                    Text(t.rawValue)
+                        .font(.system(size: 13, weight: on ? .medium : .regular))
+                        .foregroundStyle(on ? Color.text : Color.text3)
+                        .padding(.horizontal, 12).padding(.vertical, 10)
+                        .overlay(alignment: .bottom) { Rectangle().fill(on ? Color.text : .clear).frame(height: 2) }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .bottom) { Hairline() }
+    }
+
+    @ViewBuilder private func main(_ r: Binding<Recipe>) -> some View {
+        VStack(alignment: .leading, spacing: 24) {
+            switch tab {
+            case .configuration: configuration(r)
+            case .api: api(r)
+            case .pricing: pricing(r)
+            case .benchmark:
+                card {
+                    VStack(alignment: .leading, spacing: 12) { BenchmarkSection(recipe: r.wrappedValue) }
+                        .textFieldStyle(.roundedBorder)
+                        .padding(16)
+                }
+            case .logs: logs
+            }
+        }
+    }
+
+    @ViewBuilder private func configuration(_ r: Binding<Recipe>) -> some View {
+        group("Recipe", "How Spark Control starts, checks and stops this model.") {
+            row("Name") { TextField("Name", text: r.name, prompt: Text("Untitled")).multilineTextAlignment(.trailing) }
+            Hairline()
+            CommandBox(title: "Start command", text: r.startCommand, prompt: "qwen-start")
+            Hairline()
+            CommandBox(title: "Stop command", text: r.stopCommand, prompt: "qwen-stop")
+            Hairline()
+            HStack(spacing: 0) {
+                field("Spark port") {
+                    TextField("Spark port", value: r.port, format: .number.grouping(.never),
+                              prompt: Text("\((state.config.device?.backendPort ?? 18300).formatted(.number.grouping(.never))) (default)"))
+                }
+                Hairline(vertical: true)
+                field("Startup timeout (seconds)") {
+                    TextField("Startup timeout", value: r.timeout, format: .number.grouping(.never))
+                }
+                Hairline(vertical: true)
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Enabled").fontWeight(.medium)
+                        Text("Shown in Chat and API").font(.system(size: 12)).foregroundStyle(Color.text2)
+                    }
+                    Spacer(minLength: 0)
+                    Toggle("Enabled", isOn: r.enabled).labelsHidden()
+                }
+                .font(.system(size: 13))
+                .padding(.horizontal, 16).padding(.vertical, 14)
+                .frame(maxWidth: .infinity)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        group("Memory", memoryFooter(r.wrappedValue)) {
+            MemoryField(recipe: r).padding(.horizontal, 16).padding(.vertical, 12)
+        }
+        if let m = TensorFold.model(r.wrappedValue.tensorfold) {
+            group("TensorFold", TensorFoldSection.footer(TensorFold.context(of: r.wrappedValue.startCommand), model: m)) {
+                TensorFoldSection(recipe: r, model: m).padding(16)
+            }
+        }
+        if let m = VLLM.model(r.wrappedValue.vllm) {
+            group("vLLM", "Changes apply at the next start. More drafts aren't always faster; run a benchmark to compare.") {
+                VLLMSection(recipe: r, model: m).padding(16)
+            }
+        }
+    }
+
+    @ViewBuilder private func api(_ r: Binding<Recipe>) -> some View {
+        group("API", "The API name stays fixed, so renaming the model never breaks clients.") {
+            row("API model name") {
+                HStack(spacing: 8) {
+                    Text(r.wrappedValue.apiID).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Color.pageBackground, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+                    CopyButton(text: r.wrappedValue.apiID).foregroundStyle(Color.text3)
+                }
+            }
+            Hairline()
+            row("Backend model ID") {
+                if r.wrappedValue.servedName != nil {
+                    Text(r.wrappedValue.upstreamModel).font(.system(size: 12, design: .monospaced)).foregroundStyle(Color.text3).textSelection(.enabled)
+                } else {
+                    TextField("Backend model ID", text: r.upstreamModel, prompt: Text("Detected on first start"))
+                        .font(.system(size: 12, design: .monospaced)).multilineTextAlignment(.trailing)
+                }
+            }
+            Hairline()
+            row("Reasoning", note: r.wrappedValue.isEmbedding && r.wrappedValue.hasReasoning ? "Embedding models don't produce reasoning; turn this off" : nil) {
+                Toggle("Reasoning", isOn: Binding { r.wrappedValue.hasReasoning } set: { r.wrappedValue.reasoning = $0 }).labelsHidden()
+            }
+            Hairline()
+            row("Image input") {
+                Toggle("Image input", isOn: Binding { r.wrappedValue.takesImages } set: {
+                    r.wrappedValue.images = $0
+                    if r.wrappedValue.tensorfold != nil { r.wrappedValue.startCommand = TensorFold.withVision(r.wrappedValue.startCommand, $0) }
+                }).labelsHidden()
+            }
+            Hairline()
+            row("Model's Own Sampling", sub: "Ignores the temperature, top_p and other sampling values clients send, so the model maker's defaults apply.") {
+                Toggle("Model's Own Sampling", isOn: r.modelSampling).labelsHidden()
+            }
+        }
+        group("Parameter Rules", "Default fills in a missing value, Override always replaces it, Remove strips it. Values are JSON or plain text.") {
+            VStack(alignment: .leading, spacing: 8) { RulesEditor(rules: r.rules) }
+                .textFieldStyle(.roundedBorder)
+                .padding(16)
+        }
+    }
+
+    private func pricing(_ r: Binding<Recipe>) -> some View {
+        group("Pricing", "USD per million tokens. Used for cost tracking in Usage.") {
+            HStack(spacing: 0) {
+                field("Input") { TextField("Input", value: r.priceIn, format: .number.precision(.fractionLength(0...4)), prompt: Text("0")) }
+                Hairline(vertical: true)
+                field("Output") { TextField("Output", value: r.priceOut, format: .number.precision(.fractionLength(0...4)), prompt: Text("0")) }
+                Hairline(vertical: true)
+                field("Cache read") {
+                    TextField("Cache read", value: r.priceCache, format: .number.precision(.fractionLength(0...4)), prompt: Text("Same as input"))
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder private var logs: some View {
+        let lines = Array(state.logs.suffix(300))
+        card {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 3) {
+                    ForEach(lines) { l in
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(l.date, format: .dateTime.hour().minute().second()).foregroundStyle(Color.text2)
+                            Text(l.text).foregroundStyle(l.event ? Color.text : Color.text3)
+                        }
+                    }
+                    if lines.isEmpty { Text("No logs yet.").foregroundStyle(Color.text2) }
+                }
+                .font(.system(size: 12, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+            }
+            .defaultScrollAnchor(.bottom)
+            .frame(height: 420)
+        }
+        Button("Open Logs page") { selection = .logs }.buttonStyle(.plain).foregroundStyle(Color.link)
+    }
+
+    // MARK: Side column
+
+    private func side(_ r: Recipe) -> some View {
+        let snippet = quickStart(r)
+        return VStack(alignment: .leading, spacing: 16) {
+            sideCard {
+                Text("Quick start").font(.system(size: 13, weight: .semibold))
+                ScrollView(.horizontal) {
+                    Text(snippet).font(.system(size: 12, design: .monospaced)).foregroundStyle(Color(light: 0x3F3F46, dark: 0xD4D4D8))
+                        .lineSpacing(4).textSelection(.enabled).fixedSize().padding(12)
+                }
+                .scrollIndicators(.never)
+                .background(Color.pageBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.hairline))
+                Button("Copy snippet") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(snippet, forType: .string)
+                }
+                .buttonStyle(DesignButtonStyle(prominent: false, height: 34))
+            }
+            sideCard {
+                Text("How memory is shared").font(.system(size: 13, weight: .semibold))
+                Text("Models run side by side while they fit in free memory, keeping \(AppState.systemReserve / 1_000_000_000) GB for the system. If a new model doesn't fit, the least recently used one stops first, with a warning.")
+                    .font(.system(size: 13)).foregroundStyle(Color.text3).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+            }
+            sideCard(border: Color.danger.opacity(0.35)) {
+                Text("Remove model").font(.system(size: 13, weight: .semibold))
+                Text("Removes it from Spark Control. Nothing on the Spark is changed.")
+                    .font(.system(size: 13)).foregroundStyle(Color.text3).fixedSize(horizontal: false, vertical: true)
+                Button("Remove…") { confirmDelete = true }.buttonStyle(.plain).foregroundStyle(Color.danger).font(.system(size: 13, weight: .medium))
+            }
+        }
+    }
+
+    private func quickStart(_ r: Recipe) -> String {
+        let auth = state.config.gateway.apiKey.isEmpty ? "" : "\n  -H \"Authorization: Bearer \(state.toolGateway.apiKey)\" \\"
+        let body = r.isEmbedding
+            ? "'{\"model\": \"\(r.apiID)\",\n       \"input\": \"Hello\"}'"
+            : "'{\"model\": \"\(r.apiID)\",\n       \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}]}'"
+        return "curl \(state.apiBaseURL)/\(r.isEmbedding ? "embeddings" : "chat/completions") \\\(auth)\n  -H \"Content-Type: application/json\" \\\n  -d \(body)"
+    }
+
+    // MARK: Building blocks
+
+    private func canStart(_ r: Recipe) -> Bool {
+        r.enabled && !r.startCommand.isEmpty && state.route != nil && !state.isBusy
+    }
+
+    private func group(_ title: String, _ subtitle: String?, @ViewBuilder _ content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 14, weight: .semibold))
+                if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Color.text3).fixedSize(horizontal: false, vertical: true) }
+            }
+            card(content)
+        }
+    }
+
+    private func card(@ViewBuilder _ content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 0) { content() }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.cardBorder))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func sideCard(border: Color = Color.cardBorder, @ViewBuilder _ content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 12) { content() }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(border))
+    }
+
+    private func row(_ label: String, sub: String? = nil, note: String? = nil, @ViewBuilder _ trailing: () -> some View) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(label)
+                if let sub { Text(sub).font(.system(size: 12)).foregroundStyle(Color.text2).fixedSize(horizontal: false, vertical: true) }
+                if let note {
+                    Label(note, systemImage: "exclamationmark.triangle").font(.system(size: 12)).foregroundStyle(VizColor.warning)
+                }
+            }
+            Spacer(minLength: 12)
+            trailing()
+        }
+        .font(.system(size: 13))
+        .padding(.horizontal, 16).padding(.vertical, 14)
+    }
+
+    private func field(_ label: String, @ViewBuilder _ input: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(.system(size: 12)).foregroundStyle(Color.text3)
+            input()
+                .font(.system(size: 12, design: .monospaced))
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .background(Color.pageBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+        }
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-private struct ModelHeader: View {
-    @Environment(AppState.self) private var state
-    let recipe: Recipe
-    @State private var keyTarget: String?
+/// A start or stop command: title, Copy, and the editable command on the page's dark well.
+private struct CommandBox: View {
+    let title: String
+    @Binding var text: String
+    let prompt: String
 
     var body: some View {
-        let phase = state.phase(for: recipe)
-        HStack(spacing: 14) {
-            ModelAvatar(name: recipe.name, phase: phase, size: 56)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(recipe.name.isEmpty ? "Untitled" : recipe.name).font(.title2.weight(.bold))
-                    EngineBadge(name: state.engineName(recipe))
-                }
-                HStack(spacing: 6) {
-                    Text(phase.label)
-                        .foregroundStyle(phase.isFailure ? Color.red : Color.secondary)
-                        .lineLimit(2)
-                }
-                .font(.callout)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title).fontWeight(.medium)
+                Spacer()
+                CopyButton(text: text).foregroundStyle(Color.text3).disabled(text.isEmpty)
             }
-            Spacer()
-            if case .failed(let m) = phase, m.contains("Permission denied"), let target = state.sshTarget {
-                Button("Set Up Key Login…") { keyTarget = target }.buttonStyle(DesignButtonStyle(prominent: false)).fixedSize()
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("$").foregroundStyle(Color.text2)
+                TextField(title, text: $text, prompt: Text(prompt), axis: .vertical)
+                    .foregroundStyle(Color(light: 0x3F3F46, dark: 0xD4D4D8))
             }
-            if phase.busy {
-                ProgressView().controlSize(.small)
-            } else if phase == .ready {
-                Button("Stop") { state.stop(recipe) }
-                    .buttonStyle(DesignButtonStyle(prominent: false)).frame(width: 110)
-            } else {
-                Button(phase.isFailure ? "Try again" : "Load model") { state.start(recipe) }
-                .buttonStyle(DesignButtonStyle()).frame(width: 130)
-                .disabled(!recipe.enabled || recipe.startCommand.isEmpty || state.route == nil || state.isBusy)
-            }
+            .font(.system(size: 12, design: .monospaced))
+            .lineSpacing(4)
+            .padding(12)
+            .background(Color.pageBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.hairline))
         }
-        .padding(.vertical, 6)
-        .sheet(item: $keyTarget) { target in
-            KeyLoginSheet(target: target) { state.start(recipe) }
-        }
+        .font(.system(size: 13))
+        .padding(16)
     }
 }
 
@@ -192,23 +569,6 @@ private struct MemoryField: View {
     }
 }
 
-/// Regular label, monospaced value.
-private struct CodeField: View {
-    let title: String
-    @Binding var text: String
-    let prompt: String
-
-    var body: some View {
-        LabeledContent(title) {
-            TextField(title, text: $text, prompt: Text(prompt))
-                .labelsHidden()
-                .font(.body.monospaced())
-                .multilineTextAlignment(.trailing)
-        }
-    }
-}
-
-
 private struct RulesEditor: View {
     @Binding var rules: [ParamRule]
 
@@ -249,7 +609,7 @@ private struct TensorFoldSection: View {
     var body: some View {
         let current = TensorFold.context(of: recipe.startCommand)
         let options = TensorFold.contextOptions(model)
-        Section {
+        VStack(alignment: .leading, spacing: 14) {
             Picker("Context", selection: Binding { current } set: {
                 recipe.startCommand = TensorFold.withContext(recipe.startCommand, $0, model: model)
             }) {
@@ -261,18 +621,17 @@ private struct TensorFoldSection: View {
                 Toggle(isOn: Binding { TensorFold.draftsOn(recipe.startCommand) } set: {
                     recipe.startCommand = TensorFold.withDrafts(recipe.startCommand, $0)
                 }) {
-                    Text("Speculative drafts (\(source))")
-                    Text("Faster decoding, same replies.")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Speculative drafts (\(source))")
+                        Text("Faster decoding, same replies.").font(.system(size: 12)).foregroundStyle(Color.text2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-        } header: {
-            Text("TensorFold")
-        } footer: {
-            Text(footer(current))
         }
     }
 
-    private func footer(_ c: TensorFold.Context) -> String {
+    static func footer(_ c: TensorFold.Context, model: TensorFold.Model) -> String {
         var s = "Changes apply at the next start."
         if case .yarn = c {
             s += " YaRN changes replies at every length: leave it off unless prompts go past \(model.window.formatted()) tokens."
@@ -290,7 +649,7 @@ private struct VLLMSection: View {
         let ctx = VLLM.context(of: recipe.startCommand) ?? model.window
         let options = VLLM.contextOptions(model)
         let drafts = VLLM.drafts(of: recipe.startCommand)
-        Section {
+        VStack(alignment: .leading, spacing: 14) {
             Picker("Context", selection: Binding { ctx } set: {
                 recipe.startCommand = VLLM.fitted(VLLM.withContext(recipe.startCommand, $0), model)
             }) {
@@ -308,10 +667,6 @@ private struct VLLMSection: View {
             } label: {
                 Text("MTP drafts")
             }
-        } header: {
-            Text("vLLM")
-        } footer: {
-            Text("Changes apply at the next start. More drafts aren't always faster; run a benchmark to compare.")
         }
     }
 }

@@ -356,27 +356,39 @@ struct ChatView: View {
         let visible = store.chats.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }
         HStack(spacing: 0) {
             VStack(spacing: 0) {
-                HStack {
-                    Text("Chats").font(.system(size: 15, weight: .semibold)).foregroundStyle(Color.text)
-                    Spacer()
-                    Button { store.newChat(model: defaultModel, profiles: state.config.profiles) } label: {
-                        Label("New Chat", systemImage: "square.and.pencil")
+                VStack(spacing: 12) {
+                    HStack {
+                        Text("Chats").font(.system(size: 15, weight: .semibold)).foregroundStyle(Color.text)
+                        Spacer()
+                        Button { store.newChat(model: defaultModel, profiles: state.config.profiles) } label: {
+                            Image(systemName: "plus").font(.system(size: 13, weight: .medium)).foregroundStyle(Color.text)
+                                .frame(width: 32, height: 32)
+                                .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .keyboardShortcut("n")
+                        .help("New Chat (⌘N)")
+                        .accessibilityLabel("New Chat")
                     }
-                    .buttonStyle(GhostIconStyle())
-                    .keyboardShortcut("n")
-                    .help("New Chat (⌘N)")
+                    .padding(.horizontal, 4)
+                    HeaderSearch(text: $search, prompt: "Search chats", width: nil)
                 }
-                .padding(.leading, 20).padding(.trailing, 12).padding(.vertical, 8)
-                .frame(minHeight: 52)
+                .padding(.horizontal, 12).padding(.top, 16).padding(.bottom, 4)
                 .background { Color.pageBackground.gesture(WindowDragGesture()) }
-                .overlay(alignment: .bottom) { Hairline() }
                 ScrollView {
-                    VStack(spacing: 1) {
-                        HeaderSearch(text: $search, width: nil).padding(.horizontal, 4).padding(.bottom, 10)
-                        ForEach(visible) { chat in chatRow(chat, visible) }
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(Self.groups(visible), id: \.0) { label, chats in
+                            Text(label.uppercased())
+                                .font(.system(size: 11, weight: .medium)).tracking(0.44).foregroundStyle(Color.text2)
+                                .padding(.horizontal, 8).padding(.top, 10).padding(.bottom, 4)
+                                .accessibilityAddTraits(.isHeader)
+                            ForEach(chats) { chat in chatRow(chat, visible) }
+                        }
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
                 }
                 // ⌘/⇧-click picks several chats; Delete removes them. The conversation shows the one picked last.
                 .focusable()
@@ -415,18 +427,16 @@ struct ChatView: View {
     private func chatRow(_ chat: Chat, _ visible: [Chat]) -> some View {
         let recipe = state.config.recipes.first { $0.apiID == chat.model }
         let on = picked.contains(chat.id)
-        return VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(chat.title).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.text).lineLimit(1)
-                Spacer(minLength: 0)
-                Text(Self.day(chat.updated)).font(.system(size: 12)).foregroundStyle(Color.text2)
-            }
-            Text(recipe?.name ?? chat.model).font(.system(size: 12)).foregroundStyle(Color.text2).lineLimit(1)
+        return VStack(alignment: .leading, spacing: 3) {
+            Text(chat.title).font(.system(size: 13, weight: .medium))
+                .foregroundStyle(on ? Color.text : Color(light: 0x3F3F46, dark: 0xD4D4D8)).lineLimit(1)
+            Text(recipe?.name ?? chat.model).font(.system(size: 12)).foregroundStyle(on ? Color.text3 : Color.text2).lineLimit(1)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(on ? Color.overlay(0.06) : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-        .hoverFill(radius: 9, active: on)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(on ? Color(light: 0xE4E4E7, dark: 0x1C1C21) : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .hoverFill(Color.overlay(0.03), radius: 9, active: on)
+        .help(Self.day(chat.updated))
         .contentShape(Rectangle())
         .onTapGesture { click(chat.id, visible) }
         .contextMenu {
@@ -449,6 +459,18 @@ struct ChatView: View {
         } else {
             picked = [id]
         }
+    }
+
+    /// Consecutive chats under "Today", "Yesterday" or their date ("12 Nov"), keeping the list's order.
+    private static func groups(_ chats: [Chat]) -> [(String, [Chat])] {
+        var out: [(String, [Chat])] = []
+        for c in chats {
+            let cal = Calendar.current
+            let label = cal.isDateInToday(c.updated) ? "Today" : cal.isDateInYesterday(c.updated) ? "Yesterday"
+                : c.updated.formatted(.dateTime.day().month(.abbreviated))
+            if out.last?.0 == label { out[out.count - 1].1.append(c) } else { out.append((label, [c])) }
+        }
+        return out
     }
 
     /// "14:05" today, "Thu" this week, "3 Nov" before that.
@@ -478,7 +500,6 @@ private struct Conversation: View {
     var onDeleteAll: () -> Void = {}
     @State private var text = ""
     @State private var showStats = false
-    @State private var controlsWidth: CGFloat = 0
     @State private var pending: [ChatAttachment] = []
     @State private var importing = false
     @State private var problem: String?
@@ -494,9 +515,10 @@ private struct Conversation: View {
     var body: some View {
         let chat = chat
         VStack(spacing: 0) {
-            HStack(spacing: 2) {
-                Spacer()
-                HStack(spacing: 2) {
+            HStack(spacing: 12) {
+                modelMenu(chat)
+                Spacer(minLength: 8)
+                HStack(spacing: 8) {
                     Menu {
                         Picker("Profile", selection: Binding(
                             get: { chat?.profile },
@@ -508,15 +530,7 @@ private struct Conversation: View {
                         Divider()
                         Button("Edit Profiles…") { editingProfiles = true }
                     } label: {
-                        HStack(spacing: 6) {
-                            LineIcon(symbol: "person", size: 15)
-                            Text(profile?.name ?? "No Profile").font(.system(size: 12.5))
-                        }
-                        .foregroundStyle(Color.text3)
-                        .padding(.horizontal, 10)
-                        .frame(height: 28)
-                        .hoverFill(Color.overlay(0.05))
-                        .contentShape(Rectangle())
+                        Text(profile?.name ?? "No Profile").font(.system(size: 13)).lineLimit(1).headerPill()
                     }
                     .menuStyle(.button)
                     .buttonStyle(.plain)
@@ -537,15 +551,7 @@ private struct Conversation: View {
                                 }
                             }
                         } label: {
-                            HStack(spacing: 6) {
-                                LineIcon(symbol: "lightbulb", size: 15)
-                                Text(effort == .off ? "Thinking off" : "\(effort.label) effort").font(.system(size: 12.5))
-                            }
-                            .foregroundStyle(Color.text3)
-                            .padding(.horizontal, 10)
-                            .frame(height: 28)
-                            .hoverFill(Color.overlay(0.05))
-                            .contentShape(Rectangle())
+                            Text(effort == .off ? "Thinking off" : "\(effort.label) effort").font(.system(size: 13)).lineLimit(1).headerPill()
                         }
                         .menuStyle(.button)
                         .buttonStyle(.plain)
@@ -554,11 +560,12 @@ private struct Conversation: View {
                         .help("Thinking effort: how long the model reasons before answering. Less is faster, more is more careful.")
                     }
                     Button { editingSystem.toggle() } label: {
-                        Label("Chat Instructions", systemImage: "slider.horizontal.3")
+                        LineIcon(symbol: "slider.horizontal.3", size: 16).headerPill(square: true)
                     }
-                    .buttonStyle(GhostIconStyle())
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Chat Instructions")
                     .overlay(alignment: .topTrailing) {
-                        if chat?.system.isEmpty == false { Circle().fill(Color.brand).frame(width: 6, height: 6).offset(x: -3, y: 3) }
+                        if chat?.system.isEmpty == false { Circle().fill(Color.brand).frame(width: 6, height: 6).offset(x: -4, y: 4) }
                     }
                     .help("Extra instructions for this chat")
                     .popover(isPresented: $editingSystem, arrowEdge: .bottom) {
@@ -588,10 +595,7 @@ private struct Conversation: View {
                         Button("Delete Chat", role: .destructive) { store.delete([chatID]) }
                         Button("Delete All Chats…", role: .destructive, action: onDeleteAll)
                     } label: {
-                        LineIcon(symbol: "ellipsis").foregroundStyle(Color.text3)
-                            .frame(width: 28, height: 28)
-                            .hoverFill(Color.overlay(0.05))
-                            .contentShape(Rectangle())
+                        LineIcon(symbol: "ellipsis", size: 16).headerPill(square: true)
                     }
                     .menuStyle(.button)
                     .buttonStyle(.plain)
@@ -602,19 +606,20 @@ private struct Conversation: View {
                         ChatStats(messages: chat?.messages ?? [], window: current?.contextWindow).padding(14)
                     }
                 }
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { controlsWidth = $0 }
+                .fixedSize()
             }
-            .overlay { modelMenu(chat).padding(.horizontal, controlsWidth + 8) }
-            .padding(.leading, 16).padding(.trailing, 12).padding(.vertical, 6)
-            .frame(minHeight: 52)
+            .padding(.horizontal, 24).padding(.vertical, 12)
+            .frame(minHeight: 64)
             .background { Color.pageBackground.gesture(WindowDragGesture()) }
             .overlay(alignment: .bottom) { Hairline() }
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 32) {
+                    LazyVStack(alignment: .leading, spacing: 24) {
                         ForEach(chat?.messages ?? []) { m in
                             MessageView(message: m, live: streaming && m.id == chat?.messages.last?.id,
+                                        tag: ModelAvatar.tag(current?.name ?? chat?.model ?? ""),
+                                        engine: current.map(state.engineName) ?? "Custom",
                                         onEdit: store.streamingChat != nil ? nil : { text in
                                             store.resend(m.id, text: text, chatID: chatID, profiles: state.config.profiles, baseURL: state.apiBaseURL,
                                                          apiKey: state.toolGateway.apiKey)
@@ -624,9 +629,9 @@ private struct Conversation: View {
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }
-                    .frame(maxWidth: 680)
+                    .frame(maxWidth: 712)
                     .padding(.horizontal, 24)
-                    .padding(.vertical, 40)
+                    .padding(.vertical, 32)
                     .frame(maxWidth: .infinity)
                 }
                 .background(Color.pageBackground)
@@ -677,26 +682,71 @@ private struct Conversation: View {
             }
             .pickerStyle(.inline)
         } label: {
-            VStack(spacing: 0) {
-                HStack(spacing: 4) {
+            HStack(spacing: 10) {
+                Circle().fill(modelDot).frame(width: 8, height: 8)
+                VStack(alignment: .leading, spacing: 1) {
                     Text(current?.name ?? "Choose a model").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.text).lineLimit(1)
-                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.text2)
+                    if current != nil {
+                        Text(modelStatus).font(.system(size: 11))
+                            .foregroundStyle(current.map { state.phase(for: $0).isFailure } == true ? Color.danger : Color.text3).lineLimit(1)
+                    }
                 }
-                if let r = current {
-                    let p = state.phase(for: r)
-                    Text(state.offline ? Phase.offline.label : p == .stopped ? "Not loaded" : p.label)
-                        .font(.system(size: 11)).foregroundStyle(p.isFailure ? Color.danger : Color.text2).lineLimit(1)
-                }
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.text2)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 4)
-            .hoverFill(Color.overlay(0.05), radius: 8)
+            .frame(height: 40)
+            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
             .contentShape(Rectangle())
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
-        .fixedSize(horizontal: false, vertical: true)
+        .fixedSize()
+        .help("Model for this chat")
+    }
+
+    private var modelDot: Color {
+        guard let r = current else { return Color.text2 }
+        if state.offline { return Color.danger }
+        let p = state.phase(for: r)
+        return p == .ready ? Color.running : p == .stopped ? Color.text2 : p.isFailure ? Color.danger : Color(light: 0xD97706, dark: 0xFBBF24)
+    }
+
+    /// "Loading · 111 GB · Custom".
+    private var modelStatus: String {
+        guard let r = current else { return "" }
+        let p = state.phase(for: r)
+        let phase = state.offline ? Phase.offline.label : p == .stopped ? "Not loaded" : p == .starting ? "Loading" : p.label
+        return ([phase] + [state.memoryNeed(r).map { String(format: "%.0f GB", Double($0) / 1e9) }, state.engineName(r)].compactMap { $0 })
+            .joined(separator: " · ")
+    }
+
+    /// While the chat's model starts: a card above the composer, as the reply waits for it.
+    @ViewBuilder private var loadingCard: some View {
+        if let r = current, state.phase(for: r) == .starting {
+            let others = state.runningRecipes.filter { $0.id != r.id }.map(\.name)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    HStack(spacing: 8) {
+                        Circle().fill(Color(light: 0xD97706, dark: 0xFBBF24)).frame(width: 8, height: 8)
+                        Text("Loading \(r.name) into memory").font(.system(size: 13, weight: .medium)).foregroundStyle(Color.text)
+                    }
+                    Spacer(minLength: 0)
+                    if let need = state.memoryNeed(r) {
+                        Text(String(format: "%.0f GB", Double(need) / 1e9)).font(.system(size: 12, design: .monospaced)).foregroundStyle(Color.text3)
+                    }
+                }
+                ProgressView().progressViewStyle(.linear).tint(Color(light: 0xD97706, dark: 0xFBBF24))
+                Text("Your message sends as soon as the model is ready." + (others.isEmpty ? "" :
+                    " \(others.formatted(.list(type: .and))) \(others.count == 1 ? "keeps" : "keep") running alongside it."))
+                    .font(.system(size: 12)).foregroundStyle(Color.text3)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.cardBorder))
+            .accessibilityElement(children: .combine)
+        }
     }
 
     /// What sending will load and unload, when the chat's model isn't running yet.
@@ -720,55 +770,61 @@ private struct Conversation: View {
             }
             TextField("Ask anything", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
-                .font(.system(size: 15))
+                .font(.system(size: 14))
                 .foregroundStyle(Color.text)
                 .lineSpacing(4)
+                .padding(4)
                 .lineLimit(2...10)
                 .focused($focused)
                 .onSubmit(send)
                 .newlineOnShiftReturn()
             HStack(spacing: 4) {
-                Button { importing = true } label: { Label("Attach Files", systemImage: "plus") }
-                    .buttonStyle(GhostIconStyle(size: 32))
+                Button { importing = true } label: {
+                    Image(systemName: "paperclip").font(.system(size: 13)).foregroundStyle(Color.text3)
+                        .frame(width: 32, height: 32)
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+                        .contentShape(Rectangle())
+                }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Attach Files")
                     .help("Attach Files")
                     // ⌘V: images and copied files become attachments; anything else pastes as usual.
                     .background { Button("Paste", action: paste).keyboardShortcut("v").opacity(0).frame(width: 0, height: 0) }
                 Spacer()
                 if streaming {
-                    Button { store.stop() } label: { RoundIcon(symbol: "stop.fill", fill: Color.text, icon: Color.pageBackground) }
+                    Button { store.stop() } label: { RoundIcon(symbol: "stop.fill", fill: Color.primaryFill, icon: Color.primaryText) }
                         .buttonStyle(PressableStyle())
                         .help("Stop")
                         .transition(.scale.combined(with: .opacity))
                 } else {
-                    Button(action: send) { RoundIcon(symbol: "arrow.up", fill: canSend ? .brand : Color(light: 0xD1D1D6, dark: 0x48484A)) }
+                    Button(action: send) { RoundIcon(symbol: "arrow.up", fill: canSend ? Color.primaryFill : Color(light: 0xE4E4E7, dark: 0x26262B),
+                                                     icon: canSend ? Color.primaryText : Color.text2) }
                         .buttonStyle(PressableStyle())
                         .disabled(!canSend)
                         .keyboardShortcut(.return, modifiers: .command)
                         .help("Send (Return). Shift-Return adds a new line.")
                 }
             }
-            .padding(.leading, -8)
         }
         .animation(.snappy, value: streaming)
-        .padding(.leading, 18)
-        .padding(.trailing, 10)
-        .padding(.top, 12)
-        .padding(.bottom, 10)
-        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .strokeBorder(focused ? Color.brand.opacity(0.45) : Color.overlay(0.1), lineWidth: 1))
-        .shadow(color: .black.opacity(0.04), radius: 1, y: 1)
-        .shadow(color: .black.opacity(0.06), radius: 12, y: 8)
+        .padding(12)
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .strokeBorder(focused ? Color.brand.opacity(0.45) : Color(light: 0xD4D4D8, dark: 0x2E2E34), lineWidth: 1))
         .animation(.easeOut(duration: 0.15), value: focused)
-        .frame(maxWidth: 680)
-        .safeAreaInset(edge: .top, spacing: 10) {
-            if let swapNote {
-                Text(swapNote).font(.system(size: 12)).foregroundStyle(Color.text2).multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
+        .frame(maxWidth: 712)
+        .safeAreaInset(edge: .top, spacing: 12) {
+            VStack(spacing: 10) {
+                loadingCard
+                if let swapNote {
+                    Text(swapNote).font(.system(size: 12)).foregroundStyle(Color.text2).multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                }
             }
+            .frame(maxWidth: 712)
         }
         .padding(.horizontal, 24)
-        .padding(.bottom, 20)
+        .padding(.bottom, 24)
         .frame(maxWidth: .infinity)
         .background(Color.pageBackground)
     }
@@ -824,13 +880,16 @@ private struct RoundIcon: View {
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(icon)
             .frame(width: 32, height: 32)
-            .background(fill, in: Circle())
+            .background(fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
 private struct MessageView: View {
     let message: ChatMessage
     let live: Bool
+    /// The model's tile ("3.8") and engine, for the reply's avatar.
+    var tag = ""
+    var engine = "Custom"
     /// Nil while a reply is streaming.
     var onEdit: ((String) -> Void)?
     var onRetry: (() -> Void)?
@@ -868,14 +927,17 @@ private struct MessageView: View {
                         Text("Replies after this message are replaced.").font(.caption).foregroundStyle(.secondary)
                     } else {
                         if !message.content.isEmpty {
+                            let bubble = UnevenRoundedRectangle(topLeadingRadius: 14, bottomLeadingRadius: 14, bottomTrailingRadius: 4,
+                                                                topTrailingRadius: 14, style: .continuous)
                             Text(message.content)
-                                .font(.system(size: 15))
+                                .font(.system(size: 14))
                                 .foregroundStyle(Color.text)
-                                .lineSpacing(5)
+                                .lineSpacing(4)
                                 .textSelection(.enabled)
-                                .padding(.horizontal, 15)
-                                .padding(.vertical, 9)
-                                .background(Color.well, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(Color(light: 0xF4F4F5, dark: 0x1C1C21), in: bubble)
+                                .overlay(bubble.strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
                         }
                         Button { startEditing() } label: { Image(systemName: "pencil") }
                             .buttonStyle(.borderless)
@@ -889,24 +951,32 @@ private struct MessageView: View {
             .onHover { hovering = $0 }
             .contextMenu { Button("Edit") { startEditing() }.disabled(onEdit == nil) }
         } else {
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: 14) {
+                Text(tag)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(EngineBadge.text(engine))
+                    .minimumScaleFactor(0.6).lineLimit(1).padding(.horizontal, 2)
+                    .frame(width: 28, height: 28)
+                    .background(EngineBadge.color(engine).opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 12) {
                     if !message.reasoning.isEmpty {
                         Button { withAnimation(.snappy) { showThoughts.toggle() } } label: {
-                            HStack(spacing: 4) {
-                                Text(live && message.content.isEmpty ? "Thinking…" : "Thought process")
-                                Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
                                     .rotationEffect(.degrees(showThoughts ? 90 : 0))
+                                Text(live && message.content.isEmpty ? "Thinking…"
+                                     : message.usage?.reasoning.map { "Thought for \($0.formatted()) tokens" } ?? "Thought process")
                             }
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color.text2)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.text3)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .hoverFill(Color.overlay(0.05), radius: 6)
+                            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.cardBorder))
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .padding(.leading, -8)
                         .accessibilityValue(showThoughts ? "Expanded" : "Collapsed")
                         if showThoughts {
                             Text(message.reasoning)
@@ -941,7 +1011,7 @@ private struct MessageView: View {
                                     .help("Retry: generate this reply again. Messages after it are replaced.")
                             }
                             if let stats = message.stats {
-                                Text(stats).font(.system(size: 12)).foregroundStyle(Color.text2).monospacedDigit().padding(.leading, 8)
+                                Text(stats).font(.system(size: 11, design: .monospaced)).foregroundStyle(Color.text2).padding(.leading, 8)
                             }
                         }
                         .padding(.leading, -6)
@@ -1125,7 +1195,7 @@ private struct MarkdownText: View {
                 if i % 2 == 1 {
                     CodeBlock(raw: segment)
                 } else if !segment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(Self.render(segment)).font(.system(size: 15)).foregroundStyle(Color.text).textSelection(.enabled).lineSpacing(8)
+                    Text(Self.render(segment)).font(.system(size: 14)).foregroundStyle(Color(light: 0x27272A, dark: 0xE4E4E7)).textSelection(.enabled).lineSpacing(7)
                 }
             }
         }
@@ -1212,5 +1282,17 @@ private enum Thumbnails {
         let image = NSImage(cgImage: cg, size: .zero)
         cache[a.id] = image
         return image
+    }
+}
+
+private extension View {
+    /// The conversation header's 34pt outlined controls.
+    func headerPill(square: Bool = false) -> some View {
+        foregroundStyle(Color(light: 0x3F3F46, dark: 0xD4D4D8))
+            .padding(.horizontal, square ? 0 : 10)
+            .frame(width: square ? 34 : nil, height: 34)
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+            .hoverFill(Color.overlay(0.04), radius: 8)
+            .contentShape(Rectangle())
     }
 }

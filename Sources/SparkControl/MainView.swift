@@ -74,7 +74,11 @@ struct MainView: View {
         .onChange(of: selection) { old, _ in
             if case .model(let id) = old { state.config.recipes.removeAll { $0.id == id && $0.isBlank } }
         }
-        .onAppear { if selection == nil { selection = .models } }
+        .onAppear {
+            if selection == nil { selection = .models }
+            // `-startPage model` opens the first model's page.
+            if UserDefaults.standard.string(forKey: "startPage")?.lowercased() == "model", let r = state.config.recipes.first { selection = .model(r.id) }
+        }
     }
 }
 

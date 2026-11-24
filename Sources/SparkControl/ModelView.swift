@@ -489,10 +489,11 @@ private struct CommandBox: View {
                 Spacer()
                 CopyButton(text: text).foregroundStyle(Color.text3).disabled(text.isEmpty)
             }
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
                 Text("$").foregroundStyle(Color.text2)
                 TextField(title, text: $text, prompt: Text(prompt), axis: .vertical)
                     .textFieldStyle(.plain)
+                    .lineLimit(1...12)
                     .foregroundStyle(Color(light: 0x3F3F46, dark: 0xD4D4D8))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

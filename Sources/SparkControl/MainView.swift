@@ -322,7 +322,7 @@ private struct MemoryMeter: View {
             GeometryReader { g in
                 RoundedRectangle(cornerRadius: .corner(999)).fill(Color(light: 0xE4E4E7, dark: 0x222227))
                     .overlay(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: .corner(999)).fill(Appearance.current == .nvidia ? Color.brand : Color.text).frame(width: g.size.width * min(1, Double(used) / Double(max(1, total))))
+                        RoundedRectangle(cornerRadius: .corner(999)).fill(Appearance.current.sharp ? Color.brand : Color.text).frame(width: g.size.width * min(1, Double(used) / Double(max(1, total))))
                     }
             }
             .frame(height: 4)

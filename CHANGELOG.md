@@ -12,6 +12,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - Settings → General → Appearance: Soft Light (light with the whites toned down) and Soft Dark (dark lifted to charcoal), between Light and Dark.
 - Settings → General → Appearance: NVIDIA, a black theme with NVIDIA green buttons and highlights, square corners and uppercase titles.
 - Terminal: an NVIDIA colour theme (black with an NVIDIA green cursor).
+- Settings → General → Appearance: Ember, the NVIDIA theme's black, square look with orange in place of green. The Terminal has a matching Ember colour theme.
 - Models: a Model's Own Sampling switch on each model's page (off by default). When on, the temperature, top_p, top_k, min_p and penalty values coding tools send are dropped, so the model runs with its maker's recommended defaults. Parameter Rules still apply on top.
 
 ### Fixed

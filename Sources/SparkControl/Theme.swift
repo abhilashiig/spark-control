@@ -4,7 +4,8 @@ import AppKit
 // MARK: Palette
 
 extension Color {
-    /// `nvidia` overrides the dark value under the NVIDIA theme; without it, a cool Graphite grey turns neutral.
+    /// `nvidia` overrides the dark value under the NVIDIA and Ember themes (Ember swaps its green for orange);
+    /// without it, a cool Graphite grey turns neutral.
     init(light: UInt32, dark: UInt32, nvidia: UInt32? = nil) {
         func ns(_ v: UInt32) -> NSColor {
             NSColor(srgbRed: CGFloat(v >> 16 & 0xff) / 255, green: CGFloat(v >> 8 & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1)
@@ -14,7 +15,7 @@ extension Color {
             return $0.bestMatch(from: [.darkAqua, .vibrantDark]) == nil
                 ? ns(mode == .softLight ? Self.soften(light, floor: 0, ceiling: 0xE6) : light)
                 : ns(mode == .softDark ? Self.soften(dark, floor: 0x2A, ceiling: 0xFF)
-                     : mode == .nvidia ? nvidia ?? Self.neutral(dark) : dark)
+                     : mode.sharp ? nvidia.map { mode == .ember ? Self.ember($0) : $0 } ?? Self.neutral(dark) : dark)
         })
     }
 
@@ -25,6 +26,9 @@ extension Color {
         guard c.max()! - c.min()! <= 12 else { return v }
         return c.map { floor + $0 * (ceiling - floor) / 255 }.reduce(0) { $0 << 8 | $1 }
     }
+
+    /// Ember: NVIDIA green and its lighter link green become orange.
+    static func ember(_ v: UInt32) -> UInt32 { [0x76B900: 0xFF7A1A, 0x9BD12E: 0xFFA149][v] ?? v }
 
     static func neutral(_ v: UInt32) -> UInt32 {
         let c = [v >> 16 & 0xff, v >> 8 & 0xff, v & 0xff]
@@ -74,11 +78,13 @@ extension Color {
 
 /// The app's light or dark look: the system's by default, or fixed in Settings → General.
 enum Appearance: String, CaseIterable, Identifiable {
-    case system, light, softLight, softDark, dark, nvidia
+    case system, light, softLight, softDark, dark, nvidia, ember
     static let key = "appearance"
     /// Read while colours resolve, so it holds from the first frame (before `apply` runs).
     static var current: Appearance { UserDefaults.standard.string(forKey: key).flatMap(Appearance.init) ?? .system }
     var id: Self { self }
+    /// NVIDIA and Ember: black, square corners, uppercase condensed titles.
+    var sharp: Bool { self == .nvidia || self == .ember }
     var label: String {
         switch self {
         case .softLight: "Soft Light"
@@ -92,7 +98,7 @@ enum Appearance: String, CaseIterable, Identifiable {
         switch self {
         case .system: nil
         case .light, .softLight: .light
-        case .dark, .softDark, .nvidia: .dark
+        case .dark, .softDark, .nvidia, .ember: .dark
         }
     }
 
@@ -101,7 +107,7 @@ enum Appearance: String, CaseIterable, Identifiable {
         NSApp.appearance = switch mode {
         case .system: nil
         case .light, .softLight: NSAppearance(named: .aqua)
-        case .softDark, .dark, .nvidia: NSAppearance(named: .darkAqua)
+        case .softDark, .dark, .nvidia, .ember: NSAppearance(named: .darkAqua)
         }
     }
 }
@@ -133,21 +139,21 @@ enum VizColor {
 }
 
 extension CGFloat {
-    /// Every rounded rectangle's radius: as designed, or near-square under NVIDIA.
-    static func corner(_ r: CGFloat) -> CGFloat { Appearance.current == .nvidia ? Swift.min(r, 2) : r }
+    /// Every rounded rectangle's radius: as designed, or near-square under NVIDIA and Ember.
+    static func corner(_ r: CGFloat) -> CGFloat { Appearance.current.sharp ? Swift.min(r, 2) : r }
 }
 
 extension Text {
     /// A page title: 17pt semibold, or NVIDIA's uppercase condensed bold.
     func pageTitle() -> some View {
-        let nv = Appearance.current == .nvidia
+        let nv = Appearance.current.sharp
         return font(.system(size: nv ? 18 : 17, weight: nv ? .bold : .semibold).width(nv ? .condensed : .standard))
             .textCase(nv ? .uppercase : nil).tracking(nv ? 0.4 : -0.2).foregroundStyle(Color.text).lineLimit(1)
     }
 
     /// A section header: 13pt semibold, or NVIDIA's small uppercase condensed caps.
     func sectionTitle() -> some View {
-        let nv = Appearance.current == .nvidia
+        let nv = Appearance.current.sharp
         return font(.system(size: nv ? 12 : 13, weight: nv ? .bold : .semibold).width(nv ? .condensed : .standard))
             .textCase(nv ? .uppercase : nil).tracking(nv ? 1.2 : 0).foregroundStyle(Color.text)
     }
@@ -178,7 +184,7 @@ struct DesignFormStyle: FormStyle {
                 ForEach(sections: configuration.content) { section in
                     VStack(alignment: .leading, spacing: 10) {
                         if !section.header.isEmpty {
-                            let nv = Appearance.current == .nvidia
+                            let nv = Appearance.current.sharp
                             Group { section.header }
                                 .font(.system(size: nv ? 12 : 13, weight: nv ? .bold : .semibold).width(nv ? .condensed : .standard))
                                 .tracking(nv ? 1.2 : 0).foregroundStyle(Color.text)
@@ -488,7 +494,7 @@ struct LineIcon: View {
     var body: some View {
         Image(systemName: symbol)
             .symbolVariant(.none)
-            .font(.system(size: size * 0.86, weight: Appearance.current == .nvidia ? .regular : .light))
+            .font(.system(size: size * 0.86, weight: Appearance.current.sharp ? .regular : .light))
             .frame(width: size, height: size)
     }
 }
@@ -522,7 +528,7 @@ struct GhostLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.icon
             .symbolVariant(.none)
-            .font(.system(size: 14.5, weight: Appearance.current == .nvidia ? .regular : .light))
+            .font(.system(size: 14.5, weight: Appearance.current.sharp ? .regular : .light))
             .frame(width: 17, height: 17)
     }
 }

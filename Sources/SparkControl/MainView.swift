@@ -204,7 +204,7 @@ private struct JumpButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .keyboardShortcut("k", modifiers: .command)
+        .keyboardShortcut(selection == .terminal ? nil : KeyboardShortcut("k", modifiers: .command))  // Terminal's ⌘K clears
         .popover(isPresented: $open, arrowEdge: .trailing) { JumpList(selection: $selection, open: $open) }
     }
 }

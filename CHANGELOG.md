@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Changed
+- Spark Control is now source-available under the PolyForm Noncommercial License 1.0.0: free for personal and noncommercial use, modification and sharing. Selling it or using it commercially needs a separate license (hello@grabians.com).
+
 ## [1.14.0] - 2026-11-25
 
 ### Fixed

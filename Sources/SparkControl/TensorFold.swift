@@ -289,7 +289,7 @@ enum TensorFold {
         T=$(mktemp -d); trap 'rm -rf "$T"' EXIT; cd "$T"
         say "Downloading TensorFold $V"
         U=\(releaseURL(v))
-        curl -fsSL --remote-name-all "$U/$A.tar.gz" "$U/$A.tar.gz.sha256" "$U/$A.tar.gz.sha256.sig"
+        curl -fsSL --retry 3 --remote-name-all "$U/$A.tar.gz" "$U/$A.tar.gz.sha256" "$U/$A.tar.gz.sha256.sig"
         say "Verifying checksum and release signature"
         sha256sum -c "$A.tar.gz.sha256"
         cat > key.pem <<'KEY'
@@ -322,7 +322,7 @@ enum TensorFold {
     add_jpeg() {
       command -v dpkg-deb >/dev/null || fail "dpkg-deb is missing; it unpacks libjpeg-turbo."
       say "Downloading libjpeg-turbo \(jpegVersion) for JPEG images"
-      curl -fsSL -o "$T/jpeg.deb" "\(jpegDeb)"
+      curl -fsSL --retry 3 -o "$T/jpeg.deb" "\(jpegDeb)"
       echo "\(jpegSHA256)  $T/jpeg.deb" | sha256sum --quiet -c
       rm -rf "$T/jpeg"; dpkg-deb -x "$T/jpeg.deb" "$T/jpeg"
       f=$(find "$T/jpeg" -name 'libturbojpeg.so.0*' -type f | head -1)

@@ -15,6 +15,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - Inkling 2 Mini: choosing a larger context raises its Memory to what that context needs (about 53 GB for 512k, 77 GB for 1M), so it no longer fails to start with "KV cache is needed, which is larger than the available KV cache memory". A model already set to a context that doesn't fit gets the extra memory the next time the app opens.
 
 ### Fixed
+- TensorFold install and update retry a download that drops partway, and say when an install failed because the SSH connection to the Spark dropped instead of failing with no reason.
 - Benchmark: the warm-up now covers the prompt sizes it measures, so a server compiling kernels on first use no longer shows up as a slow first prompt or a slow 1× concurrent row (one Inkling run read 422 t/s prefill there instead of about 2,400).
 
 ## [1.12.0] - 2026-11-18

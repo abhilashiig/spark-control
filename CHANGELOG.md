@@ -5,8 +5,15 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Added
+- Models: a Model's Own Sampling switch on each model's page (off by default). When on, the temperature, top_p, top_k, min_p and penalty values coding tools send are dropped, so the model runs with its maker's recommended defaults. Parameter Rules still apply on top.
+
 ### Changed
 - TensorFold models with images accept up to 64 images in a conversation instead of 4, with a 65,536-token image budget so each image keeps about the same detail. Models already set up get the new limits too; a limit you set by hand is kept.
+
+### Fixed
+- Activity: a streamed reply whose output arrived all at once (vLLM sends tool calls that way) shows "—" for TTFT and Decode instead of an impossible speed like 11,000 tok/s, and no longer skews the Decode and Prefill averages.
+- vLLM models now report cached prompt tokens, so Cached and Prefill on the Activity page are real instead of always 0. Takes effect the next time each model starts.
 
 ## [1.12.1] - 2026-11-24
 

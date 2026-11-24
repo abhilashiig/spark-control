@@ -172,7 +172,7 @@ enum VLLM {
                     "-e HF_HUB_OFFLINE=1", m.runImage,
                     m.repo.id] + (m.repo.revision.map { ["--revision", $0] } ?? [])
         args += ["--served-model-name", name, "--api-key", "\"$(cat \"\(TensorFold.dataDir)/api-key\")\"",
-                 "--max-num-seqs \(m.maxSeqs)", "--enable-prefix-caching"]
+                 "--max-num-seqs \(m.maxSeqs)", "--enable-prefix-caching --enable-prompt-tokens-details"]
         args += m.parsers + m.flags
         let cmd = withMemory(withContext(args.joined(separator: " "), m.startWindow ?? m.window), m.memoryGB, total: total,
                              footprint: m.footprintGB)
@@ -216,6 +216,9 @@ enum VLLM {
     /// version added that measured no gain. Other models' commands are left as they are.
     static func synced(_ command: String, model id: String?) -> String {
         guard let m = model(id) else { return command }
+        // Without it vLLM reports 0 cached tokens even on prefix-cache hits.
+        let command = command.contains("--enable-prompt-tokens-details") ? command
+            : command.replacingOccurrences(of: " --enable-prefix-caching", with: " --enable-prefix-caching --enable-prompt-tokens-details")
         guard m.footprintGB != nil else { return fitted(command, m) }
         var c = command
         if !c.contains("--kv-cache-memory-bytes") {

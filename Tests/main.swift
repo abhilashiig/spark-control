@@ -29,6 +29,13 @@ check((body["chat_template_kwargs"] as? [String: Any])?["enable_thinking"] as? B
 check(body["stream_options"] == nil, "no stream options for non-streaming")
 check(recipe.apiID == "qwen3.8-flash" && recipe.answers(to: "Qwen/Qwen3.8-Flash"), "api id + upstream match")
 
+// Model's own sampling: client sampling stripped, rules still apply after
+var own = plain; own.modelSampling = true; own.rules = [ParamRule(key: "presence_penalty", kind: .default, value: "1.5")]
+var sampled: [String: Any] = ["model": "x", "temperature": 0.2, "top_p": 1, "presence_penalty": 0, "max_tokens": 9]
+Transform.apply(&sampled, recipe: own, path: "/v1/chat/completions", streamUsage: false)
+check(sampled["temperature"] == nil && sampled["top_p"] == nil && sampled["max_tokens"] as? Int == 9, "client sampling stripped")
+check(sampled["presence_penalty"] as? Double == 1.5, "rules apply after stripping")
+
 // Untouched without rules
 var untouched: [String: Any] = ["model": "x", "foo": [1, 2]]
 check(Transform.apply(&untouched, recipe: plain, path: "/v1/chat/completions", streamUsage: false).isEmpty, "no rules → unchanged")

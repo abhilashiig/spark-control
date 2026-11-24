@@ -93,6 +93,8 @@ struct Recipe: Codable, Identifiable, Hashable {
     /// Whether it thinks before answering and accepts images. nil = guessed from its name and start command.
     var reasoning: Bool?
     var images: Bool?
+    /// Strip the client's sampling fields so the engine uses the model's own defaults (its generation_config.json).
+    var modelSampling = false
     /// The API model name, fixed once the model is added or first started so renaming it doesn't break clients.
     /// nil = not fixed yet: follows the name.
     var api: String?
@@ -419,6 +421,7 @@ extension Recipe {
         backendKey = try c.decodeIfPresent(String.self, forKey: .backendKey)
         reasoning = try c.decodeIfPresent(Bool.self, forKey: .reasoning)
         images = try c.decodeIfPresent(Bool.self, forKey: .images)
+        modelSampling = try c.value(.modelSampling, or: d.modelSampling)
         api = try c.decodeIfPresent(String.self, forKey: .api)
     }
 }

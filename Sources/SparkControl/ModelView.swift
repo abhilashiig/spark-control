@@ -65,6 +65,8 @@ struct ModelView: View {
                     r.wrappedValue.images = $0
                     if r.wrappedValue.tensorfold != nil { r.wrappedValue.startCommand = TensorFold.withVision(r.wrappedValue.startCommand, $0) }
                 })
+                Toggle("Model's Own Sampling", isOn: r.modelSampling)
+                    .help("Ignores the temperature, top_p and other sampling values clients send, so the model maker's defaults apply.")
             } header: {
                 Text("API")
             } footer: {

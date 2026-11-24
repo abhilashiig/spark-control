@@ -15,10 +15,16 @@ enum Transform {
         (try? JSONSerialization.jsonObject(with: Data(s.utf8), options: .fragmentsAllowed)) ?? s
     }
 
+    static let samplingKeys = ["temperature", "top_p", "top_k", "min_p", "presence_penalty", "frequency_penalty", "repetition_penalty"]
+
     /// Applies the recipe's rules and model rewrite. Returns the top-level keys it changed.
     @discardableResult
     static func apply(_ body: inout [String: Any], recipe: Recipe, path: String, streamUsage: Bool) -> Set<String> {
         var changed = Set<String>()
+        // Before the rules, so a rule can still set one of these on purpose.
+        if recipe.modelSampling {
+            for k in samplingKeys where body.removeValue(forKey: k) != nil { changed.insert(k) }
+        }
         for rule in recipe.rules where !rule.key.isEmpty {
             switch rule.kind {
             case .remove:

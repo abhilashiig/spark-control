@@ -63,9 +63,10 @@ struct SparkView: View {
                                          domain: 0...max(100, (samples.compactMap(\.gpuTemp).max() ?? 0) + 5), range: range)
                         }
                         MemoryBreakdown(sample: now)
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 12, alignment: .top)], spacing: 12) {
-                            CoresCard(samples: all)
-                            TemperaturesCard(sample: now)
+                        let pair = Group { CoresCard(samples: all); TemperaturesCard(sample: now) }
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .top, spacing: 12) { pair.frame(minWidth: 380) }.fixedSize(horizontal: false, vertical: true)
+                            VStack(spacing: 12) { pair }
                         }
                         StorageCard(sample: now)
                     }
@@ -136,7 +137,7 @@ struct SparkView: View {
         let cpu = samples.count > 1 ? SparkMonitor.cpuPercent("cpu", from: samples[samples.count - 2], to: now) : nil
         let mem = Double(now.memUsed) / Double(max(1, now.memTotal))
         let idle = { (v: Double?) in v.map { $0 < 5 ? "Idle" : "Busy" } }
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 12) {
+        let tiles = Group {
             Tile(title: "Memory", value: String(format: "%.0f", gb(now.memUsed)), unit: String(format: "/ %.0f GB", gb(now.memTotal)),
                  detail: String(format: "%.0f GB available", gb(now.memAvailable)),
                  fraction: mem, tint: Color.text,
@@ -151,6 +152,10 @@ struct SparkView: View {
                  detail: now.power.map { String(format: "%.0f W draw", $0) } ?? "",
                  fraction: now.gpuTemp.map { $0 / 100 }, tint: now.gpuTemp.map { TempStatus($0).color } ?? Color.running,
                  tag: now.gpuTemp.map { (TempStatus($0).label, TempStatus($0).color) })
+        }
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) { tiles.frame(minWidth: 200) }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) { tiles }
         }
     }
 
@@ -191,6 +196,7 @@ private struct Panel<Trailing: View, Content: View>: View {
             }
             content
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .card(padding: 18)
     }
 }
@@ -285,7 +291,7 @@ private struct HistoryChart: View {
             .chartXScale(domain: end.addingTimeInterval(-Double(range))...end)
             .chartPlotStyle { $0.clipped() }
             .chartXAxis {
-                AxisMarks(values: .stride(by: .minute, count: range > 600 ? 15 : 1)) {
+                AxisMarks(preset: .aligned, values: .stride(by: .minute, count: range > 600 ? 15 : 1)) {
                     AxisValueLabel(format: .dateTime.hour().minute())
                         .font(.system(size: 11, design: .monospaced)).foregroundStyle(Color.text2)
                 }
@@ -370,7 +376,7 @@ private struct MemoryBreakdown: View {
 private struct FlowLegend: View {
     let items: [(String, String, Color?)]
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), alignment: .leading)], alignment: .leading, spacing: 8) {
+        FlowLayout {
             ForEach(items, id: \.0) { name, value, color in
                 HStack(spacing: 8) {
                     RoundedRectangle(cornerRadius: .corner(2)).fill(color ?? OverviewColor.track)

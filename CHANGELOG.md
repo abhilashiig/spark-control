@@ -13,11 +13,13 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - Settings → General → Appearance: NVIDIA, a black theme with NVIDIA green buttons and highlights, square corners and uppercase titles.
 - Terminal: an NVIDIA colour theme (black with an NVIDIA green cursor).
 - Settings → General → Appearance: Ember, the NVIDIA theme's black, square look with orange in place of green. The Terminal has a matching Ember colour theme.
+- Settings: Cap GPU Clock and Switch Models Automatically are the same on every Mac connected to the Spark. The GPU cap shows what's set on the Spark, and Switch Models Automatically is shared with the model list.
 - Models: a Model's Own Sampling switch on each model's page (off by default). When on, the temperature, top_p, top_k, min_p and penalty values coding tools send are dropped, so the model runs with its maker's recommended defaults. Parameter Rules still apply on top.
 
 ### Fixed
 - Terminal: ⌘K clears the terminal again instead of opening Search or jump to.
 - Settings: pop-up menus no longer show in light colours while a dark theme is chosen.
+- Overview: the stat cards and the CPU cores and Temperatures cards fill the page width instead of leaving empty space on the right, the last time on each chart is no longer cut off, legends wrap evenly, and Docker image sizes read "102 GB" like the rest.
 - Requests: Copy as cURL asks for the model by its API name, so the copied command works against Spark Control's API.
 - TensorFold's Check for Updates says Up to Date (or Couldn't Check) instead of doing nothing visible.
 - Set Up Spark (in Settings) can be cancelled and opens with your current Spark filled in.

@@ -110,7 +110,7 @@ struct ModelsView: View {
             .accessibilityElement()
             .accessibilityLabel("Memory committed")
             .accessibilityValue("\(Self.gb(committed)) of \(Self.gb(total))")
-            FlowLegend {
+            FlowLayout {
                 ForEach(segments, id: \.0) { name, color, bytes in legend(name, Self.gb(bytes)) { RoundedRectangle(cornerRadius: .corner(2)).fill(color) } }
                 legend("System reserve", Self.gb(reserve)) { RoundedRectangle(cornerRadius: .corner(2)).fill(Color(light: 0xD4D4D8, dark: 0x3A3A42)) }
                 legend("Free for models", Self.gb(max(0, total - committed))) {
@@ -470,7 +470,7 @@ private struct Hatch: ShapeStyle {
 }
 
 /// Lays out legend items left to right, wrapping to new lines.
-private struct FlowLegend: Layout {
+struct FlowLayout: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         place(proposal.width ?? .infinity, subviews).size
     }

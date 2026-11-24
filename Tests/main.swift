@@ -418,7 +418,7 @@ mon2.cpuTimes["cpu0"]![6] = 200
 check(SparkMonitor.cpuPercent("cpu0", from: mon1, to: mon2) == 40, "CPU busy share comes from jiffy deltas")
 check(SparkMonitor.parse("GPU|[N/A], [N/A], [N/A], [N/A]").gpuUtil == nil, "missing GPU readings stay empty")
 let store = SparkMonitor.parseStorage("DU|Hugging Face cache|285788099522\nDU|ComfyUI|58777820794\nDOCKER|96.61GB")
-check(store.folders.count == 2 && store.folders[0].1 == 285788099522 && store.docker == "96.61GB", "storage parses")
+check(store.folders.count == 2 && store.folders[0].1 == 285788099522 && store.docker == "96.61 GB", "storage parses")
 check(bash(SparkMonitor.script, syntaxOnly: true).0 == 0 && bash(SparkMonitor.storageScript, syntaxOnly: true).0 == 0, "monitor scripts parse")
 
 // Running side by side
@@ -471,6 +471,8 @@ check(shared.merged(into: [mine], local: Date(timeIntervalSince1970: 200)) == ni
       && SharedModels(updated: .now, recipes: [theirs, Recipe(name: "New Model", startCommand: "", stopCommand: "")]).merged(into: [], local: nil) == [theirs],
       "the newer list wins; a Mac's first sync keeps its own models but not the starter ones or blank ones")
 check((try? JSONDecoder().decode(SharedModels.self, from: JSONEncoder().encode(shared)))?.recipes == [theirs], "the shared list reads back")
+check((try? JSONDecoder().decode(SharedModels.self, from: JSONEncoder().encode(SharedModels(updated: .now, recipes: [], autoSwap: false))))?.autoSwap == false
+      && (try? JSONDecoder().decode(SharedModels.self, from: JSONEncoder().encode(shared)))?.autoSwap == nil, "auto-switch is shared")
 
 // Coding tool configs
 let gw = ClientTool.Gateway(baseURL: "http://localhost:18080/v1", apiKey: "sk-local")

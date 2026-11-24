@@ -115,9 +115,9 @@ enum VizColor {
 // MARK: Pages and cards
 
 extension View {
-    /// A grouped Form on the soft page background, so its sections read as cards.
+    /// A Form in the app's own style: titled sections as bordered cards with hairlines between rows.
     func page() -> some View {
-        formStyle(.grouped).scrollContentBackground(.hidden).background(Color.pageBackground)
+        formStyle(DesignFormStyle()).background(Color.pageBackground)
     }
 
     func card(padding: CGFloat = 16, radius: CGFloat = 14) -> some View {
@@ -125,6 +125,88 @@ extension View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Color.cardBorder))
+    }
+}
+
+/// Lays a Form out as the redesign's cards: section header above, rows split by hairlines, footer below.
+/// Rows are label left, control right; a label's second Text is its grey subtitle, as in a grouped Form.
+struct DesignFormStyle: FormStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                ForEach(sections: configuration.content) { section in
+                    VStack(alignment: .leading, spacing: 10) {
+                        if !section.header.isEmpty {
+                            Group { section.header }
+                                .font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.text)
+                                .textCase(nil)
+                        }
+                        Group(subviews: section.content) { rows in
+                            if !rows.isEmpty {
+                                VStack(spacing: 0) {
+                                    ForEach(rows) { row in
+                                        row.padding(.horizontal, 16).padding(.vertical, 11)
+                                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                        if row.id != rows.last?.id { Hairline() }
+                                    }
+                                }
+                                .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.cardBorder))
+                            }
+                        }
+                        if !section.footer.isEmpty {
+                            Group { section.footer }.font(.system(size: 12)).foregroundStyle(Color.text2)
+                        }
+                    }
+                }
+            }
+            .font(.system(size: 13))
+            .labeledContentStyle(DesignRowStyle())
+            .toggleStyle(DesignToggleStyle())
+            .padding(.horizontal, 28)
+            .padding(.vertical, 24)
+            .frame(maxWidth: 760)
+            .frame(maxWidth: .infinity)
+        }
+    }
+}
+
+/// Title (and grey subtitle) left, value right.
+struct DesignRowStyle: LabeledContentStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .center, spacing: 16) {
+            RowLabel { configuration.label }
+            Spacer(minLength: 8)
+            configuration.content.foregroundStyle(Color.text3).multilineTextAlignment(.trailing)
+        }
+    }
+}
+
+struct DesignToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 16) {
+            RowLabel { configuration.label }
+            Spacer(minLength: 8)
+            Toggle("", isOn: configuration.$isOn).toggleStyle(.switch).labelsHidden().controlSize(.small)
+        }
+    }
+}
+
+/// A row label's first view in the body style; any after it as the grey subtitle.
+private struct RowLabel<Content: View>: View {
+    @ViewBuilder var content: Content
+    var body: some View {
+        Group(subviews: content) { parts in
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(parts) { part in
+                    if part.id == parts.first?.id {
+                        part.font(.system(size: 13)).foregroundStyle(Color.text)
+                    } else {
+                        part.font(.system(size: 12)).foregroundStyle(Color.text2)
+                    }
+                }
+            }
+        }
     }
 }
 

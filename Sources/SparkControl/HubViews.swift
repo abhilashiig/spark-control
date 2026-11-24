@@ -244,7 +244,7 @@ struct HuggingFaceView: View {
                 } header: {
                     Text(state.hfQuery.isEmpty ? "Most Downloaded on Hugging Face" : "Results for “\(state.hfQuery)”")
                 } footer: {
-                    Text("Download fetches every file in the repo, so check the size.")
+                    Text("Downloads every file in the repo.")
                 }
             }
         }
@@ -361,7 +361,7 @@ private struct RepoRow: View {
                 if repo.partial > 0 {
                     Button("Clean Up") { Task { await state.hfClean(repo) } }
                         .disabled(repo.state != .idle || state.route == nil)
-                        .help("Remove the unfinished files an interrupted download left behind. The model stays.")
+                        .help("Remove leftovers from an interrupted download")
                 }
                 Button("Delete…", role: .destructive) { deleting = repo }
                     .disabled(repo.state != .idle || state.route == nil)
@@ -397,7 +397,7 @@ private struct HFSignInSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Sign In to Hugging Face").font(.headline)
-            Text("Paste an access token (Read is enough). It's saved on the Spark, not this Mac.")
+            Text("A Read token is enough. Saved on the Spark.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Link("Create a token on huggingface.co", destination: URL(string: "https://huggingface.co/settings/tokens")!)
@@ -467,8 +467,6 @@ struct DiscoveredView: View {
                 }
             } header: {
                 Text("On the Spark")
-            } footer: {
-                Text("Nothing runs until you set a model up and enable it.")
             }
 
             Section {
@@ -479,14 +477,14 @@ struct DiscoveredView: View {
                     if shown.isEmpty { Text("No matching models\(fitsOnly ? " that fit in memory" : "").").foregroundStyle(.secondary) }
                     ForEach(shown) { resultRow($0) }
                 } else {
-                    Text("Search ollama.com with the field in the toolbar.").foregroundStyle(.secondary)
+                    Text("Search ollama.com above.").foregroundStyle(.secondary)
                 }
             } header: {
                 Text(state.ollamaQuery.isEmpty ? "Popular on ollama.com" : "Results for “\(state.ollamaQuery)”")
             } footer: {
                 Text(fitsOnly
-                     ? "Showing sizes up to \(limit.formatted(.byteCount(style: .memory))): the Spark's memory less \(AppState.systemReserve / 1_000_000_000) GB for the system. Long contexts need more on top. Turn off Fits in Memory to see every size."
-                     : "Showing every size, including ones too big for the Spark's memory.")
+                     ? "Sizes up to \(limit.formatted(.byteCount(style: .memory))). Long contexts need more."
+                     : "Some sizes won't fit in memory.")
             }
         }
         .page()

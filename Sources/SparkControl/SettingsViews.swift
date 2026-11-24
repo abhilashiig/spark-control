@@ -97,7 +97,7 @@ struct DeviceFields: View {
     private var footer: String {
         let local = device.host(.local), ts = device.host(.tailscale)
         switch device.mode {
-        case .auto: return "Uses \(local) when you're on the same network, and \(ts) over Tailscale when you're not."
+        case .auto: return "\(local) on the same network, \(ts) elsewhere."
         case .local: return "Always uses \(local)."
         case .tailscale: return "Always uses \(ts) over Tailscale."
         }
@@ -249,7 +249,6 @@ private struct GatewaySettingsView: View {
                 TextField("Port", value: g.port, format: .number.grouping(.never))
                 Toggle(isOn: g.allowLAN) {
                     Text("Allow other devices to connect")
-                    Text("Off: only apps on this Mac can use the API.")
                 }
                 if let error = state.gatewayError {
                     Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
@@ -279,7 +278,6 @@ private struct GatewaySettingsView: View {
                 }
                 Toggle(isOn: g.injectCost) {
                     Text("Add cost to responses")
-                    Text("Turn off if a client rejects extra fields.")
                 }
                 Toggle("Ask for usage in streamed responses", isOn: g.streamUsage)
             }
@@ -300,7 +298,7 @@ private struct GeneralSettings: View {
             Picker("Appearance", selection: $appearance) {
                 ForEach(Appearance.allCases) { Text($0.label).tag($0.rawValue) }
             }
-            .help("System follows macOS's light or dark mode")
+            .help("System follows macOS")
             Toggle("Open at login", isOn: $state.launchAtLogin)
             LabeledContent("Data") {
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([Store.configURL]) }
@@ -314,7 +312,7 @@ private struct GeneralSettings: View {
         .confirmationDialog("Clear all benchmark results?", isPresented: $confirmClearBench) {
             Button("Clear", role: .destructive) { state.clearBenchmarks() }
         } message: {
-            Text("Deletes the saved runs for every model on this Mac. Copies on the Spark in ~/spark-bench-results are kept.")
+            Text("Copies on the Spark in ~/spark-bench-results are kept.")
         }
     }
 }
@@ -378,7 +376,7 @@ struct SudoPasswordSheet: View {
                 Text(title).font(.headline)
                 Text(target).font(.callout.monospaced()).foregroundStyle(.secondary)
             }
-            Text("Enter your Spark password for sudo. It's sent over SSH once and never saved.")
+            Text("Used once for sudo. Never saved.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             SecureField("Spark password", text: $password)
@@ -439,7 +437,7 @@ struct KeyLoginSheet: View {
                     Text(target).font(.callout.monospaced()).foregroundStyle(.secondary)
                 }
             }
-            Text("Enter your Spark password once. Spark Control adds this Mac's SSH key to the Spark, then signs in with the key from now on. The password is never saved.")
+            Text("Used once to add this Mac's SSH key. Never saved.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             SecureField("Spark password", text: $password)

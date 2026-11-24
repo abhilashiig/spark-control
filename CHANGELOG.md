@@ -6,6 +6,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ## [Unreleased]
 
 ### Changed
+- Shorter copy across the app: fewer captions and explanations, terser tooltips and buttons (Send Test, Open Config, Restore). API Access drops its intro, section notes and the Use in Snippet action.
 - API Access is redesigned: pick This Mac or Another computer and a model, and the base URL and a curl, Python, JavaScript or .env snippet update to match. Send Test Request runs it and shows the reply. Kilo Code, Pi and Hermes each get a card with their sync status, Open Config and Restore Previous (puts back the file from before Spark Control changed it). The model list is a table with each model's ID, memory, type and status, plus Copy ID and Use in Snippet.
 - The Ember theme is now Nebula, with a cool violet in place of orange, in both Appearance and the Terminal. If you chose Ember, you get Nebula automatically.
 

@@ -588,7 +588,7 @@ private struct EngineRow: View {
             }
         } log: {
             if case .user = state.tf.engine {
-                Text("Installed by you, so Spark Control uses it but never updates or removes it.")
+                Text("Installed by you; never updated or removed here.")
             } else if case .managed = state.tf.engine, !state.tf.jpeg {
                 Text("Image models refuse JPEG until libjpeg-turbo \(TensorFold.jpegVersion) is added (More → Add JPEG Support).")
             }
@@ -789,7 +789,7 @@ struct ModelRow: View {
             moreMenu("Delete from the Spark")
         case .none where complete:
             downloaded("On Spark")
-                .help("Already in the Spark's Hugging Face cache (\(st.bytes.formatted(.byteCount(style: .file)))), downloaded outside Spark Control.")
+                .help("Already in the Spark's Hugging Face cache (\(st.bytes.formatted(.byteCount(style: .file))))")
             Spacer(minLength: 8)
             addOrOpen(noEngine)
         case .failed, .none:
@@ -847,7 +847,7 @@ struct ModelRow: View {
             Button("Open") { Task { await state.comfyOpen(template: m.template) } }
                 .buttonStyle(PillButtonStyle(filled: true))
                 .disabled(noEngine || state.comfyBusy || state.isBusy)
-                .help("Starts ComfyUI if needed and opens this model's workflow in the browser, ready for a prompt")
+                .help("Open in ComfyUI")
         } else if let id = state.catRecipeID(item) {
             Button("Open") { selection = .model(id) }.buttonStyle(PillButtonStyle())
         } else {

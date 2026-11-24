@@ -56,7 +56,7 @@ struct ModelView: View {
                 state.deleteRecipe(id)
             }
         } message: {
-            Text("This removes the recipe from Spark Control. Nothing on the Spark is changed.")
+            Text("Nothing on the Spark is changed.")
         }
         .sheet(item: $keyTarget) { target in
             KeyLoginSheet(target: target) { state.start(r.wrappedValue) }
@@ -393,12 +393,12 @@ struct ModelView: View {
             }
             sideCard {
                 Text("How memory is shared").font(.system(size: 13, weight: .semibold))
-                Text("Models run side by side while they fit in free memory, keeping \(AppState.systemReserve / 1_000_000_000) GB for the system. If a new model doesn't fit, the least recently used one stops first, with a warning.")
+                Text("Models share memory, keeping \(AppState.systemReserve / 1_000_000_000) GB for the system. When one doesn't fit, the least recently used stops.")
                     .font(.system(size: 13)).foregroundStyle(Color.text3).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
             }
             sideCard(border: Color.danger.opacity(0.35)) {
                 Text("Remove model").font(.system(size: 13, weight: .semibold))
-                Text("Removes it from Spark Control. Nothing on the Spark is changed.")
+                Text("Nothing on the Spark is changed.")
                     .font(.system(size: 13)).foregroundStyle(Color.text3).fixedSize(horizontal: false, vertical: true)
                 Button("Remove…") { confirmDelete = true }.buttonStyle(.plain).foregroundStyle(Color.danger).font(.system(size: 13, weight: .medium))
             }
@@ -611,7 +611,7 @@ private struct TensorFoldSection: View {
     static func footer(_ c: TensorFold.Context, model: TensorFold.Model) -> String {
         var s = "Changes apply at the next start."
         if case .yarn = c {
-            s += " YaRN changes replies at every length: leave it off unless prompts go past \(model.window.formatted()) tokens."
+            s += " Use YaRN only past \(model.window.formatted()) tokens; it changes every reply."
         }
         return s
     }

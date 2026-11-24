@@ -44,12 +44,12 @@ struct ModelsView: View {
                 .labelStyle(.titleAndIcon)
                 .buttonStyle(DesignButtonStyle(height: 34))
                 .fixedSize()
-                .help("Add a custom model: any OpenAI-compatible server on the Spark")
+                .help("Add custom model")
         }
         .confirmationDialog("Delete “\(current?.name ?? "")”?", isPresented: $confirmDelete, presenting: current) { r in
             Button("Delete", role: .destructive) { picked = nil; state.deleteRecipe(r.id) }
         } message: { _ in
-            Text("This removes the recipe from Spark Control. Nothing on the Spark is changed.")
+            Text("Nothing on the Spark is changed.")
         }
     }
 

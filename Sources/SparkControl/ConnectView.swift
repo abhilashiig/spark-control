@@ -27,14 +27,12 @@ struct ConnectView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 32) {
-                Text("Connect apps and coding tools to models running on the Spark. Any OpenAI-compatible client works.")
-                    .font(.system(size: 13)).foregroundStyle(Color.text3)
-                PageSection(title: "Connect", note: "Pick where you're calling from and which model; the snippet updates to match.") {
+                PageSection(title: "Connect") {
                     // Side by side always; a wide snippet scrolls inside its card instead of stacking the cards.
                     HStack(alignment: .top, spacing: 16) { settings.frame(width: 400); code }
                 }
                 ToolsSection()
-                PageSection(title: "Models", note: "Use the ID as the model value in requests.") { table }
+                PageSection(title: "Models") { table }
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 24)
@@ -49,8 +47,8 @@ struct ConnectView: View {
     private var endpointPill: some View {
         let running = state.runningRecipes.count
         let (color, text): (Color, String) = state.gatewayError != nil ? (.danger, "Endpoint error")
-            : running == 0 ? (Color.text2, "Endpoint online · no model running")
-            : (.running, "Endpoint online · serving \(running) model\(running == 1 ? "" : "s")")
+            : running == 0 ? (Color.text2, "No model running")
+            : (.running, "Serving \(running) model\(running == 1 ? "" : "s")")
         return HStack(spacing: 6) {
             Circle().fill(color).frame(width: 7, height: 7)
             Text(text).font(.system(size: 12, weight: .medium)).foregroundStyle(color)
@@ -71,9 +69,9 @@ struct ConnectView: View {
             }
             if fromLAN && !state.config.gateway.allowLAN {
                 HStack(spacing: 8) {
-                    Text("Only apps on this Mac can connect now.").font(.system(size: 12)).foregroundStyle(Color.text2)
+                    Text("Off for other devices.").font(.system(size: 12)).foregroundStyle(Color.text2)
                     Spacer(minLength: 0)
-                    Button("Allow other devices") { state.config.gateway.allowLAN = true }.buttonStyle(PillButtonStyle())
+                    Button("Allow") { state.config.gateway.allowLAN = true }.buttonStyle(PillButtonStyle())
                 }
             }
             field("Base URL") { CopyField(value: baseURL) }
@@ -100,8 +98,7 @@ struct ConnectView: View {
                 field("API key") { CopyField(value: key) }
             } else {
                 Label {
-                    Text("No API key needed. Clients that insist on one can use any value, e.g. ")
-                        + Text("sk-local").font(.system(size: 12, design: .monospaced)) + Text(".")
+                    Text("No API key needed")
                 } icon: {
                     Image(systemName: "lock")
                 }
@@ -151,14 +148,13 @@ struct ConnectView: View {
             HStack(spacing: 12) {
                 let running = model.map { state.phase(for: $0) == .ready } ?? false
                 Button { Task { await sendTest() } } label: {
-                    if testing { ProgressView().controlSize(.small) } else { Label("Send test request", systemImage: "play") }
+                    if testing { ProgressView().controlSize(.small) } else { Label("Send Test", systemImage: "play") }
                 }
                 .buttonStyle(PillButtonStyle(filled: true))
                 .disabled(testing || !running || model?.isEmbedding == true)
-                Text(model?.isEmbedding == true ? "Embedding models take /v1/embeddings, not chat."
-                     : running ? "Sends this request from this Mac and shows the reply here."
-                     : "Start the model to test it; a test won't stop the one running.")
-                    .font(.system(size: 12)).foregroundStyle(Color.text2)
+                if !running && model?.isEmbedding != true {
+                    Text("Start the model to test it").font(.system(size: 12)).foregroundStyle(Color.text2)
+                }
                 Spacer(minLength: 0)
             }
             .padding(12)
@@ -240,7 +236,7 @@ struct ConnectView: View {
         Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 0) {
             GridRow {
                 ForEach(["Model", "ID", "Memory", "Type", "Status"], id: \.self) { Text($0) }
-                Text("Actions").gridColumnAlignment(.trailing)
+                Text("").gridColumnAlignment(.trailing)
             }
             .font(.system(size: 12)).foregroundStyle(Color.text2)
             .padding(.vertical, 12)
@@ -249,7 +245,7 @@ struct ConnectView: View {
                 Text("No enabled models.").foregroundStyle(Color.text2).padding(.vertical, 12).gridCellColumns(6)
             }
             ForEach(models) { r in
-                let phase = state.phase(for: r), inSnippet = r.id == model?.id
+                let phase = state.phase(for: r)
                 Hairline().gridCellUnsizedAxes(.horizontal)
                 GridRow {
                     Text(r.name).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.text).lineLimit(1)
@@ -263,14 +259,7 @@ struct ConnectView: View {
                         StatusDot(phase: phase, size: 7)
                         Text(phase.label).foregroundStyle(phase == .ready ? Color.running : Color.text2).lineLimit(1)
                     }
-                    HStack(spacing: 12) {
-                        CopyLink(title: "Copy ID", text: r.apiID, pill: true)
-                        Button(inSnippet ? "In snippet" : "Use in snippet") { modelID = r.id }
-                            .buttonStyle(.plain).foregroundStyle(inSnippet ? Color.text2 : Color.link)
-                            .disabled(inSnippet)
-                            .frame(width: 92, alignment: .leading)
-                    }
-                    .gridColumnAlignment(.trailing)
+                    CopyLink(title: "Copy ID", text: r.apiID, pill: true).gridColumnAlignment(.trailing)
                 }
                 .font(.system(size: 13))
                 .padding(.vertical, 9)
@@ -348,16 +337,15 @@ private struct ToolsSection: View {
         @Bindable var state = state
         let models = state.toolModels, gateway = state.toolGateway
         let _ = state.toolsChanged
-        PageSection(title: "Coding tools", note: "Spark Control writes these configs for you. Restart the tool, or reload its window, after a change.") {
+        PageSection(title: "Coding tools", note: "Restart a tool after a change.") {
             HStack(alignment: .top, spacing: 12) {
                 ForEach(ClientTool.allCases) { tool in
-                    card(tool, status: tool.status(models: models, gateway: gateway), count: models.count)
+                    card(tool, status: tool.status(models: models, gateway: gateway))
                 }
             }
             VStack(spacing: 0) {
                 Toggle(isOn: $state.config.gateway.syncTools) {
                     Text("Keep tool configs in sync")
-                    Text("When you add, remove or switch models, update the configs above. The previous file is saved as .spark-control.bak.")
                 }
                 .padding(16)
                 if FileManager.default.fileExists(atPath: ClientTool.kilo.folder.path) {
@@ -373,7 +361,7 @@ private struct ToolsSection: View {
         }
     }
 
-    private func card(_ tool: ClientTool, status: ClientTool.Status, count: Int) -> some View {
+    private func card(_ tool: ClientTool, status: ClientTool.Status) -> some View {
         let bak = tool.file.appendingPathExtension("spark-control.bak")
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -383,10 +371,6 @@ private struct ToolsSection: View {
             }
             Text(tool.file.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
                 .font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Color.text2).lineLimit(1).truncationMode(.middle)
-            Text(status == .notInstalled ? "Install \(tool.name) to use it with the Spark."
-                 : status == .notAdded ? "Not set up for the Spark yet."
-                 : "All \(count) models listed")
-                .font(.system(size: 12)).foregroundStyle(Color.text2)
             HStack(spacing: 12) {
                 switch status {
                 case .notAdded: Button("Add") { state.writeTool(tool) }.buttonStyle(PillButtonStyle(filled: true))
@@ -394,12 +378,12 @@ private struct ToolsSection: View {
                 default: EmptyView()
                 }
                 if status != .notInstalled && FileManager.default.fileExists(atPath: tool.file.path) {
-                    Button("Open config") { NSWorkspace.shared.activateFileViewerSelecting([tool.file]) }
+                    Button("Open Config") { NSWorkspace.shared.activateFileViewerSelecting([tool.file]) }
                         .buttonStyle(PillButtonStyle())
                         .help("Show in Finder")
                 }
                 if FileManager.default.fileExists(atPath: bak.path) {
-                    Button("Restore previous") {
+                    Button("Restore") {
                         do {
                             _ = try FileManager.default.replaceItemAt(tool.file, withItemAt: bak)
                             state.event("Restored \(tool.name)'s previous config")
@@ -409,7 +393,7 @@ private struct ToolsSection: View {
                         state.toolsChanged = Date()
                     }
                     .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Color.link)
-                    .help("Put back the file from before Spark Control last changed it")
+                    .help("Put back the file from before the last change")
                 }
             }
             .padding(.top, 8)
@@ -479,9 +463,7 @@ private struct ToolsSection: View {
             if let e = state.indexingError, !state.indexingBusy {
                 Text(e).foregroundStyle(.red)
             } else if all.isEmpty {
-                Text("Pull a model with \"embed\" in its name on the Ollama page, say qwen3-embedding:0.6b.")
-            } else {
-                Text("Lets Kilo Code find code by meaning, with embeddings made on the Spark.")
+                Text("Needs an embedding model, e.g. qwen3-embedding:0.6b from Ollama.")
             }
         }
         .task { if state.discovered == nil { await state.discover() } }

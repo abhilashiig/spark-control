@@ -113,7 +113,7 @@ struct SparkView: View {
             Button { Task { await state.openDashboard() } } label: { Label("DGX Dashboard", systemImage: "safari") }
                 .labelStyle(.iconOnly)
                 .buttonStyle(GhostIconStyle())
-                .help("Open NVIDIA's DGX Dashboard in your browser, through an SSH tunnel")
+                .help("Open DGX Dashboard")
                 .disabled(state.route == nil)
         }
         .padding(.leading, 28)
@@ -507,7 +507,7 @@ struct SSHKeysView: View {
         Form {
             if let keys {
                 Section {
-                    Text("Each key can log in to the Spark as you without a password. Remove any you don't recognise.")
+                    Text("Remove any you don't recognise.")
                         .foregroundStyle(.secondary)
                 }
                 Section("\(keys.count) authorized key\(keys.count == 1 ? "" : "s")") {
@@ -535,7 +535,7 @@ struct SSHKeysView: View {
         .confirmationDialog("Remove “\(removing.map(name) ?? "")”?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             Button("Remove Key", role: .destructive) { if let k = removing { Task { await remove(k) } } }
         } message: {
-            Text("Whoever holds this key can no longer log in to the Spark as you. Sessions already open stay open until they end.")
+            Text("Open sessions stay open until they end.")
         }
     }
 
@@ -627,7 +627,7 @@ struct WiFiView: View {
                     } footer: {
                         if status.scanBlocked {
                             HStack(alignment: .firstTextBaseline) {
-                                Text("The Spark only scans for networks with your password, so this is its last scan and may be missing some.")
+                                Text("Last scan; may be incomplete.")
                                     .foregroundStyle(.secondary)
                                 Spacer()
                                 Button("Scan with Password…") { scanSheet = true }.disabled(busy)

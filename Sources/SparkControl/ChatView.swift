@@ -536,7 +536,7 @@ private struct Conversation: View {
                     .buttonStyle(.plain)
                     .menuIndicator(.hidden)
                     .fixedSize()
-                    .help("Profile: the system prompt this chat uses")
+                    .help("Profile")
                     .sheet(isPresented: $editingProfiles) { ProfilesEditor(selection: chat?.profile ?? state.config.profiles.first?.id) }
                     if current?.hasReasoning == true || chat?.effort != nil {
                         let effort = ThinkingEffort(chat?.effort)
@@ -557,7 +557,7 @@ private struct Conversation: View {
                         .buttonStyle(.plain)
                         .menuIndicator(.hidden)
                         .fixedSize()
-                        .help("Thinking effort: how long the model reasons before answering. Less is faster, more is more careful.")
+                        .help("Thinking effort")
                     }
                     Button { editingSystem.toggle() } label: {
                         LineIcon(symbol: "slider.horizontal.3", size: 16).headerPill(square: true)
@@ -802,7 +802,7 @@ private struct Conversation: View {
                         .buttonStyle(PressableStyle())
                         .disabled(!canSend)
                         .keyboardShortcut(.return, modifiers: .command)
-                        .help("Send (Return). Shift-Return adds a new line.")
+                        .help("Send (Return)")
                 }
             }
         }
@@ -1008,7 +1008,7 @@ private struct MessageView: View {
                             if let onRetry {
                                 Button(action: onRetry) { Label("Retry", systemImage: "arrow.clockwise") }
                                     .buttonStyle(GhostIconStyle())
-                                    .help("Retry: generate this reply again. Messages after it are replaced.")
+                                    .help("Retry")
                             }
                             if let stats = message.stats {
                                 Text(stats).font(.system(size: 11, design: .monospaced)).foregroundStyle(Color.text2).padding(.leading, 8)
@@ -1106,7 +1106,7 @@ private struct ProfilesEditor: View {
                     }
                 }
                 .fixedSize()
-                .help("Bring back a built-in profile, or reset its prompt")
+                .help("Restore built-in profiles")
                 Spacer()
                 Button("Done") { dismiss() }.buttonStyle(.borderedProminent)
             }
@@ -1120,7 +1120,7 @@ private struct ProfilesEditor: View {
                 selection = state.config.profiles.first?.id
             }
         } message: {
-            Text("Chats using it keep their own instructions and continue without a profile.")
+            Text("Chats using it keep their instructions.")
         }
     }
 }

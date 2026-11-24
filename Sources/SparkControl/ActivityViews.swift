@@ -392,7 +392,7 @@ private struct RequestDetail: View {
             }
             .overlay(alignment: .bottom) { Hairline() }
             if tab == .request {
-                Text("As forwarded to the Spark, with the API name swapped for the backend model ID.")
+                Text("As sent to the Spark")
                     .font(.system(size: 12)).foregroundStyle(Color.text2)
             }
             ScrollView(.horizontal) {
@@ -656,7 +656,7 @@ struct UsageView: View {
         .confirmationDialog("Reset all usage history?", isPresented: $confirmReset) {
             Button("Reset", role: .destructive) { state.resetUsage() }
         } message: {
-            Text("This permanently deletes the usage history stored on this Mac.")
+            Text("Deletes the usage history on this Mac.")
         }
     }
 

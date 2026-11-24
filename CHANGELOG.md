@@ -5,6 +5,10 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Fixed
+- Activity: a streamed reply whose output arrived all at once (vLLM sends tool calls that way) shows "—" for TTFT and Decode instead of an impossible speed like 11,000 tok/s, and no longer skews the Decode and Prefill averages.
+- vLLM models now report cached prompt tokens, so Cached and Prefill on the Activity page are real instead of always 0. Takes effect the next time each model starts.
+
 ## [1.12.1] - 2026-11-24
 
 ### Added

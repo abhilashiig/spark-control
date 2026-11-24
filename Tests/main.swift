@@ -313,6 +313,10 @@ let vq = VLLM.model("qwen3.6-35b-a3b")!, vg = VLLM.model("gemma-4-26b-a4b")!
 let vqStart = VLLM.startCommand(vq, port: 18300, name: "qwen3.6-35b-a3b")
 check(VLLM.drafts(of: vqStart) == 3 && VLLM.context(of: vqStart) == 262_144 && vqStart.contains("-p 18300:8000")
       && vqStart.contains("--revision 1355db6a052410cfd62085d94b58866fd0f2c3c5"), "vLLM start command has port, revision, context and suggested drafts")
+let vqOld = vqStart.replacingOccurrences(of: " --enable-prompt-tokens-details", with: "")
+check(VLLM.synced(vqOld, model: vq.id).components(separatedBy: "--enable-prompt-tokens-details").count == 2
+      && VLLM.synced(vqStart, model: vq.id).components(separatedBy: "--enable-prompt-tokens-details").count == 2,
+      "vLLM commands report cached tokens, saved ones gain the flag once")
 // vLLM: request limit, fixed KV cache (skips the memory profiling that fails on the GB10), and saved commands kept in step
 let vu = VLLM.model("qwen3.8-27b-uncensored")!
 let vuStart = VLLM.startCommand(vu, port: 18301, name: "u")

@@ -224,7 +224,7 @@ final class Gateway: @unchecked Sendable {
 
         var usage: Transform.Usage?
         var status = 0
-        var firstToken: Date?
+        var firstToken: Date?, tokenChunks = 0
         do {
             if streaming {
                 let (bytes, resp) = try await session.bytes(for: up)
@@ -235,7 +235,7 @@ final class Gateway: @unchecked Sendable {
                 for try await byte in bytes {
                     line.append(byte)
                     guard byte == 10 else { continue }
-                    if firstToken == nil, Transform.isTokenChunk(line) { firstToken = Date() }
+                    if Transform.isTokenChunk(line) { tokenChunks += 1; if firstToken == nil { firstToken = Date() } }
                     let (l, u) = Transform.sseLine(line, recipe: recipe, inject: s.settings.injectCost)
                     if let u { usage = u }
                     out.append(l)
@@ -270,10 +270,13 @@ final class Gateway: @unchecked Sendable {
             return
         }
         let ended = Date()
+        // Output that arrived in one or two bursts (vLLM holds back tool calls until it can parse them) has no
+        // measurable first-token or decode time: the burst lands after generation is already done.
+        let timed = tokenChunks >= 3 ? firstToken : nil
         await state.finishRequest(entry, status: status, usage: usage, recipe: recipe,
                                   duration: ended.timeIntervalSince(started),
-                                  ttft: firstToken.map { $0.timeIntervalSince(started) },
-                                  decodeTime: firstToken.map { ended.timeIntervalSince($0) }, error: nil)
+                                  ttft: timed.map { $0.timeIntervalSince(started) },
+                                  decodeTime: timed.map { ended.timeIntervalSince($0) }, error: nil)
     }
 
     private func modelObject(_ r: Recipe, _ s: GatewaySnapshot) -> [String: Any] {

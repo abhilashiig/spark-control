@@ -11,28 +11,35 @@ extension Color {
         self.init(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .vibrantDark]) != nil ? ns(dark) : ns(light) })
     }
 
-    static let brand = Color(light: 0x0A66D8, dark: 0x3B8EEA)
+    // Graphite: near-black surfaces in dark mode, a periwinkle accent, and light-on-dark primary buttons.
+    static let brand = Color(light: 0x4F5BD5, dark: 0x8B9DFF)
+    /// Links and the selected sidebar icon.
+    static let link = Color(light: 0x4F5BD5, dark: 0xAEB9FF)
     /// The app icon's spark.
     static let spark = Color(light: 0xF29A2E, dark: 0xFFB04D)
     /// The app icon's dial background.
     static let sparkNavy = Color(light: 0x24307A, dark: 0x2E3B8F)
-    static let pageBackground = Color(light: 0xFFFFFF, dark: 0x1E1E20)
-    static let cardBackground = Color(light: 0xFFFFFF, dark: 0x252527)
-    static let cardBorder = Color(light: 0x000000, dark: 0xFFFFFF).opacity(0.08)
-    static let sidebar = Color(light: 0xF3F3F5, dark: 0x262628)
+    static let pageBackground = Color(light: 0xFFFFFF, dark: 0x0A0A0B)
+    static let cardBackground = Color(light: 0xFFFFFF, dark: 0x131316)
+    static let cardBorder = Color(light: 0xE4E4E7, dark: 0x222227)
+    static let sidebar = Color(light: 0xF4F4F5, dark: 0x0E0E10)
     /// Model tiles, tracks and wells.
-    static let well = Color(light: 0xF2F2F4, dark: 0x2C2C2F)
-    /// The dark square engine icons sit on, and the memory in use.
-    static let ink = Color(light: 0x1D1D1F, dark: 0x3A3A3D)
-    static let text = Color(light: 0x1D1D1F, dark: 0xF5F5F7)
-    static let text2 = Color(light: 0x6E6E73, dark: 0x98989D)
+    static let well = Color(light: 0xF2F2F4, dark: 0x1A1A1E)
+    /// The dark square engine icons sit on.
+    static let ink = Color(light: 0x1D1D1F, dark: 0x26262B)
+    /// Primary buttons: ink on light, near-white on dark.
+    static let primaryFill = Color(light: 0x18181B, dark: 0xEDEDEF)
+    static let primaryText = Color(light: 0xFFFFFF, dark: 0x0A0A0B)
+    static let text = Color(light: 0x18181B, dark: 0xEDEDEF)
+    /// Labels, column headers and meta lines.
+    static let text2 = Color(light: 0x71717A, dark: 0x8A8A93)
     /// Body copy one step down from `text`, and icon buttons.
-    static let text3 = Color(light: 0x5E5E63, dark: 0xA1A1A6)
-    static let hairline = Color(light: 0x000000, dark: 0xFFFFFF).opacity(0.08)
-    static let running = Color(light: 0x28A745, dark: 0x32C25A)
-    static let danger = Color(light: 0xC4302B, dark: 0xFF5A52)
+    static let text3 = Color(light: 0x52525B, dark: 0xA1A1AA)
+    static let hairline = Color(light: 0xE4E4E7, dark: 0x1F1F23)
+    static let running = Color(light: 0x16A34A, dark: 0x4ADE80)
+    static let danger = Color(light: 0xDC2626, dark: 0xF87171)
     /// The segmented control's selected thumb.
-    static let thumb = Color(light: 0xFFFFFF, dark: 0x5B5B5F)
+    static let thumb = Color(light: 0xFFFFFF, dark: 0x26262B)
 
     /// Hover, selection and track fills: black over light backgrounds, a stronger white over dark ones.
     static func overlay(_ opacity: Double) -> Color {
@@ -89,7 +96,7 @@ extension View {
         formStyle(.grouped).scrollContentBackground(.hidden).background(Color.pageBackground)
     }
 
-    func card(padding: CGFloat = 16, radius: CGFloat = 16) -> some View {
+    func card(padding: CGFloat = 16, radius: CGFloat = 14) -> some View {
         self.padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
@@ -208,9 +215,9 @@ struct BoltTile: View {
     var body: some View {
         Image(systemName: "bolt.fill")
             .font(.system(size: size * 0.5, weight: .bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.primaryText)
             .frame(width: size, height: size)
-            .background(Color.ink, in: RoundedRectangle(cornerRadius: size * 0.27, style: .continuous))
+            .background(Color.primaryFill, in: RoundedRectangle(cornerRadius: size * 0.27, style: .continuous))
             .accessibilityHidden(true)
     }
 }
@@ -219,20 +226,32 @@ struct EngineBadge: View {
     let name: String
     var body: some View {
         Text(name)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Self.color(name).opacity(0.15), in: Capsule())
-            .foregroundStyle(Self.color(name))
+            .font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Self.color(name).opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .foregroundStyle(Self.text(name))
+            .lineLimit(1)
+            .fixedSize()
     }
 
     static func color(_ name: String) -> Color {
         switch name {
-        case "TensorFold": .indigo
-        case "vLLM": .teal
-        case "Ollama": .brown
-        case "ComfyUI": .pink
-        default: .gray
+        case "TensorFold": Color(light: 0x5B6CF0, dark: 0x8B9DFF)
+        case "vLLM": Color(light: 0xD97706, dark: 0xFBBF24)
+        case "Ollama": Color(light: 0x0D9488, dark: 0x2DD4BF)
+        case "ComfyUI": Color(light: 0xDB2777, dark: 0xF472B6)
+        default: Color(light: 0x71717A, dark: 0x8A8A93)
+        }
+    }
+
+    static func text(_ name: String) -> Color {
+        switch name {
+        case "TensorFold": Color(light: 0x4338CA, dark: 0xB7C1FF)
+        case "vLLM": Color(light: 0xB45309, dark: 0xFCD34D)
+        case "Ollama": Color(light: 0x0F766E, dark: 0x5EEAD4)
+        case "ComfyUI": Color(light: 0xBE185D, dark: 0xF9A8D4)
+        default: Color(light: 0x52525B, dark: 0xC4C4CC)
         }
     }
 }
@@ -267,7 +286,7 @@ struct PageHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Color.text).lineLimit(1)
+            Text(title).font(.system(size: 17, weight: .semibold)).tracking(-0.2).foregroundStyle(Color.text).lineLimit(1)
             Spacer(minLength: 0)
             trailing
                 .labelStyle(.iconOnly)
@@ -275,10 +294,10 @@ struct PageHeader<Trailing: View>: View {
                 .menuStyle(.button)
                 .menuIndicator(.hidden)
         }
-        .padding(.leading, 24)
-        .padding(.trailing, 16)
-        .padding(.vertical, 8)
-        .frame(minHeight: 52)
+        .padding(.leading, 28)
+        .padding(.trailing, 20)
+        .padding(.vertical, 10)
+        .frame(minHeight: 60)
         .background { Color.pageBackground.gesture(WindowDragGesture()) }
         .overlay(alignment: .bottom) { Rectangle().fill(Color.hairline).frame(height: 1) }
     }
@@ -382,9 +401,11 @@ struct HeaderSearch: View {
         }
         .foregroundStyle(Color.text2)
         .padding(.horizontal, 8)
-        .frame(width: width, height: 28)
+        .padding(.horizontal, 2)
+        .frame(width: width, height: 32)
         .frame(maxWidth: width == nil ? .infinity : nil)
-        .background(Color.overlay(0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .background(Color(light: 0xF4F4F5, dark: 0x131316), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
     }
 }
 
@@ -400,9 +421,9 @@ struct Segments<T: Hashable>: View {
                 Button { selection = value } label: {
                     Text(label)
                         .font(.system(size: 12, weight: on ? .medium : .regular))
-                        .foregroundStyle(on ? Color.text : Color(light: 0x48484A, dark: 0xC7C7CC))
+                        .foregroundStyle(on ? Color.text : Color.text3)
                         .padding(.horizontal, 12)
-                        .frame(height: 24)
+                        .frame(height: 26)
                         .background {
                             if on {
                                 RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.thumb)
@@ -416,8 +437,9 @@ struct Segments<T: Hashable>: View {
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
-        .padding(2)
-        .background(Color.overlay(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(3)
+        .background(Color(light: 0xF4F4F5, dark: 0x131316), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
     }
 }
 
@@ -435,16 +457,16 @@ struct DesignButtonStyle: ButtonStyle {
         @State private var hover = false
         var body: some View {
             configuration.label
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(prominent ? Color.white : Color.text)
+                .font(.system(size: 13, weight: prominent ? .semibold : .medium))
+                .foregroundStyle(prominent ? Color.primaryText : Color.text)
                 .padding(.horizontal, 14)
                 .frame(height: height)
                 .frame(maxWidth: .infinity)
-                .background(prominent ? Color.brand : Color.cardBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(prominent ? Color.primaryFill : hover ? Color.overlay(0.04) : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .overlay {
-                    if !prominent { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.overlay(0.12)) }
+                    if !prominent { RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color(light: 0xD4D4D8, dark: 0x2E2E34)) }
                 }
-                .brightness(prominent && hover ? 0.06 : 0)
+                .brightness(prominent && hover ? -0.06 : 0)
                 .opacity(configuration.isPressed ? 0.85 : enabled ? 1 : 0.45)
                 .contentShape(Rectangle())
                 .onHover { hover = $0 }
@@ -452,8 +474,8 @@ struct DesignButtonStyle: ButtonStyle {
     }
 }
 
-/// 28pt capsules on catalog rows: accent text on grey ("Download"), or white on accent ("Add to Models").
-/// `large` is the 32pt engine button ("Install").
+/// 30pt buttons on catalog rows: outlined ("Download"), or the primary fill ("Add to Models").
+/// `large` is the 34pt engine button ("Install").
 struct PillButtonStyle: ButtonStyle {
     var filled = false
     var large = false
@@ -470,14 +492,17 @@ struct PillButtonStyle: ButtonStyle {
         var body: some View {
             configuration.label
                 .font(.system(size: large ? 13.5 : 12.5, weight: .semibold))
-                .foregroundStyle(filled ? Color.white : tint)
+                .foregroundStyle(filled ? Color.primaryText : tint == .brand ? Color.text : tint)
                 .lineLimit(1)
-                .padding(.horizontal, large ? 22 : 14)
-                .frame(height: large ? 32 : 28)
-                .background(filled ? tint : Color.well, in: Capsule())
-                .brightness(hover ? (filled ? 0.06 : -0.03) : 0)
+                .padding(.horizontal, large ? 16 : 12)
+                .frame(height: large ? 34 : 30)
+                .background(filled ? Color.primaryFill : hover ? Color.overlay(0.04) : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    if !filled { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color(light: 0xD4D4D8, dark: 0x2E2E34)) }
+                }
+                .brightness(filled && hover ? -0.06 : 0)
                 .opacity(configuration.isPressed ? 0.85 : enabled ? 1 : 0.45)
-                .contentShape(Capsule())
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .onHover { hover = $0 }
         }
     }

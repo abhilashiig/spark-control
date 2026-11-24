@@ -78,7 +78,7 @@ struct MainView: View {
     }
 }
 
-/// The sidebar: the Spark card, page groups, what's running, and memory, API Access, Settings and power at the foot.
+/// The sidebar: the Spark and Settings, page groups, what's running, and memory and power at the foot.
 private struct Sidebar: View {
     @Environment(AppState.self) private var state
     @Binding var selection: Pane?
@@ -93,6 +93,7 @@ private struct Sidebar: View {
                 VStack(alignment: .leading, spacing: 2) {
                     row("Chat", "bubble.left", .chat)
                     row("Models", "cube", .models)
+                    row("API Access", "chevron.left.forwardslash.chevron.right", .connect)
                     // Only what's running (or starting, stopping, failed), and the open one; the rest is on Models.
                     let live = state.config.recipes.filter { state.phase(for: $0) != .stopped || selection == .model($0.id) }
                     if !live.isEmpty {
@@ -131,16 +132,9 @@ private struct Sidebar: View {
             }
             .scrollIndicators(.never)
             Spacer(minLength: 16)
-            VStack(spacing: 10) {
+            HStack(spacing: 6) {
                 MemoryMeter()
-                HStack(spacing: 4) {
-                    row("API Access", "chevron.left.forwardslash.chevron.right", .connect)
-                    SettingsLink { LineIcon(symbol: "gearshape") }
-                        .buttonStyle(GhostIconStyle(size: 34))
-                        .help("Settings (⌘,)")
-                        .accessibilityLabel("Settings")
-                    ShutdownButton().frame(width: 34, height: 34)
-                }
+                ShutdownButton().frame(width: 34, height: 34)
             }
         }
         .padding(.horizontal, 12)
@@ -280,10 +274,14 @@ private struct DeviceCard: View {
                 .font(.system(size: 12)).foregroundStyle(Color.text3)
             }
             Spacer(minLength: 0)
+            SettingsLink { LineIcon(symbol: "gearshape") }
+                .buttonStyle(GhostIconStyle(size: 30))
+                .help("Settings (⌘,)")
+                .accessibilityLabel("Settings")
         }
-        .padding(.horizontal, 10)
+        .padding(.leading, 10)
+        .padding(.trailing, 2)
         .frame(minHeight: 40)
-        .accessibilityElement(children: .combine)
         .help(state.route.flatMap { r in state.config.device.map { "\($0.host(r)) over \(r.label)" } } ?? "")
     }
 

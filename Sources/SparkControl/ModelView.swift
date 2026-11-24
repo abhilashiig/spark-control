@@ -10,7 +10,7 @@ struct ModelView: View {
     @State private var keyTarget: String?
     @State private var width: CGFloat = 1000
 
-    enum Tab: String, CaseIterable { case configuration = "Configuration", api = "API", pricing = "Pricing", benchmark = "Benchmark", logs = "Logs" }
+    enum Tab: String, CaseIterable { case configuration = "Configuration", api = "API", pricing = "Pricing", benchmark = "Benchmark" }
 
     /// Looked up by id so deleting the model can't leave a stale index behind.
     private var recipe: Binding<Recipe> {
@@ -76,7 +76,6 @@ struct ModelView: View {
                 if case .failed(let m) = phase, m.contains("Permission denied"), let target = state.sshTarget {
                     Button("Set Up Key Login…") { keyTarget = target }.buttonStyle(DesignButtonStyle(prominent: false, height: 34))
                 }
-                Button("View logs") { tab = .logs }.buttonStyle(DesignButtonStyle(prominent: false, height: 34))
                 if phase.busy {
                     ProgressView().controlSize(.small).padding(.horizontal, 8)
                 } else if phase == .ready {
@@ -263,7 +262,6 @@ struct ModelView: View {
                         .textFieldStyle(.roundedBorder)
                         .padding(16)
                 }
-            case .logs: logs
             }
         }
     }
@@ -371,30 +369,6 @@ struct ModelView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    @ViewBuilder private var logs: some View {
-        let lines = Array(state.logs.suffix(300))
-        card {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 3) {
-                    ForEach(lines) { l in
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            Text(l.date, format: .dateTime.hour().minute().second()).foregroundStyle(Color.text2)
-                            Text(l.text).foregroundStyle(l.event ? Color.text : Color.text3)
-                        }
-                    }
-                    if lines.isEmpty { Text("No logs yet.").foregroundStyle(Color.text2) }
-                }
-                .font(.system(size: 12, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-            }
-            .defaultScrollAnchor(.bottom)
-            .frame(height: 420)
-        }
-        Button("Open Logs page") { selection = .logs }.buttonStyle(.plain).foregroundStyle(Color.link)
     }
 
     // MARK: Side column
@@ -518,7 +492,9 @@ private struct CommandBox: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("$").foregroundStyle(Color.text2)
                 TextField(title, text: $text, prompt: Text(prompt), axis: .vertical)
+                    .textFieldStyle(.plain)
                     .foregroundStyle(Color(light: 0x3F3F46, dark: 0xD4D4D8))
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .font(.system(size: 12, design: .monospaced))
             .lineSpacing(4)

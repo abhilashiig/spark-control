@@ -30,10 +30,8 @@ struct ConnectView: View {
                 Text("Connect apps and coding tools to models running on the Spark. Any OpenAI-compatible client works.")
                     .font(.system(size: 13)).foregroundStyle(Color.text3)
                 PageSection(title: "Connect", note: "Pick where you're calling from and which model; the snippet updates to match.") {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 16) { settings.frame(width: 420); code }
-                        VStack(spacing: 16) { settings; code }
-                    }
+                    // Side by side always; a wide snippet scrolls inside its card instead of stacking the cards.
+                    HStack(alignment: .top, spacing: 16) { settings.frame(width: 400); code }
                 }
                 ToolsSection()
                 PageSection(title: "Models", note: "Use the ID as the model value in requests.") { table }
@@ -86,7 +84,7 @@ struct ConnectView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if let model {
                     HStack {
                         Text("id: " + model.apiID).font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Color.text2)
@@ -125,7 +123,7 @@ struct ConnectView: View {
             HStack {
                 Segments(selection: $snippet, options: Snippet.allCases.map { ($0, $0.rawValue) })
                 Spacer()
-                CopyButton(text: codeText).buttonStyle(PillButtonStyle())
+                CopyLink(title: "Copy", text: codeText, pill: true)
             }
             .padding(12)
             Hairline()
@@ -137,8 +135,8 @@ struct ConnectView: View {
                     .textSelection(.enabled)
                     .fixedSize()
                     .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .defaultScrollAnchor(.topLeading)
             .frame(minHeight: 200, maxHeight: .infinity)
             .background(Color.well.opacity(0.5))
             if let reply {
@@ -255,8 +253,10 @@ struct ConnectView: View {
                 Hairline().gridCellUnsizedAxes(.horizontal)
                 GridRow {
                     Text(r.name).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.text).lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     Text(r.apiID).font(.system(size: 12, design: .monospaced)).foregroundStyle(Color.text3)
                         .textSelection(.enabled).lineLimit(1).truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     Text(r.memoryGB.map { "\(Int($0.rounded())) GB" } ?? "—").foregroundStyle(Color.text3)
                     Text(r.isEmbedding ? "Embedding" : "Chat").foregroundStyle(Color.text3)
                     HStack(spacing: 6) {
@@ -264,7 +264,7 @@ struct ConnectView: View {
                         Text(phase.label).foregroundStyle(phase == .ready ? Color.running : Color.text2).lineLimit(1)
                     }
                     HStack(spacing: 12) {
-                        CopyLink(title: "Copy ID", text: r.apiID).buttonStyle(PillButtonStyle())
+                        CopyLink(title: "Copy ID", text: r.apiID, pill: true)
                         Button(inSnippet ? "In snippet" : "Use in snippet") { modelID = r.id }
                             .buttonStyle(.plain).foregroundStyle(inSnippet ? Color.text2 : Color.link)
                             .disabled(inSnippet)
@@ -308,7 +308,7 @@ private struct CopyField: View {
             Text(value).font(.system(size: 12, design: .monospaced)).foregroundStyle(Color.text)
                 .textSelection(.enabled).lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 0)
-            CopyLink(title: "Copy", text: value).buttonStyle(PillButtonStyle())
+            CopyLink(title: "Copy", text: value, pill: true)
         }
         .padding(.leading, 12).padding(.trailing, 4).frame(height: 40)
         .background(Color.well, in: RoundedRectangle(cornerRadius: .corner(9), style: .continuous))
@@ -316,21 +316,24 @@ private struct CopyField: View {
     }
 }
 
-/// A text button that copies, and says so for a moment. Plain link style unless given another.
+/// A text button that copies, and says so for a moment: a link, or an outlined pill.
 private struct CopyLink: View {
     let title: String
     let text: String
+    var pill = false
     @State private var copied = false
     var body: some View {
-        Button(copied ? "Copied" : title) {
+        let button = Button(copied ? "Copied" : title) {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
             copied = true
             Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
         }
-        .buttonStyle(.plain)
-        .font(.system(size: 12))
-        .foregroundStyle(Color.link)
+        if pill {
+            button.buttonStyle(PillButtonStyle())
+        } else {
+            button.buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Color.link)
+        }
     }
 }
 

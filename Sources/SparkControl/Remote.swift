@@ -59,7 +59,8 @@ enum SSH {
         await withCheckedContinuation { cont in
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-            p.arguments = options + shared + [target, remote]
+            // Commands are written for bash; the user's login shell may be zsh, where an unmatched glob is an error.
+            p.arguments = options + shared + [target, "bash -c " + quote(remote)]
             let pipe = Pipe()
             p.standardOutput = pipe
             p.standardError = pipe

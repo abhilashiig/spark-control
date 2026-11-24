@@ -113,8 +113,8 @@ struct ModelView: View {
                 .foregroundStyle(EngineBadge.text(engine))
                 .minimumScaleFactor(0.6).lineLimit(1).padding(.horizontal, 4)
                 .frame(width: 56, height: 56)
-                .background(EngineBadge.color(engine).opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(EngineBadge.color(engine).opacity(0.3)))
+                .background(EngineBadge.color(engine).opacity(0.12), in: RoundedRectangle(cornerRadius: .corner(14), style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: .corner(14), style: .continuous).strokeBorder(EngineBadge.color(engine).opacity(0.3)))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 10) {
@@ -124,7 +124,7 @@ struct ModelView: View {
                     ForEach(tags(r), id: \.self) { t in
                         Text(t).font(.system(size: 12, weight: .medium)).foregroundStyle(Color(light: 0x52525B, dark: 0xC4C4CC))
                             .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(Color(light: 0xF4F4F5, dark: 0x1C1C21), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .background(Color(light: 0xF4F4F5, dark: 0x1C1C21), in: RoundedRectangle(cornerRadius: .corner(6), style: .continuous))
                     }
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -173,9 +173,9 @@ struct ModelView: View {
             statCard(r.memoryMeasured ? "Memory · measured" : "Memory") {
                 bigNumber(need.map { String(format: "%.0f", Double($0) / 1e9) } ?? "—", unit: need == nil ? nil : "GB")
                 GeometryReader { g in
-                    Capsule().fill(Color(light: 0xE4E4E7, dark: 0x222227))
+                    RoundedRectangle(cornerRadius: .corner(999)).fill(Color(light: 0xE4E4E7, dark: 0x222227))
                         .overlay(alignment: .leading) {
-                            Capsule().fill(EngineBadge.color(state.engineName(r))).frame(width: g.size.width * min(1, fraction))
+                            RoundedRectangle(cornerRadius: .corner(999)).fill(EngineBadge.color(state.engineName(r))).frame(width: g.size.width * min(1, fraction))
                         }
                 }
                 .frame(height: 4)
@@ -214,8 +214,8 @@ struct ModelView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.cardBorder))
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(12), style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: .corner(12), style: .continuous).strokeBorder(Color.cardBorder))
     }
 
     private func bigNumber(_ v: String, unit: String? = nil) -> some View {
@@ -319,8 +319,8 @@ struct ModelView: View {
                 HStack(spacing: 8) {
                     Text(r.wrappedValue.apiID).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
                         .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Color.pageBackground, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+                        .background(Color.pageBackground, in: RoundedRectangle(cornerRadius: .corner(6), style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: .corner(6), style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
                     CopyButton(text: r.wrappedValue.apiID).foregroundStyle(Color.text3)
                 }
             }
@@ -383,8 +383,8 @@ struct ModelView: View {
                         .lineSpacing(4).textSelection(.enabled).fixedSize().padding(12)
                 }
                 .scrollIndicators(.never)
-                .background(Color.pageBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.hairline))
+                .background(Color.pageBackground, in: RoundedRectangle(cornerRadius: .corner(8), style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: .corner(8), style: .continuous).strokeBorder(Color.hairline))
                 Button("Copy snippet") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(snippet, forType: .string)
@@ -432,17 +432,17 @@ struct ModelView: View {
     private func card(@ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 0) { content() }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.cardBorder))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(12), style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: .corner(12), style: .continuous).strokeBorder(Color.cardBorder))
+            .clipShape(RoundedRectangle(cornerRadius: .corner(12), style: .continuous))
     }
 
     private func sideCard(border: Color = Color.cardBorder, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 12) { content() }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(border))
+            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(12), style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: .corner(12), style: .continuous).strokeBorder(border))
     }
 
     private func row(_ label: String, sub: String? = nil, note: String? = nil, @ViewBuilder _ trailing: () -> some View) -> some View {
@@ -468,8 +468,8 @@ struct ModelView: View {
                 .font(.system(size: 12, design: .monospaced))
                 .padding(.horizontal, 10)
                 .frame(height: 34)
-                .background(Color.pageBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+                .background(Color.pageBackground, in: RoundedRectangle(cornerRadius: .corner(8), style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: .corner(8), style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -500,8 +500,8 @@ private struct CommandBox: View {
             .font(.system(size: 12, design: .monospaced))
             .lineSpacing(4)
             .padding(12)
-            .background(Color.pageBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.hairline))
+            .background(Color.pageBackground, in: RoundedRectangle(cornerRadius: .corner(8), style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: .corner(8), style: .continuous).strokeBorder(Color.hairline))
         }
         .font(.system(size: 13))
         .padding(16)

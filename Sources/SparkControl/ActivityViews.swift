@@ -103,8 +103,8 @@ struct RequestsView: View {
             .foregroundStyle(value.wrappedValue == nil ? Color.text3 : Color.text)
             .padding(.horizontal, 12)
             .frame(height: 34)
-            .background(value.wrappedValue == nil ? Color.clear : Color.overlay(0.05), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .background(value.wrappedValue == nil ? Color.clear : Color.overlay(0.05), in: RoundedRectangle(cornerRadius: .corner(9), style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: .corner(9), style: .continuous)
                 .strokeBorder(Color(light: 0xD4D4D8, dark: 0x2E2E34), style: StrokeStyle(lineWidth: 1, dash: value.wrappedValue == nil ? [3, 3] : [])))
             .contentShape(Rectangle())
         }
@@ -203,7 +203,7 @@ private struct RequestRow: View {
                 .frame(width: RequestColumns.time, alignment: .leading)
             StatusBadge(entry: e).frame(width: RequestColumns.status, alignment: .leading)
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                RoundedRectangle(cornerRadius: 2).fill(ModelColor.of(e.model)).frame(width: 8, height: 8)
+                RoundedRectangle(cornerRadius: .corner(2)).fill(ModelColor.of(e.model)).frame(width: 8, height: 8)
                 Text(e.model.isEmpty ? "—" : e.model).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.text)
                     .lineLimit(2)
             }
@@ -246,7 +246,7 @@ private struct StatusBadge: View {
             .foregroundStyle(color)
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
-            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: .corner(5), style: .continuous))
             .fixedSize()
     }
 }
@@ -269,7 +269,7 @@ private struct TimingBar: View {
                     Rectangle().fill(Self.decode)
                 }
             }
-            .clipShape(Capsule())
+            .clipShape(RoundedRectangle(cornerRadius: .corner(999)))
         }
         .accessibilityHidden(true)
     }
@@ -332,7 +332,7 @@ private struct RequestDetail: View {
     private func metric(_ label: String, _ value: String, swatch: Color?) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
-                if let swatch { RoundedRectangle(cornerRadius: 2).fill(swatch).frame(width: 8, height: 8) }
+                if let swatch { RoundedRectangle(cornerRadius: .corner(2)).fill(swatch).frame(width: 8, height: 8) }
                 Text(label).foregroundStyle(Color.text3)
             }
             .font(.system(size: 12))
@@ -405,8 +405,8 @@ private struct RequestDetail: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
             }
-            .background(Color(light: 0xFAFAFA, dark: 0x0A0A0B), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.cardBorder))
+            .background(Color(light: 0xFAFAFA, dark: 0x0A0A0B), in: RoundedRectangle(cornerRadius: .corner(10), style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: .corner(10), style: .continuous).strokeBorder(Color.cardBorder))
         }
     }
 
@@ -464,7 +464,7 @@ private struct LivePill: View {
         .foregroundStyle(c)
         .padding(.horizontal, 9)
         .padding(.vertical, 3)
-        .background(c.opacity(0.12), in: Capsule())
+        .background(c.opacity(0.12), in: RoundedRectangle(cornerRadius: .corner(999)))
     }
 }
 
@@ -486,7 +486,7 @@ private struct StatusSegments<T: Hashable>: View {
                     .foregroundStyle(on ? Color.text : Color.text3)
                     .padding(.horizontal, 12)
                     .frame(height: 28)
-                    .background(on ? Color.thumb : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .background(on ? Color.thumb : .clear, in: RoundedRectangle(cornerRadius: .corner(6), style: .continuous))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -494,8 +494,8 @@ private struct StatusSegments<T: Hashable>: View {
             }
         }
         .padding(3)
-        .background(Color(light: 0xF4F4F5, dark: 0x131316), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+        .background(Color(light: 0xF4F4F5, dark: 0x131316), in: RoundedRectangle(cornerRadius: .corner(9), style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: .corner(9), style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
     }
 }
 
@@ -510,7 +510,7 @@ private struct ActivityHeader<Accessory: View, Trailing: View>: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 10) {
-                    Text(title).font(.system(size: 17, weight: .semibold)).tracking(-0.2).foregroundStyle(Color.text).lineLimit(1)
+                    Text(title).pageTitle()
                     accessory
                 }
                 if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Color.text3).lineLimit(1) }
@@ -688,8 +688,8 @@ struct UsageView: View {
             }
         }
         .fixedSize(horizontal: false, vertical: true)
-        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.cardBorder))
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(14), style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: .corner(14), style: .continuous).strokeBorder(Color.cardBorder))
     }
 
     // MARK: Performance
@@ -765,8 +765,8 @@ struct UsageView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 18)
-        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.cardBorder))
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(14), style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: .corner(14), style: .continuous).strokeBorder(Color.cardBorder))
     }
 
     // MARK: Tables
@@ -796,7 +796,7 @@ struct UsageView: View {
                     ForEach(rows) { r in
                         GridRow {
                             HStack(spacing: 8) {
-                                RoundedRectangle(cornerRadius: 2).fill(ModelColor.of(r.model)).frame(width: 8, height: 8)
+                                RoundedRectangle(cornerRadius: .corner(2)).fill(ModelColor.of(r.model)).frame(width: 8, height: 8)
                                 Text(r.model).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.text)
                                     .textSelection(.enabled).help(r.model)
                             }
@@ -820,8 +820,8 @@ struct UsageView: View {
                 .frame(minWidth: 860)
             }
             .scrollIndicators(.automatic)
-            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.cardBorder))
+            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(14), style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: .corner(14), style: .continuous).strokeBorder(Color.cardBorder))
         }
     }
 
@@ -848,8 +848,8 @@ struct UsageView: View {
                         }
                     }
                     .padding(16)
-                    .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.cardBorder))
+                    .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(14), style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: .corner(14), style: .continuous).strokeBorder(Color.cardBorder))
                 }
             }
         }
@@ -868,8 +868,8 @@ struct UsageView: View {
         Text("No usage in this period.").font(.system(size: 13)).foregroundStyle(Color.text2)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(18)
-            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.cardBorder))
+            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(14), style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: .corner(14), style: .continuous).strokeBorder(Color.cardBorder))
     }
 
     private var resetCard: some View {
@@ -884,8 +884,8 @@ struct UsageView: View {
                 .disabled(state.usage.isEmpty)
         }
         .padding(16)
-        .background(Color.danger.opacity(0.04), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.danger.opacity(0.3)))
+        .background(Color.danger.opacity(0.04), in: RoundedRectangle(cornerRadius: .corner(14), style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: .corner(14), style: .continuous).strokeBorder(Color.danger.opacity(0.3)))
     }
 
     // MARK: Export

@@ -574,7 +574,7 @@ private struct EngineRow: View {
                     } label: {
                         Text("•••").font(.system(size: 12)).foregroundStyle(Color.text3)
                             .frame(width: 34, height: 34)
-                            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color(light: 0xD4D4D8, dark: 0x2E2E34)))
+                            .overlay(RoundedRectangle(cornerRadius: .corner(9), style: .continuous).strokeBorder(Color(light: 0xD4D4D8, dark: 0x2E2E34)))
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -669,8 +669,8 @@ struct ModelRow: View {
                     .foregroundStyle(Color(light: 0x3F3F46, dark: 0xD4D4D8))
                     .minimumScaleFactor(0.6).lineLimit(1).padding(.horizontal, 2)
                     .frame(width: 40, height: 40)
-                    .background(Color.well, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+                    .background(Color.well, in: RoundedRectangle(cornerRadius: .corner(10), style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: .corner(10), style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(Color.text)
@@ -704,7 +704,7 @@ struct ModelRow: View {
                     ForEach(tags, id: \.self) { t in
                         Text(t).font(.system(size: 12)).foregroundStyle(Color(light: 0x52525B, dark: 0xC4C4CC))
                             .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(Color(light: 0xF4F4F5, dark: 0x1C1C21), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .background(Color(light: 0xF4F4F5, dark: 0x1C1C21), in: RoundedRectangle(cornerRadius: .corner(6), style: .continuous))
                     }
                 }
             }
@@ -718,8 +718,8 @@ struct ModelRow: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.cardBorder))
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(14), style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: .corner(14), style: .continuous).strokeBorder(Color.cardBorder))
     }
 
     /// The corner label: where the model stands, or a warning that it leaves little memory for anything else.
@@ -927,8 +927,8 @@ struct EngineHero<Actions: View, Log: View>: View {
             if !state.tfLog.isEmpty {
                 LogBox(lines: state.tfLog)
                     .padding(12)
-                    .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.cardBorder))
+                    .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(10), style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: .corner(10), style: .continuous).strokeBorder(Color.cardBorder))
             }
         }
     }
@@ -1069,7 +1069,7 @@ private struct UpdateSheet: View {
                         .padding(10)
                     }
                     .frame(minHeight: 120, maxHeight: 320)
-                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: .corner(6)))
                 } else {
                     Text("Release notes couldn't be loaded.").foregroundStyle(.secondary)
                 }
@@ -1158,7 +1158,7 @@ private struct ManualSetupSheet: View {
                 CopyButton(text: TensorFold.manualSteps).buttonStyle(.borderless)
             }
             .padding(10)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: .corner(8)))
             HStack {
                 if checking { ProgressView().controlSize(.small) }
                 if case .user(let path, _) = state.tf.engine { Label("Found at \(path)", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }

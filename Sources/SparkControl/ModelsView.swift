@@ -103,7 +103,7 @@ struct ModelsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.well)
-                .clipShape(Capsule())
+                .clipShape(RoundedRectangle(cornerRadius: .corner(999)))
             }
             .frame(height: 10)
             .animation(.smooth, value: committed)
@@ -111,10 +111,10 @@ struct ModelsView: View {
             .accessibilityLabel("Memory committed")
             .accessibilityValue("\(Self.gb(committed)) of \(Self.gb(total))")
             FlowLegend {
-                ForEach(segments, id: \.0) { name, color, bytes in legend(name, Self.gb(bytes)) { RoundedRectangle(cornerRadius: 2).fill(color) } }
-                legend("System reserve", Self.gb(reserve)) { RoundedRectangle(cornerRadius: 2).fill(Color(light: 0xD4D4D8, dark: 0x3A3A42)) }
+                ForEach(segments, id: \.0) { name, color, bytes in legend(name, Self.gb(bytes)) { RoundedRectangle(cornerRadius: .corner(2)).fill(color) } }
+                legend("System reserve", Self.gb(reserve)) { RoundedRectangle(cornerRadius: .corner(2)).fill(Color(light: 0xD4D4D8, dark: 0x3A3A42)) }
                 legend("Free for models", Self.gb(max(0, total - committed))) {
-                    RoundedRectangle(cornerRadius: 2).fill(Color.well).overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(Color(light: 0xD4D4D8, dark: 0x3A3A42)))
+                    RoundedRectangle(cornerRadius: .corner(2)).fill(Color.well).overlay(RoundedRectangle(cornerRadius: .corner(2)).strokeBorder(Color(light: 0xD4D4D8, dark: 0x3A3A42)))
                 }
             }
             if let r = current, state.phase(for: r) == .stopped, r.enabled {
@@ -164,8 +164,8 @@ struct ModelsView: View {
                 }
             }
         }
-        .background(Color(light: 0xFFFFFF, dark: 0x0F0F11), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.cardBorder))
+        .background(Color(light: 0xFFFFFF, dark: 0x0F0F11), in: RoundedRectangle(cornerRadius: .corner(14), style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: .corner(14), style: .continuous).strokeBorder(Color.cardBorder))
     }
 
     private func columns(_ rows: [Recipe], level: Int) -> some View {
@@ -299,8 +299,8 @@ struct ModelsView: View {
                             .foregroundStyle(EngineBadge.text(state.engineName(r)))
                             .minimumScaleFactor(0.6).lineLimit(1).padding(.horizontal, 3)
                             .frame(width: 44, height: 44)
-                            .background(EngineBadge.color(state.engineName(r)).opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(EngineBadge.color(state.engineName(r)).opacity(0.3)))
+                            .background(EngineBadge.color(state.engineName(r)).opacity(0.12), in: RoundedRectangle(cornerRadius: .corner(11), style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: .corner(11), style: .continuous).strokeBorder(EngineBadge.color(state.engineName(r)).opacity(0.3)))
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(r.name.isEmpty ? "Untitled" : r.name)
@@ -343,8 +343,8 @@ struct ModelsView: View {
                             }
                             .padding(.leading, 12).padding(.trailing, 6)
                             .frame(height: 40)
-                            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+                            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(9), style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: .corner(9), style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
                         }
                     }
                     Spacer(minLength: 0)

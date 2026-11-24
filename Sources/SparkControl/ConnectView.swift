@@ -46,8 +46,8 @@ struct ConnectView: View {
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(14)
-                            .background(Color.well, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color.cardBorder))
+                            .background(Color.well, in: RoundedRectangle(cornerRadius: .corner(9), style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: .corner(9), style: .continuous).strokeBorder(Color.cardBorder))
                         CopyButton(text: code).padding(6)
                     }
                 }

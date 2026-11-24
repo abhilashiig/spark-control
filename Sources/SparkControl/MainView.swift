@@ -174,7 +174,7 @@ private struct Sidebar: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 34)
-            .background(on ? Color(light: 0xE4E4E7, dark: 0x1C1C21) : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(on ? Color(light: 0xE4E4E7, dark: 0x1C1C21) : .clear, in: RoundedRectangle(cornerRadius: .corner(8), style: .continuous))
             .hoverFill(Color.overlay(0.03), radius: 8, active: on)
             .contentShape(Rectangle())
         }
@@ -196,11 +196,11 @@ private struct JumpButton: View {
                 Text("Search or jump to…").frame(maxWidth: .infinity, alignment: .leading)
                 Text("⌘K").font(.system(size: 11)).foregroundStyle(Color.text3)
                     .padding(.horizontal, 6).padding(.vertical, 1)
-                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(light: 0xD4D4D8, dark: 0x2E2E34)))
+                    .overlay(RoundedRectangle(cornerRadius: .corner(5)).strokeBorder(Color(light: 0xD4D4D8, dark: 0x2E2E34)))
             }
             .font(.system(size: 13)).foregroundStyle(Color.text2)
             .padding(.horizontal, 10).frame(height: 34)
-            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x222227)))
+            .overlay(RoundedRectangle(cornerRadius: .corner(9), style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x222227)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -320,16 +320,16 @@ private struct MemoryMeter: View {
             }
             .font(.system(size: 12))
             GeometryReader { g in
-                Capsule().fill(Color(light: 0xE4E4E7, dark: 0x222227))
+                RoundedRectangle(cornerRadius: .corner(999)).fill(Color(light: 0xE4E4E7, dark: 0x222227))
                     .overlay(alignment: .leading) {
-                        Capsule().fill(Color.text).frame(width: g.size.width * min(1, Double(used) / Double(max(1, total))))
+                        RoundedRectangle(cornerRadius: .corner(999)).fill(Appearance.current == .nvidia ? Color.brand : Color.text).frame(width: g.size.width * min(1, Double(used) / Double(max(1, total))))
                     }
             }
             .frame(height: 4)
         }
         .padding(12)
-        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Color.cardBorder))
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(11), style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: .corner(11), style: .continuous).strokeBorder(Color.cardBorder))
         .accessibilityElement(children: .combine)
     }
 }

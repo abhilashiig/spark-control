@@ -95,7 +95,7 @@ struct SparkView: View {
     private func header(_ now: SparkMonitor.Sample?) -> some View {
         let live = state.route != nil && now.map { Date().timeIntervalSince($0.date) < 30 } == true
         return HStack(spacing: 12) {
-            Text("Overview").font(.system(size: 17, weight: .semibold)).tracking(-0.2).foregroundStyle(Color.text).lineLimit(1)
+            Text("Overview").pageTitle()
             HStack(spacing: 6) {
                 Circle().fill(live ? Color.running : Color.text2).frame(width: 6, height: 6)
                 Text(live ? "Live" : state.route == nil ? "Offline" : "Waiting")
@@ -103,7 +103,7 @@ struct SparkView: View {
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(live ? Color.running : Color.text2)
             .padding(.horizontal, 8).padding(.vertical, 3)
-            .background((live ? Color.running : Color.text2).opacity(0.1), in: Capsule())
+            .background((live ? Color.running : Color.text2).opacity(0.1), in: RoundedRectangle(cornerRadius: .corner(999)))
             if let now {
                 Text(health(now)).font(.system(size: 13)).foregroundStyle(Color.text2).lineLimit(1)
             }
@@ -236,9 +236,9 @@ private struct Meter: View {
     let tint: Color
     var body: some View {
         GeometryReader { g in
-            Capsule().fill(Color(light: 0xE4E4E7, dark: 0x222227))
+            RoundedRectangle(cornerRadius: .corner(999)).fill(Color(light: 0xE4E4E7, dark: 0x222227))
                 .overlay(alignment: .leading) {
-                    Capsule().fill(tint).frame(width: max(fraction > 0 ? 2 : 0, g.size.width * min(max(fraction, 0), 1)))
+                    RoundedRectangle(cornerRadius: .corner(999)).fill(tint).frame(width: max(fraction > 0 ? 2 : 0, g.size.width * min(max(fraction, 0), 1)))
                 }
         }
         .frame(height: 4)
@@ -324,7 +324,7 @@ private struct StackBar: View {
                 Spacer(minLength: 0)
             }
             .background(OverviewColor.track)
-            .clipShape(Capsule())
+            .clipShape(RoundedRectangle(cornerRadius: .corner(999)))
         }
         .frame(height: 12)
         .animation(.smooth, value: total)
@@ -373,8 +373,8 @@ private struct FlowLegend: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), alignment: .leading)], alignment: .leading, spacing: 8) {
             ForEach(items, id: \.0) { name, value, color in
                 HStack(spacing: 8) {
-                    RoundedRectangle(cornerRadius: 2).fill(color ?? OverviewColor.track)
-                        .overlay { if color == nil { RoundedRectangle(cornerRadius: 2).strokeBorder(OverviewColor.trackLine) } }
+                    RoundedRectangle(cornerRadius: .corner(2)).fill(color ?? OverviewColor.track)
+                        .overlay { if color == nil { RoundedRectangle(cornerRadius: .corner(2)).strokeBorder(OverviewColor.trackLine) } }
                         .frame(width: 8, height: 8)
                     Text(name).foregroundStyle(Color.text3).lineLimit(1)
                     Text(value).font(.system(size: 12, design: .monospaced)).foregroundStyle(Color.text).lineLimit(1)
@@ -399,7 +399,7 @@ private struct CoresCard: View {
         } content: {
             HStack(alignment: .bottom, spacing: 4) {
                 ForEach(cores.indices, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 4).fill(OverviewColor.track)
+                    RoundedRectangle(cornerRadius: .corner(4)).fill(OverviewColor.track)
                         .overlay(alignment: .bottom) {
                             GeometryReader { g in
                                 Rectangle().fill(OverviewColor.load)
@@ -407,7 +407,7 @@ private struct CoresCard: View {
                                     .frame(maxHeight: .infinity, alignment: .bottom)
                             }
                         }
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                        .clipShape(RoundedRectangle(cornerRadius: .corner(4)))
                         .help("Core \(i): \(Int(cores[i]))%")
                 }
             }
@@ -544,7 +544,7 @@ struct SSHKeysView: View {
                     Text(name(k)).font(.headline)
                     if isMine {
                         Text("This Mac").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(Color.brand.opacity(0.15), in: Capsule()).foregroundStyle(Color.brand)
+                            .background(Color.brand.opacity(0.15), in: RoundedRectangle(cornerRadius: .corner(999))).foregroundStyle(Color.brand)
                     }
                 }
                 Text("\(k.type)  \(k.fingerprint)").font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
@@ -688,7 +688,7 @@ struct WiFiView: View {
                     if n.secured { Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary).accessibilityLabel("Secured") }
                     if n.inUse {
                         Text("Connected").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(Color.brand.opacity(0.15), in: Capsule()).foregroundStyle(Color.brand)
+                            .background(Color.brand.opacity(0.15), in: RoundedRectangle(cornerRadius: .corner(999))).foregroundStyle(Color.brand)
                     }
                 }
                 Text([n.secured ? n.security : "Open", n.saved ? "Saved" : nil, "\(n.signal)%"].compactMap { $0 }.joined(separator: " · "))

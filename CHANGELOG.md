@@ -10,9 +10,12 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ### Added
 - Settings → General → Appearance: Soft Light (light with the whites toned down) and Soft Dark (dark lifted to charcoal), between Light and Dark.
+- Settings → General → Appearance: NVIDIA, a black theme with NVIDIA green buttons and highlights, square corners and uppercase titles.
+- Terminal: an NVIDIA colour theme (black with an NVIDIA green cursor).
 - Models: a Model's Own Sampling switch on each model's page (off by default). When on, the temperature, top_p, top_k, min_p and penalty values coding tools send are dropped, so the model runs with its maker's recommended defaults. Parameter Rules still apply on top.
 
 ### Fixed
+- Settings: pop-up menus no longer show in light colours while a dark theme is chosen.
 - Requests: Copy as cURL asks for the model by its API name, so the copied command works against Spark Control's API.
 - TensorFold's Check for Updates says Up to Date (or Couldn't Check) instead of doing nothing visible.
 - Set Up Spark (in Settings) can be cancelled and opens with your current Spark filled in.

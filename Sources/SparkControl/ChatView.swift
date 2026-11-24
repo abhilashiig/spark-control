@@ -363,8 +363,8 @@ struct ChatView: View {
                         Button { store.newChat(model: defaultModel, profiles: state.config.profiles) } label: {
                             Image(systemName: "plus").font(.system(size: 13, weight: .medium)).foregroundStyle(Color.text)
                                 .frame(width: 32, height: 32)
-                                .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+                                .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(8), style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: .corner(8), style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -434,7 +434,7 @@ struct ChatView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(on ? Color(light: 0xE4E4E7, dark: 0x1C1C21) : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .background(on ? Color(light: 0xE4E4E7, dark: 0x1C1C21) : .clear, in: RoundedRectangle(cornerRadius: .corner(9), style: .continuous))
         .hoverFill(Color.overlay(0.03), radius: 9, active: on)
         .help(Self.day(chat.updated))
         .contentShape(Rectangle())
@@ -580,7 +580,7 @@ private struct Conversation: View {
                                 .frame(width: 380, height: 160)
                                 .scrollContentBackground(.hidden)
                                 .padding(6)
-                                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: .corner(6)))
                         }
                         .padding(14)
                     }
@@ -695,8 +695,8 @@ private struct Conversation: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 40)
-            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(10), style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: .corner(10), style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
             .contentShape(Rectangle())
         }
         .menuStyle(.button)
@@ -743,8 +743,8 @@ private struct Conversation: View {
                     .font(.system(size: 12)).foregroundStyle(Color.text3)
             }
             .padding(.horizontal, 16).padding(.vertical, 14)
-            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.cardBorder))
+            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(12), style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: .corner(12), style: .continuous).strokeBorder(Color.cardBorder))
             .accessibilityElement(children: .combine)
         }
     }
@@ -782,7 +782,7 @@ private struct Conversation: View {
                 Button { importing = true } label: {
                     Image(systemName: "paperclip").font(.system(size: 13)).foregroundStyle(Color.text3)
                         .frame(width: 32, height: 32)
-                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+                        .overlay(RoundedRectangle(cornerRadius: .corner(8), style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
                         .contentShape(Rectangle())
                 }
                     .buttonStyle(.plain)
@@ -808,8 +808,8 @@ private struct Conversation: View {
         }
         .animation(.snappy, value: streaming)
         .padding(12)
-        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(14), style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: .corner(14), style: .continuous)
             .strokeBorder(focused ? Color.brand.opacity(0.45) : Color(light: 0xD4D4D8, dark: 0x2E2E34), lineWidth: 1))
         .animation(.easeOut(duration: 0.15), value: focused)
         .frame(maxWidth: 712)
@@ -880,7 +880,7 @@ private struct RoundIcon: View {
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(icon)
             .frame(width: 32, height: 32)
-            .background(fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(fill, in: RoundedRectangle(cornerRadius: .corner(8), style: .continuous))
     }
 }
 
@@ -916,7 +916,7 @@ private struct MessageView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .frame(minWidth: 320)
-                            .background(Color.accentColor.opacity(0.16), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .background(Color.accentColor.opacity(0.16), in: RoundedRectangle(cornerRadius: .corner(14), style: .continuous))
                         HStack {
                             Button("Cancel") { editing = false }
                             Button("Save & Resend", action: save)
@@ -927,8 +927,8 @@ private struct MessageView: View {
                         Text("Replies after this message are replaced.").font(.caption).foregroundStyle(.secondary)
                     } else {
                         if !message.content.isEmpty {
-                            let bubble = UnevenRoundedRectangle(topLeadingRadius: 14, bottomLeadingRadius: 14, bottomTrailingRadius: 4,
-                                                                topTrailingRadius: 14, style: .continuous)
+                            let bubble = UnevenRoundedRectangle(topLeadingRadius: .corner(14), bottomLeadingRadius: .corner(14), bottomTrailingRadius: .corner(4),
+                                                                topTrailingRadius: .corner(14), style: .continuous)
                             Text(message.content)
                                 .font(.system(size: 14))
                                 .foregroundStyle(Color.text)
@@ -957,7 +957,7 @@ private struct MessageView: View {
                     .foregroundStyle(EngineBadge.text(engine))
                     .minimumScaleFactor(0.6).lineLimit(1).padding(.horizontal, 2)
                     .frame(width: 28, height: 28)
-                    .background(EngineBadge.color(engine).opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(EngineBadge.color(engine).opacity(0.14), in: RoundedRectangle(cornerRadius: .corner(8), style: .continuous))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 12) {
                     if !message.reasoning.isEmpty {
@@ -972,8 +972,8 @@ private struct MessageView: View {
                             .foregroundStyle(Color.text3)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.cardBorder))
+                            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(7), style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: .corner(7), style: .continuous).strokeBorder(Color.cardBorder))
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -998,7 +998,7 @@ private struct MessageView: View {
                             .foregroundStyle(.red)
                             .textSelection(.enabled)
                             .padding(10)
-                            .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: .corner(10), style: .continuous))
                     }
                     if !live {
                         HStack(spacing: 2) {
@@ -1072,7 +1072,7 @@ private struct ProfilesEditor: View {
                                 .font(.body)
                                 .scrollContentBackground(.hidden)
                                 .padding(6)
-                                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: .corner(6)))
                         }
                         .padding(14)
                     } else {
@@ -1236,8 +1236,8 @@ private struct CodeBlock: View {
                     .padding(10)
             }
         }
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.cardBorder))
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: .corner(10), style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: .corner(10), style: .continuous).strokeBorder(Color.cardBorder))
     }
 }
 
@@ -1252,7 +1252,7 @@ private struct AttachmentChip: View {
                     .resizable()
                     .scaledToFill()
                     .frame(width: 26, height: 26)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .clipShape(RoundedRectangle(cornerRadius: .corner(4)))
             } else {
                 Image(systemName: "doc.text").foregroundStyle(.secondary)
             }
@@ -1264,7 +1264,7 @@ private struct AttachmentChip: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: .corner(8), style: .continuous))
     }
 }
 
@@ -1291,7 +1291,7 @@ private extension View {
         foregroundStyle(Color(light: 0x3F3F46, dark: 0xD4D4D8))
             .padding(.horizontal, square ? 0 : 10)
             .frame(width: square ? 34 : nil, height: 34)
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+            .overlay(RoundedRectangle(cornerRadius: .corner(8), style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
             .hoverFill(Color.overlay(0.04), radius: 8)
             .contentShape(Rectangle())
     }

@@ -473,8 +473,15 @@ let tfq = Recipe(name: "Qwen3.8 27B", startCommand: "tensorfold serve q --drafte
 var tfOff = tfq; tfOff.images = false
 check(tfq.migrated(defaultPort: 8000).takesImages && !tfOff.migrated(defaultPort: 8000).takesImages
       && TensorFold.withVision(TensorFold.withVision(tfq.startCommand, true), false) == tfq.startCommand
-      && TensorFold.withVision(TensorFold.withVision(tfq.startCommand, true), true).components(separatedBy: "--vision").count == 2,
+      && TensorFold.withVision(TensorFold.withVision(tfq.startCommand, true), true) == TensorFold.withVision(tfq.startCommand, true),
       "saved Qwen3.8 27B gains --vision unless turned off; the flag toggles cleanly")
+var tfOld = tfq; tfOld.startCommand += " --vision"
+var tfHand = tfq; tfHand.startCommand += " --vision --vision-max-images 8"
+check(tfOld.migrated(defaultPort: 8000).startCommand.hasSuffix(" --vision --vision-max-images 64 --vision-image-tokens 65536")
+      && tfHand.migrated(defaultPort: 8000).startCommand.hasSuffix(" --vision --vision-max-images 8 --vision-image-tokens 65536")
+      && TensorFold.withVision(tfHand.startCommand, false) == tfq.startCommand
+      && TensorFold.startCommand(TensorFold.model("gemma-4-31b")!, binary: "tf", port: 1).contains(" --vision --vision-max-images 64 --vision-image-tokens 65536"),
+      "image limits: new and saved models get 64 images in 65,536 tokens, a hand-set limit stays, Images off drops them all")
 vl.images = false
 check(!vl.takesImages, "the toggle overrides the guess")
 vl.images = nil

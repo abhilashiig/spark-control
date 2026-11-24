@@ -529,7 +529,7 @@ enum TensorFold {
         var args = ["\"\(binary)\"", "serve", m.repo.id, "--host", "0.0.0.0", "--port", "\(port)",
                     "--name", name ?? m.id, "--api-key-file", "\"\(dataDir)/api-key\""]
         if let d = m.drafter { args += ["--drafter", d.id] }
-        return withContext((args + m.flags).joined(separator: " "), .window(m.startWindow ?? m.window), model: m)
+        return withContext((args + m.flags.flatMap { $0 == "--vision" ? visionFlags : [$0] }).joined(separator: " "), .window(m.startWindow ?? m.window), model: m)
     }
 
     // MARK: Drafts
@@ -545,9 +545,14 @@ enum TensorFold {
 
     // MARK: Images
 
+    /// --vision with room for long image chats: TensorFold's defaults stop a request at 4 images (the whole
+    /// history counts) in 4,096 image tokens. 64 in 65,536 keeps about 1,024 tokens an image (docs/vision.md).
+    static let visionFlags = ["--vision", "--vision-max-images 64", "--vision-image-tokens 65536"]
+
+    /// Adds or removes --vision together with its image limits.
     static func withVision(_ command: String, _ on: Bool) -> String {
-        let plain = command.replacingOccurrences(of: " --vision", with: "")
-        return on ? plain + " --vision" : plain
+        let plain = command.replacing(#/ --vision(-(max-images|image-tokens) +\S+)?(?=\s|$)/#, with: "")
+        return on ? plain + " " + visionFlags.joined(separator: " ") : plain
     }
 
     // MARK: Context
@@ -604,11 +609,13 @@ enum TensorFold {
         return command + " --drafter " + d.id
     }
 
-    /// Likewise --vision, unless Image input was turned off on the model's page.
+    /// Likewise --vision and its image limits, unless Image input was turned off on the model's page.
+    /// A limit already in the command, set by hand, is kept.
     static func addingVision(to command: String, model: String?, images: Bool?) -> String {
-        guard images != false, Self.model(model)?.flags.contains("--vision") == true, !command.contains("--vision")
-        else { return command }
-        return withVision(command, true)
+        guard images != false, Self.model(model)?.flags.contains("--vision") == true else { return command }
+        let words = command.split(separator: " ")
+        let missing = visionFlags.filter { !words.contains($0.split(separator: " ")[0]) }
+        return missing.isEmpty ? command : command + " " + missing.joined(separator: " ")
     }
 
     /// A display name and served model id no existing model answers to, so the gateway and the Spark's

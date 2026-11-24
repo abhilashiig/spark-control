@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Changed
+- TensorFold models with images accept up to 64 images in a conversation instead of 4, with a 65,536-token image budget so each image keeps about the same detail. Models already set up get the new limits too; a limit you set by hand is kept.
+
 ## [1.12.1] - 2026-11-24
 
 ### Added

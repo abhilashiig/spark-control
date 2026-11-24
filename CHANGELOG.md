@@ -5,6 +5,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-11-24
+
 ### Changed
 - New look: a darker graphite theme with light primary buttons. The sidebar shows the Spark as a card, lists running models with their memory, and keeps a memory meter, Settings and power at the foot. Models is now a table with Engine, Context, Speculative, Memory and Fit columns, a Start or Chat button on each row, and a memory bar split by model and system reserve. A model's page has stat cards (memory, 24h requests and tokens, benchmark) and tabs; Requests has filters, a latency bar per request and a detail panel with prefill and decode speed and Copy as cURL; Usage, Overview, Chat and the TensorFold, vLLM and ComfyUI catalogs follow the same look. API Access, Hugging Face, Ollama, SSH Keys, Wi-Fi and Settings use the same cards in place of the system's grouped forms. ⌘K jumps to any page or model.
 

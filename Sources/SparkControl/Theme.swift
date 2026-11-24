@@ -8,7 +8,20 @@ extension Color {
         func ns(_ v: UInt32) -> NSColor {
             NSColor(srgbRed: CGFloat(v >> 16 & 0xff) / 255, green: CGFloat(v >> 8 & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1)
         }
-        self.init(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .vibrantDark]) != nil ? ns(dark) : ns(light) })
+        self.init(nsColor: NSColor(name: nil) {
+            let mode = Appearance.current
+            return $0.bestMatch(from: [.darkAqua, .vibrantDark]) == nil
+                ? ns(mode == .softLight ? Self.soften(light, floor: 0, ceiling: 0xE6) : light)
+                : ns(mode == .softDark ? Self.soften(dark, floor: 0x2A, ceiling: 0xFF) : dark)
+        })
+    }
+
+    /// The soft themes: greys squeezed into floor...ceiling (whites toned down, or blacks raised to charcoal).
+    /// Saturated colours are left alone.
+    static func soften(_ v: UInt32, floor: UInt32, ceiling: UInt32) -> UInt32 {
+        let c = [v >> 16 & 0xff, v >> 8 & 0xff, v & 0xff]
+        guard c.max()! - c.min()! <= 12 else { return v }
+        return c.map { floor + $0 * (ceiling - floor) / 255 }.reduce(0) { $0 << 8 | $1 }
     }
 
     // Graphite: near-black surfaces in dark mode, a periwinkle accent, and light-on-dark primary buttons.
@@ -52,16 +65,25 @@ extension Color {
 
 /// The app's light or dark look: the system's by default, or fixed in Settings → General.
 enum Appearance: String, CaseIterable, Identifiable {
-    case system, light, dark
+    case system, light, softLight, softDark, dark
     static let key = "appearance"
+    /// Read while colours resolve, so it holds from the first frame (before `apply` runs).
+    static var current: Appearance { UserDefaults.standard.string(forKey: key).flatMap(Appearance.init) ?? .system }
     var id: Self { self }
-    var label: String { rawValue.capitalized }
+    var label: String {
+        switch self {
+        case .softLight: "Soft Light"
+        case .softDark: "Soft Dark"
+        default: rawValue.capitalized
+        }
+    }
 
     static func apply(_ raw: String) {
-        NSApp.appearance = switch Appearance(rawValue: raw) ?? .system {
+        let mode = Appearance(rawValue: raw) ?? .system
+        NSApp.appearance = switch mode {
         case .system: nil
-        case .light: NSAppearance(named: .aqua)
-        case .dark: NSAppearance(named: .darkAqua)
+        case .light, .softLight: NSAppearance(named: .aqua)
+        case .softDark, .dark: NSAppearance(named: .darkAqua)
         }
     }
 }
@@ -74,7 +96,9 @@ extension View {
 private struct AppliesAppearance: ViewModifier {
     @AppStorage(Appearance.key) private var appearance = Appearance.system.rawValue
     func body(content: Content) -> some View {
-        content.onChange(of: appearance, initial: true) { Appearance.apply(appearance) }
+        // A soft theme shares its NSAppearance with light or dark, so a switch rebuilds the views to re-resolve colours.
+        content.id(appearance)
+            .onChange(of: appearance, initial: true) { Appearance.apply(appearance) }
     }
 }
 

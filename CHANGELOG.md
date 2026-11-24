@@ -9,9 +9,11 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - New look (beta): a darker graphite theme with light primary buttons. The sidebar shows the Spark as a card, lists running models with their memory, and keeps a memory meter, Settings and power at the foot. Models is now a table with Engine, Context, Speculative, Memory and Fit columns, a Start or Chat button on each row, and a memory bar split by model and system reserve. A model's page has stat cards (memory, 24h requests and tokens, benchmark) and tabs; Requests has filters, a latency bar per request and a detail panel with Copy as cURL; Usage, Overview, Chat and the TensorFold, vLLM and ComfyUI catalogs follow the same look. ⌘K jumps to any page or model.
 
 ### Added
+- Settings → General → Appearance: Soft Light (light with the whites toned down) and Soft Dark (dark lifted to charcoal), between Light and Dark.
 - Models: a Model's Own Sampling switch on each model's page (off by default). When on, the temperature, top_p, top_k, min_p and penalty values coding tools send are dropped, so the model runs with its maker's recommended defaults. Parameter Rules still apply on top.
 
 ### Fixed
+- TensorFold's Check for Updates says Up to Date (or Couldn't Check) instead of doing nothing visible.
 - Set Up Spark (in Settings) can be cancelled and opens with your current Spark filled in.
 - Activity: a streamed reply whose output arrived all at once (vLLM sends tool calls that way) shows "—" for TTFT and Decode instead of an impossible speed like 11,000 tok/s, and no longer skews the Decode and Prefill averages.
 - vLLM models now report cached prompt tokens, so Cached and Prefill on the Activity page are real instead of always 0. Takes effect the next time each model starts.

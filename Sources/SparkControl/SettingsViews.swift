@@ -300,7 +300,6 @@ private struct GeneralSettings: View {
             Picker("Appearance", selection: $appearance) {
                 ForEach(Appearance.allCases) { Text($0.label).tag($0.rawValue) }
             }
-            .pickerStyle(.segmented)
             .help("System follows macOS's light or dark mode")
             Toggle("Open at login", isOn: $state.launchAtLogin)
             LabeledContent("Data") {

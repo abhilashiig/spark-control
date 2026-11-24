@@ -526,6 +526,7 @@ private struct EngineRow: View {
     @Binding var manual: Bool
     @State private var updating: String?
     @State private var checking = false
+    @State private var checked: String?
 
     var body: some View {
         EngineHero(symbol: "square.stack.3d.up", title: "TensorFold",
@@ -546,12 +547,20 @@ private struct EngineRow: View {
                             .buttonStyle(PillButtonStyle(filled: true, large: true))
                             .disabled(state.route == nil)
                     } else {
-                        Button(checking ? "Checking…" : "Check for Updates") {
+                        // The result shows for a few seconds, then the button reverts.
+                        Button(checking ? "Checking…" : checked ?? "Check for Updates") {
                             checking = true
-                            Task { state.tfLatest = await TensorFold.latestStable(); checking = false }
+                            Task {
+                                let latest = await TensorFold.latestStable()
+                                if let latest { state.tfLatest = latest }
+                                checking = false
+                                checked = latest == nil ? "Couldn't Check" : "Up to Date (\(v))"
+                                try? await Task.sleep(for: .seconds(3))
+                                checked = nil
+                            }
                         }
                         .buttonStyle(PillButtonStyle(large: true))
-                        .disabled(checking)
+                        .disabled(checking || checked != nil)
                     }
                     Menu {
                         if !state.tf.jpeg {

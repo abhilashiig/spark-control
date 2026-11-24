@@ -84,7 +84,7 @@ struct RouteBadge: View {
             .font(.caption.weight(.semibold))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(tint.opacity(0.14), in: Capsule())
+            .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: .corner(999)))
             .foregroundStyle(tint)
     }
     private var tint: Color { route == nil ? .red : .green

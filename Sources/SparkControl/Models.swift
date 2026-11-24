@@ -242,6 +242,8 @@ struct SharedModels: Codable {
     var recipes: [Recipe]
     /// Chat profiles; nil in files written before profiles were shared.
     var profiles: [ChatProfile]?
+    /// "Switch models automatically"; nil in files written before it was shared.
+    var autoSwap: Bool?
 
     /// What a Mac's list becomes after reading the Spark's, given when this Mac last changed or synced its own
     /// (`local`, nil before its first sync). Nil = keep this Mac's list (and push it when newer).

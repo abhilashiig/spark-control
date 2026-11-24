@@ -197,8 +197,8 @@ final class AppState {
     private func configChanged(from old: Config) {
         guard config != old else { return }
         Store.save(config)
-        if (config.recipes.filter({ !$0.isBlank }) != old.recipes.filter({ !$0.isBlank }) || config.profiles != old.profiles)
-            && !applyingShared {
+        if (config.recipes.filter({ !$0.isBlank }) != old.recipes.filter({ !$0.isBlank }) || config.profiles != old.profiles
+            || config.gateway.autoSwap != old.gateway.autoSwap) && !applyingShared {
             modelsUpdated = Date()
             pushModels()
         }
@@ -325,7 +325,6 @@ final class AppState {
             event(new.map { "Connected via \($0.label) (\(d.host($0)))" } ?? "Spark is unreachable on both routes")
             if new != nil {
                 await pullModels()
-                if config.gpuCap { await syncGPUCap() }
             }
         }
     }
@@ -347,6 +346,7 @@ final class AppState {
     func pullModels() async {
         guard let target = sshTarget else { return }
         lastPull = Date()
+        await pullGPUCap()
         let res = await SSH.run(target, "cat \"\(SharedModels.path)\" 2>/dev/null || true", timeout: 20)
         guard res.code == 0 else { return }
         guard let start = res.output.firstIndex(of: "{") else {
@@ -360,7 +360,7 @@ final class AppState {
         }
         guard let merged = shared.merged(into: config.recipes, local: modelsUpdated) else {
             // A file without profiles gets this Mac's, stamped now so the other Macs take them.
-            if shared.profiles == nil { modelsUpdated = Date() }
+            if shared.profiles == nil || shared.autoSwap == nil { modelsUpdated = Date() }
             if let m = modelsUpdated, m > shared.updated || shared.recipes.contains(where: \.isBlank) { pushModels() }
             return
         }
@@ -369,14 +369,25 @@ final class AppState {
         applyingShared = true
         config.recipes = merged.map { $0.migrated(defaultPort: port) }
         if let profiles { config.profiles = profiles }
+        if let s = shared.autoSwap { config.gateway.autoSwap = s }
         applyingShared = false
         modelsUpdated = shared.updated
         event("Loaded \(shared.recipes.count) models" + (profiles.map { " and \($0.count) chat profiles" } ?? "") + " from the Spark")
         // Push back what the Spark lacks: this Mac's own models or profiles on a first sync, or profiles at all.
-        if merged.count != shared.recipes.count || profiles?.count != shared.profiles?.count || shared.profiles == nil {
+        if merged.count != shared.recipes.count || profiles?.count != shared.profiles?.count || shared.profiles == nil
+            || shared.autoSwap == nil {
             modelsUpdated = Date()
             pushModels()
         }
+    }
+
+    /// The cap is a boot service on the Spark, so every Mac shows what's installed there rather than its own last choice.
+    private func pullGPUCap() async {
+        // A failed change waits for its password instead of flipping back.
+        guard gpuCapError == nil, let target = sshTarget else { return }
+        let res = await SSH.run(target, "[ -e /etc/systemd/system/\(GPUCap.unitName).service ] && echo __ON__ || echo __OFF__", timeout: 20)
+        guard res.output.contains("__O") else { return }
+        config.gpuCap = res.output.contains("__ON__")
     }
 
     /// Saves the model list on the Spark, a moment after the last change.
@@ -387,7 +398,8 @@ final class AppState {
             guard !Task.isCancelled, let target = sshTarget, let stamp = modelsUpdated else { return }
             let e = JSONEncoder()
             e.outputFormatting = [.prettyPrinted, .sortedKeys]
-            guard let data = try? e.encode(SharedModels(updated: stamp, recipes: config.recipes.filter { !$0.isBlank }, profiles: config.profiles)) else { return }
+            guard let data = try? e.encode(SharedModels(updated: stamp, recipes: config.recipes.filter { !$0.isBlank }, profiles: config.profiles,
+                                                            autoSwap: config.gateway.autoSwap)) else { return }
             let file = SharedModels.path
             let cmd = "mkdir -p \"$(dirname \"\(file)\")\" && cat > \"\(file).tmp\" && mv \"\(file).tmp\" \"\(file)\""
             // Detached: writing the list to ssh's stdin may block until ssh connects.

@@ -129,7 +129,7 @@ struct RouteChecksView: View {
                                 .font(.caption2.weight(.semibold))
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 1)
-                                .background(.tint.opacity(0.15), in: Capsule())
+                                .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: .corner(999)))
                                 .foregroundStyle(.tint)
                         }
                     }
@@ -194,6 +194,7 @@ struct DeviceSetupView: View {
     @State private var device = Device()
 
     var body: some View {
+        let editing = state.config.device != nil
         VStack(spacing: 0) {
             VStack(spacing: 8) {
                 Image(systemName: "server.rack")
@@ -214,6 +215,7 @@ struct DeviceSetupView: View {
 
             HStack {
                 Spacer()
+                if editing { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction) }
                 Button("Continue") {
                     state.config.device = device
                     dismiss()
@@ -224,7 +226,9 @@ struct DeviceSetupView: View {
             .padding([.horizontal, .bottom], 20)
         }
         .frame(width: 540, height: 600)
-        .interactiveDismissDisabled()
+        .background(Color.pageBackground)
+        .interactiveDismissDisabled(!editing)
+        .onAppear { if let d = state.config.device { device = d } }
     }
 }
 
@@ -296,7 +300,6 @@ private struct GeneralSettings: View {
             Picker("Appearance", selection: $appearance) {
                 ForEach(Appearance.allCases) { Text($0.label).tag($0.rawValue) }
             }
-            .pickerStyle(.segmented)
             .help("System follows macOS's light or dark mode")
             Toggle("Open at login", isOn: $state.launchAtLogin)
             LabeledContent("Data") {
@@ -430,7 +433,7 @@ struct KeyLoginSheet: View {
                     .font(.system(size: 22, weight: .medium))
                     .foregroundStyle(.tint)
                     .frame(width: 40, height: 40)
-                    .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: .corner(9), style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Set Up Key Login").font(.headline)
                     Text(target).font(.callout.monospaced()).foregroundStyle(.secondary)

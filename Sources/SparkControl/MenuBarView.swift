@@ -126,7 +126,7 @@ private struct MenuRow<Content: View>: View {
         .buttonStyle(.plain)
         .foregroundStyle(isEnabled ? .primary : .secondary)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: .corner(8), style: .continuous)
                 .fill(hover && isEnabled ? Color.brand.opacity(0.14) : .clear)
         )
         .animation(.easeOut(duration: 0.12), value: hover)

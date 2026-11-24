@@ -124,7 +124,7 @@ enum SparkMonitor {
         for line in output.split(separator: "\n") {
             let f = line.split(separator: "|").map(String.init)
             if f.first == "DU", f.count == 3, let b = Int64(f[2]) { folders.append((f[1], b)) }
-            if f.first == "DOCKER", f.count == 2 { docker = f[1] }
+            if f.first == "DOCKER", f.count == 2 { docker = f[1].replacingOccurrences(of: #"(\d)([kMGT]?B)$"#, with: "$1 $2", options: .regularExpression) }
         }
         return (folders, docker)
     }

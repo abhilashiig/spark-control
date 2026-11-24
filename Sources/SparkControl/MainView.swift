@@ -21,7 +21,7 @@ struct MainView: View {
         return UserDefaults.standard.string(forKey: "startPage").flatMap { pages[$0.lowercased()] } ?? .models
     }()
 
-    @AppStorage("sidebarWidth") private var sidebarWidth = 216.0
+    @AppStorage("sidebarWidth") private var sidebarWidth = 240.0
 
     var body: some View {
         @Bindable var state = state
@@ -74,11 +74,15 @@ struct MainView: View {
         .onChange(of: selection) { old, _ in
             if case .model(let id) = old { state.config.recipes.removeAll { $0.id == id && $0.isBlank } }
         }
-        .onAppear { if selection == nil { selection = .models } }
+        .onAppear {
+            if selection == nil { selection = .models }
+            // `-startPage model` opens the first model's page.
+            if UserDefaults.standard.string(forKey: "startPage")?.lowercased() == "model", let r = state.config.recipes.first { selection = .model(r.id) }
+        }
     }
 }
 
-/// The design's sidebar: the Spark at the top, page groups, API Access and power at the foot. Flat #F3F3F5, no vibrancy.
+/// The sidebar: the Spark and Settings, page groups, what's running, and memory and power at the foot.
 private struct Sidebar: View {
     @Environment(AppState.self) private var state
     @Binding var selection: Pane?
@@ -87,22 +91,34 @@ private struct Sidebar: View {
         VStack(alignment: .leading, spacing: 0) {
             // Room for the window's traffic lights, which sit over the sidebar (the window has no title bar).
             Color.clear.frame(height: 28).contentShape(Rectangle()).gesture(WindowDragGesture())
-            DeviceHeader()
-            Spacer().frame(height: 10)
+            DeviceCard()
+            JumpButton(selection: $selection).padding(.top, 14)
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 2) {
                     row("Chat", "bubble.left", .chat)
-                    row("Models", "cpu", .models)
+                    row("Models", "cube", .models)
+                    row("API Access", "chevron.left.forwardslash.chevron.right", .connect)
                     // Only what's running (or starting, stopping, failed), and the open one; the rest is on Models.
-                    ForEach(state.config.recipes.filter { state.phase(for: $0) != .stopped || selection == .model($0.id) }) { r in
-                        item(r.name.isEmpty ? "Untitled" : r.name, .model(r.id)) {
-                            ModelAvatar(name: r.name, phase: state.phase(for: r), size: 22)
+                    let live = state.config.recipes.filter { state.phase(for: $0) != .stopped || selection == .model($0.id) }
+                    if !live.isEmpty {
+                        group("Running")
+                        ForEach(live) { r in
+                            item(r.name.isEmpty ? "Untitled" : r.name, .model(r.id)) {
+                                StatusDot(phase: state.phase(for: r))
+                                    .padding(3)
+                                    .background(Circle().fill(state.phase(for: r).color.opacity(0.15)))
+                                    .frame(width: 16, height: 16)
+                            } trailing: {
+                                if let need = state.memoryNeed(r) {
+                                    Text("\(Int((Double(need) / 1e9).rounded())) GB")
+                                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(Color.text2)
+                                }
+                            }
                         }
-                        .padding(.leading, 12)
                     }
                     group("Engines")
                     row("TensorFold", "square.stack.3d.up", .tensorfold)
-                    row("vLLM", "cube", .vllm)
+                    row("vLLM", "triangle", .vllm)
                     row("Ollama", "tray", .discovered)
                     row("Hugging Face", "face.smiling", .huggingFace)
                     row("ComfyUI", "photo", .comfy)
@@ -116,45 +132,50 @@ private struct Sidebar: View {
                     row("SSH Keys", "key", .sshKeys)
                     row("Wi-Fi", "wifi", .wifi)
                 }
+                .padding(.top, 10)
             }
             .scrollIndicators(.never)
-            Spacer(minLength: 20)
-            HStack(spacing: 4) {
-                row("API Access", "powerplug", .connect)
-                ShutdownButton().frame(width: 28, height: 28)
+            Spacer(minLength: 16)
+            HStack(spacing: 6) {
+                MemoryMeter()
+                ShutdownButton().frame(width: 34, height: 34)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.bottom, 14)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 16)
         .background(Color.sidebar)
     }
 
     private func group(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 11, weight: .semibold))
+        Text(title.uppercased())
+            .font(.system(size: 11, weight: .medium))
+            .tracking(0.44)
             .foregroundStyle(Color.text2)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 10)
             .padding(.top, 16)
             .padding(.bottom, 4)
             .accessibilityAddTraits(.isHeader)
     }
 
     private func row(_ title: String, _ symbol: String, _ pane: Pane) -> some View {
-        item(title, pane) { LineIcon(symbol: symbol).foregroundStyle(Color.brand) }
+        let on = selection == pane
+        return item(title, pane) { LineIcon(symbol: symbol, size: 16).foregroundStyle(on ? Color.link : Color.text2) } trailing: { EmptyView() }
     }
 
-    private func item(_ title: String, _ pane: Pane, @ViewBuilder icon: () -> some View) -> some View {
+    private func item(_ title: String, _ pane: Pane, @ViewBuilder icon: () -> some View, @ViewBuilder trailing: () -> some View) -> some View {
         let on = selection == pane
         return Button { selection = pane } label: {
-            HStack(spacing: 9) {
+            HStack(spacing: 10) {
                 icon()
-                Text(title).font(.system(size: 13, weight: on ? .medium : .regular)).foregroundStyle(Color.text).lineLimit(1)
+                Text(title).font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(on ? Color.text : Color(light: 0x3F3F46, dark: 0xB4B4BC)).lineLimit(1)
                 Spacer(minLength: 0)
+                trailing()
             }
-            .padding(.horizontal, 8)
-            .frame(height: 30)
-            .background(on ? Color.overlay(0.075) : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .hoverFill(Color.overlay(0.04), active: on)
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .background(on ? Color(light: 0xE4E4E7, dark: 0x1C1C21) : .clear, in: RoundedRectangle(cornerRadius: .corner(8), style: .continuous))
+            .hoverFill(Color.overlay(0.03), radius: 8, active: on)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -162,38 +183,110 @@ private struct Sidebar: View {
     }
 }
 
-/// The Spark this window controls, and whether it answers. The menu holds Settings.
-private struct DeviceHeader: View {
+/// "Search or jump to…": ⌘K opens a field that filters pages and models; Return opens the first match.
+private struct JumpButton: View {
+    @Environment(AppState.self) private var state
+    @Binding var selection: Pane?
+    @State private var open = false
+
+    var body: some View {
+        Button { open = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").font(.system(size: 12))
+                Text("Search or jump to…").frame(maxWidth: .infinity, alignment: .leading)
+                Text("⌘K").font(.system(size: 11)).foregroundStyle(Color.text3)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .overlay(RoundedRectangle(cornerRadius: .corner(5)).strokeBorder(Color(light: 0xD4D4D8, dark: 0x2E2E34)))
+            }
+            .font(.system(size: 13)).foregroundStyle(Color.text2)
+            .padding(.horizontal, 10).frame(height: 34)
+            .overlay(RoundedRectangle(cornerRadius: .corner(9), style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x222227)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(selection == .terminal ? nil : KeyboardShortcut("k", modifiers: .command))  // Terminal's ⌘K clears
+        .popover(isPresented: $open, arrowEdge: .trailing) { JumpList(selection: $selection, open: $open) }
+    }
+}
+
+private struct JumpList: View {
+    @Environment(AppState.self) private var state
+    @Binding var selection: Pane?
+    @Binding var open: Bool
+    @State private var query = ""
+    @FocusState private var focused: Bool
+
+    private static let pages: [(String, String, Pane)] = [
+        ("Chat", "bubble.left", .chat), ("Models", "cube", .models), ("TensorFold", "square.stack.3d.up", .tensorfold),
+        ("vLLM", "triangle", .vllm), ("Ollama", "tray", .discovered), ("Hugging Face", "face.smiling", .huggingFace),
+        ("ComfyUI", "photo", .comfy), ("Overview", "gauge.with.needle", .spark), ("Requests", "arrow.left.arrow.right", .requests),
+        ("Usage", "chart.bar", .usage), ("Logs", "doc.text", .logs), ("Terminal", "apple.terminal", .terminal),
+        ("SSH Keys", "key", .sshKeys), ("Wi-Fi", "wifi", .wifi), ("API Access", "chevron.left.forwardslash.chevron.right", .connect),
+    ]
+
+    private var matches: [(String, String, Pane)] {
+        let all = Self.pages + state.config.recipes.map { ($0.name.isEmpty ? "Untitled" : $0.name, "cpu", Pane.model($0.id)) }
+        return query.isEmpty ? all : all.filter { $0.0.localizedCaseInsensitiveContains(query) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TextField("Search or jump to…", text: $query)
+                .textFieldStyle(.plain).font(.system(size: 14)).padding(12)
+                .focused($focused)
+                .onSubmit { if let m = matches.first { go(m.2) } }
+            Hairline()
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(matches, id: \.2) { title, symbol, pane in
+                        Button { go(pane) } label: {
+                            HStack(spacing: 10) {
+                                LineIcon(symbol: symbol, size: 16).foregroundStyle(Color.text2)
+                                Text(title).lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .font(.system(size: 13)).padding(.horizontal, 10).frame(height: 30)
+                            .hoverFill(radius: 7).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(6)
+            }
+            .frame(maxHeight: 320)
+        }
+        .frame(width: 300)
+        .onAppear { focused = true }
+    }
+
+    private func go(_ pane: Pane) { selection = pane; open = false }
+}
+
+/// The Spark this window controls, and whether it answers.
+private struct DeviceCard: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "bolt")
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
-                .background(Color.ink, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(alignment: .bottomTrailing) {
-                    Circle().fill(dot).frame(width: 9, height: 9)
-                        .overlay(Circle().stroke(Color.sidebar, lineWidth: 2))
-                        .offset(x: 2, y: 2)
-                }
-                .accessibilityHidden(true)
+            BoltTile(size: 30)
             VStack(alignment: .leading, spacing: 1) {
                 Text(name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.text).lineLimit(1)
-                Text(status).font(.system(size: 11.5)).foregroundStyle(Color.text2).lineLimit(1)
+                HStack(spacing: 6) {
+                    Circle().fill(dot).frame(width: 6, height: 6)
+                    Text(status).lineLimit(1)
+                }
+                .font(.system(size: 12)).foregroundStyle(Color.text3)
             }
-            .help(state.route.flatMap { r in state.config.device.map { "\($0.host(r)) over \(r.label)" } } ?? "")
-            .accessibilityElement(children: .combine)
             Spacer(minLength: 0)
-            SettingsLink { Label("Settings", systemImage: "gearshape") }
-                .labelStyle(.iconOnly)
-                .buttonStyle(GhostIconStyle())
+            SettingsLink { LineIcon(symbol: "gearshape") }
+                .buttonStyle(GhostIconStyle(size: 30))
                 .help("Settings (⌘,)")
+                .accessibilityLabel("Settings")
         }
-        .padding(.leading, 8)
+        .padding(.leading, 10)
         .padding(.trailing, 2)
-        .padding(.vertical, 6)
+        .frame(minHeight: 40)
+        .help(state.route.flatMap { r in state.config.device.map { "\($0.host(r)) over \(r.label)" } } ?? "")
     }
 
     private var name: String {
@@ -209,4 +302,34 @@ private struct DeviceHeader: View {
     }
 
     private var dot: Color { state.offline || state.config.device == nil ? .red : state.route == nil ? .orange : Color.running }
+}
+
+/// Unified memory in use, from the last Spark reading.
+private struct MemoryMeter: View {
+    @Environment(AppState.self) private var state
+
+    var body: some View {
+        let total = state.sparkMemoryTotal
+        let used = state.spark.last?.memUsed ?? 0
+        VStack(spacing: 8) {
+            HStack {
+                Text("Memory").foregroundStyle(Color.text3)
+                Spacer()
+                Text("\(Int((Double(used) / 1e9).rounded())) / \(Int((Double(total) / 1e9).rounded())) GB")
+                    .font(.system(size: 12, design: .monospaced)).foregroundStyle(Color.text)
+            }
+            .font(.system(size: 12))
+            GeometryReader { g in
+                RoundedRectangle(cornerRadius: .corner(999)).fill(Color(light: 0xE4E4E7, dark: 0x222227))
+                    .overlay(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: .corner(999)).fill(Appearance.current.sharp ? Color.brand : Color.text).frame(width: g.size.width * min(1, Double(used) / Double(max(1, total))))
+                    }
+            }
+            .frame(height: 4)
+        }
+        .padding(12)
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(11), style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: .corner(11), style: .continuous).strokeBorder(Color.cardBorder))
+        .accessibilityElement(children: .combine)
+    }
 }

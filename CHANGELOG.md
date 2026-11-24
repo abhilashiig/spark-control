@@ -5,13 +5,27 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Changed
+- New look: a darker graphite theme with light primary buttons. The sidebar shows the Spark as a card, lists running models with their memory, and keeps a memory meter, Settings and power at the foot. Models is now a table with Engine, Context, Speculative, Memory and Fit columns, a Start or Chat button on each row, and a memory bar split by model and system reserve. A model's page has stat cards (memory, 24h requests and tokens, benchmark) and tabs; Requests has filters, a latency bar per request and a detail panel with prefill and decode speed and Copy as cURL; Usage, Overview, Chat and the TensorFold, vLLM and ComfyUI catalogs follow the same look. API Access, Hugging Face, Ollama, SSH Keys, Wi-Fi and Settings use the same cards in place of the system's grouped forms. ⌘K jumps to any page or model.
+
 ### Added
+- Settings → General → Appearance: Soft Light (light with the whites toned down) and Soft Dark (dark lifted to charcoal), between Light and Dark.
+- Settings → General → Appearance: NVIDIA, a black theme with NVIDIA green buttons and highlights, square corners and uppercase titles.
+- Terminal: an NVIDIA colour theme (black with an NVIDIA green cursor).
+- Settings → General → Appearance: Ember, the NVIDIA theme's black, square look with orange in place of green. The Terminal has a matching Ember colour theme.
+- Settings: Cap GPU Clock and Switch Models Automatically are the same on every Mac connected to the Spark. The GPU cap shows what's set on the Spark, and Switch Models Automatically is shared with the model list.
 - Models: a Model's Own Sampling switch on each model's page (off by default). When on, the temperature, top_p, top_k, min_p and penalty values coding tools send are dropped, so the model runs with its maker's recommended defaults. Parameter Rules still apply on top.
 
 ### Changed
 - TensorFold models with images accept up to 64 images in a conversation instead of 4, with a 65,536-token image budget so each image keeps about the same detail. Models already set up get the new limits too; a limit you set by hand is kept.
 
 ### Fixed
+- Terminal: ⌘K clears the terminal again instead of opening Search or jump to.
+- Settings: pop-up menus no longer show in light colours while a dark theme is chosen.
+- Overview: the stat cards and the CPU cores and Temperatures cards fill the page width instead of leaving empty space on the right, the last time on each chart is no longer cut off, legends wrap evenly, and Docker image sizes read "102 GB" like the rest.
+- Requests: Copy as cURL asks for the model by its API name, so the copied command works against Spark Control's API.
+- TensorFold's Check for Updates says Up to Date (or Couldn't Check) instead of doing nothing visible.
+- Set Up Spark (in Settings) can be cancelled and opens with your current Spark filled in.
 - Starting a model, and everything else the app runs on the Spark, works when the Spark's login shell is zsh. It failed with "no matches found: /tmp/spark-control/start-…-*.log" even though the model had started.
 - Activity: a streamed reply whose output arrived all at once (vLLM sends tool calls that way) shows "—" for TTFT and Decode instead of an impossible speed like 11,000 tok/s, and no longer skews the Decode and Prefill averages.
 - vLLM models now report cached prompt tokens, so Cached and Prefill on the Activity page are real instead of always 0. Takes effect the next time each model starts.
@@ -62,7 +76,7 @@ The redesign is out of beta. This release includes everything in 1.12.0-beta.1, 
 - Chat: Retry under a reply generates it again from the same question (handy after an error or a weak answer). Messages after it are replaced.
 
 ### Changed
-- New look (beta): a flat, light window with a sidebar showing the Spark and whether it's online, pages grouped under Engines, Monitor and Device, and API Access at the foot. Every page has a simple title bar with its controls; Settings is in the menu under the Spark's name. "Spark" is now called Overview and "Connect" is API Access.
+- New look: a flat, light window with a sidebar showing the Spark and whether it's online, pages grouped under Engines, Monitor and Device, and API Access at the foot. Every page has a simple title bar with its controls; Settings is in the menu under the Spark's name. "Spark" is now called Overview and "Connect" is API Access.
 - Models is now a list of what's loaded and the rest of your library, with a memory bar and a details panel. The panel loads, stops or opens the model in Chat, and before loading shows how much memory it needs and which models it would unload. Settings and benchmarks open from the panel's Settings link or by double-clicking a model.
 - Chat: search your chats; the model and whether it's loaded sit at the top of the conversation, and the message box says what sending will load and unload. Chat statistics, Show Chat Files and deleting chats are in the conversation's More (…) menu.
 - TensorFold, vLLM and ComfyUI pages: each engine leads with its install button, and its models are listed with their size, a Download button, and Add to Models once downloaded.

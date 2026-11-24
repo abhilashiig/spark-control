@@ -5,7 +5,7 @@ import Charts
 // MARK: Sampling
 
 extension AppState {
-    /// One reading from the Spark, appended to the history (five minutes at the page's 2-second pace).
+    /// One reading from the Spark, appended to the history (an hour at the page's 2-second pace).
     func sampleSpark() async {
         guard let target = sshTarget else { return }
         let res = await SSH.run(target, "bash -c \(SSH.quote(SparkMonitor.script))", timeout: 10)
@@ -13,7 +13,7 @@ extension AppState {
         let s = SparkMonitor.parse(res.output)
         guard s.memTotal > 0 else { return }
         spark.append(s)
-        if spark.count > 150 { spark.removeFirst(spark.count - 150) }
+        if spark.count > 1800 { spark.removeFirst(spark.count - 1800) }
     }
 
     func measureStorage() async {
@@ -25,45 +25,64 @@ extension AppState {
 
 // MARK: View
 
+/// Chart and bar colours from the design: periwinkle for load, teal for memory, amber for heat.
+private enum OverviewColor {
+    static let load = Color(light: 0x5B6CF0, dark: 0x8B9DFF)
+    static let memory = Color(light: 0x0D9488, dark: 0x5EEAD4)
+    static let heat = Color(light: 0xD97706, dark: 0xFBBF24)
+    static let pink = Color(light: 0xDB2777, dark: 0xF472B6)
+    static let other = Color(light: 0xA1A1AA, dark: 0x6B6B74)
+    static let track = Color(light: 0xF0F0F2, dark: 0x1C1C21)
+    static let trackLine = Color(light: 0xD4D4D8, dark: 0x3A3A42)
+    static let grid = Color(light: 0xEDEDF0, dark: 0x1F1F23)
+}
+
 struct SparkView: View {
     @Environment(AppState.self) private var state
+    /// Seconds of history the charts show. ponytail: readings are only taken while this page is open and kept for an
+    /// hour, so there's no 24 h range; a longer one needs sampling in the background.
+    @AppStorage("overviewRange") private var range = 300
 
     var body: some View {
-        let samples = state.spark
-        ScrollView {
-            if let now = samples.last {
-                VStack(alignment: .leading, spacing: 18) {
-                    tiles(now, samples)
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
-                        HistoryChart(title: "CPU", unit: "%", points: cpuSeries(samples), domain: 0...100)
-                        HistoryChart(title: "GPU", unit: "%", points: samples.compactMap { s in s.gpuUtil.map { (s.date, $0) } }, domain: 0...100)
-                        HistoryChart(title: "Memory used", unit: "GB", points: samples.map { ($0.date, gb($0.memUsed)) },
-                                     domain: 0...max(1, gb(now.memTotal)))
-                        HistoryChart(title: "GPU temperature", unit: "°C", points: samples.compactMap { s in s.gpuTemp.map { (s.date, $0) } },
-                                     domain: 0...max(100, (samples.compactMap(\.gpuTemp).max() ?? 0) + 5))
+        let all = state.spark
+        let samples = all.last.map { last in all.filter { last.date.timeIntervalSince($0.date) <= Double(range) } } ?? []
+        VStack(spacing: 0) {
+            header(all.last)
+            ScrollView {
+                if let now = samples.last {
+                    VStack(alignment: .leading, spacing: 16) {
+                        tiles(now, all)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 12)], spacing: 12) {
+                            HistoryChart(title: "CPU", unit: "%", color: OverviewColor.load, points: cpuSeries(samples), domain: 0...100, range: range)
+                            HistoryChart(title: "GPU", unit: "%", color: OverviewColor.load,
+                                         points: samples.compactMap { s in s.gpuUtil.map { (s.date, $0) } }, domain: 0...100, range: range)
+                            HistoryChart(title: "Memory used", unit: "GB", color: OverviewColor.memory, points: samples.map { ($0.date, gb($0.memUsed)) },
+                                         domain: 0...max(1, gb(now.memTotal)), range: range)
+                            HistoryChart(title: "GPU temperature", unit: "°C", color: OverviewColor.heat,
+                                         points: samples.compactMap { s in s.gpuTemp.map { (s.date, $0) } },
+                                         domain: 0...max(100, (samples.compactMap(\.gpuTemp).max() ?? 0) + 5), range: range)
+                        }
+                        MemoryBreakdown(sample: now)
+                        let pair = Group { CoresCard(samples: all); TemperaturesCard(sample: now) }
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .top, spacing: 12) { pair.frame(minWidth: 380) }.fixedSize(horizontal: false, vertical: true)
+                            VStack(spacing: 12) { pair }
+                        }
+                        StorageCard(sample: now)
                     }
-                    MemoryBreakdown(sample: now)
-                    HStack(alignment: .top, spacing: 14) {
-                        CoresCard(samples: samples)
-                        TemperaturesCard(sample: now)
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
-                    StorageCard(sample: now)
+                    .padding(.horizontal, 28)
+                    .padding(.top, 24)
+                    .padding(.bottom, 48)
+                    .animation(.smooth, value: samples.count)
+                } else {
+                    ContentUnavailableView(state.route == nil ? "Spark unreachable" : "Reading the Spark…",
+                                           systemImage: "gauge.with.dots.needle.33percent")
+                        .padding(.top, 80)
                 }
-                .padding(20)
-                .animation(.smooth, value: samples.count)
-            } else {
-                ContentUnavailableView(state.route == nil ? "Spark unreachable" : "Reading the Spark…",
-                                       systemImage: "gauge.with.dots.needle.33percent")
-                    .padding(.top, 80)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Color.pageBackground)
-        .pageHeader("Overview") {
-            Button { Task { await state.openDashboard() } } label: { Label("DGX Dashboard", systemImage: "safari") }
-                .help("Open NVIDIA's DGX Dashboard in your browser, through an SSH tunnel")
-                .disabled(state.route == nil)
-        }
         .task {
             await state.measureStorage()
             while !Task.isCancelled {
@@ -73,21 +92,70 @@ struct SparkView: View {
         }
     }
 
+    /// Title, a Live pill and what needs attention, then the time range and DGX Dashboard.
+    private func header(_ now: SparkMonitor.Sample?) -> some View {
+        let live = state.route != nil && now.map { Date().timeIntervalSince($0.date) < 30 } == true
+        return HStack(spacing: 12) {
+            Text("Overview").pageTitle()
+            HStack(spacing: 6) {
+                Circle().fill(live ? Color.running : Color.text2).frame(width: 6, height: 6)
+                Text(live ? "Live" : state.route == nil ? "Offline" : "Waiting")
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(live ? Color.running : Color.text2)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background((live ? Color.running : Color.text2).opacity(0.1), in: RoundedRectangle(cornerRadius: .corner(999)))
+            if let now {
+                Text(health(now)).font(.system(size: 13)).foregroundStyle(Color.text2).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Segments(selection: $range, options: [(300, "5 min"), (3600, "1 h")])
+            Button { Task { await state.openDashboard() } } label: { Label("DGX Dashboard", systemImage: "safari") }
+                .labelStyle(.iconOnly)
+                .buttonStyle(GhostIconStyle())
+                .help("Open NVIDIA's DGX Dashboard in your browser, through an SSH tunnel")
+                .disabled(state.route == nil)
+        }
+        .padding(.leading, 28)
+        .padding(.trailing, 20)
+        .padding(.vertical, 10)
+        .frame(minHeight: 60)
+        .background { Color.pageBackground.gesture(WindowDragGesture()) }
+        .overlay(alignment: .bottom) { Hairline() }
+    }
+
+    private func health(_ s: SparkMonitor.Sample) -> String {
+        var issues: [String] = []
+        if s.memAvailable < 12 << 30 { issues.append("Memory low") }
+        if s.swapTotal - s.swapFree > 1 << 30 { issues.append("Swapping") }
+        if let t = s.gpuTemp, case .good = TempStatus(t) {} else if let t = s.gpuTemp { issues.append("GPU \(TempStatus(t).label.lowercased())") }
+        if s.diskTotal > 0, Double(s.diskUsed) / Double(s.diskTotal) > 0.9 { issues.append("Disk almost full") }
+        return issues.isEmpty ? "All systems normal" : issues.joined(separator: " · ")
+    }
+
     private func tiles(_ now: SparkMonitor.Sample, _ samples: [SparkMonitor.Sample]) -> some View {
         let cpu = samples.count > 1 ? SparkMonitor.cpuPercent("cpu", from: samples[samples.count - 2], to: now) : nil
-        return HStack(spacing: 14) {
-            Tile(title: "Memory", symbol: "memorychip.fill", tint: .purple, value: String(format: "%.0f / %.0f GB", gb(now.memUsed), gb(now.memTotal)),
+        let mem = Double(now.memUsed) / Double(max(1, now.memTotal))
+        let idle = { (v: Double?) in v.map { $0 < 5 ? "Idle" : "Busy" } }
+        let tiles = Group {
+            Tile(title: "Memory", value: String(format: "%.0f", gb(now.memUsed)), unit: String(format: "/ %.0f GB", gb(now.memTotal)),
                  detail: String(format: "%.0f GB available", gb(now.memAvailable)),
-                 fraction: Double(now.memUsed) / Double(max(1, now.memTotal)),
-                 status: now.memAvailable < 12 << 30 ? .warning("Low") : nil)
-            Tile(title: "CPU", symbol: "cpu.fill", tint: .blue, value: cpu.map { String(format: "%.0f%%", $0) } ?? "—",
+                 fraction: mem, tint: Color.text,
+                 tag: now.memAvailable < 12 << 30 ? ("Low", VizColor.warning) : (String(format: "%.0f%%", mem * 100), Color.text3))
+            Tile(title: "CPU", value: cpu.map { String(format: "%.0f", $0) } ?? "—", unit: "%",
                  detail: "\(now.coreCount) cores · load " + (now.load.first.map { String(format: "%.2f", $0) } ?? "—"),
-                 fraction: cpu.map { $0 / 100 })
-            Tile(title: "GPU", symbol: "square.stack.3d.up.fill", tint: .green, value: now.gpuUtil.map { String(format: "%.0f%%", $0) } ?? "—",
-                 detail: now.clock.map { String(format: "%.0f MHz", $0) } ?? "",
-                 fraction: now.gpuUtil.map { $0 / 100 })
-            Tile(title: "GPU temperature", symbol: "thermometer.medium", tint: .orange, value: now.gpuTemp.map { String(format: "%.0f °C", $0) } ?? "—",
-                 detail: now.power.map { String(format: "%.0f W", $0) } ?? "", status: now.gpuTemp.map(TempStatus.init))
+                 fraction: cpu.map { $0 / 100 }, tint: OverviewColor.load, tag: idle(cpu).map { ($0, Color.text3) })
+            Tile(title: "GPU", value: now.gpuUtil.map { String(format: "%.0f", $0) } ?? "—", unit: "%",
+                 detail: now.clock.map { String(format: "%@ MHz", Int($0).formatted()) } ?? "",
+                 fraction: now.gpuUtil.map { $0 / 100 }, tint: OverviewColor.load, tag: idle(now.gpuUtil).map { ($0, Color.text3) })
+            Tile(title: "GPU temperature", value: now.gpuTemp.map { String(format: "%.0f", $0) } ?? "—", unit: "°C",
+                 detail: now.power.map { String(format: "%.0f W draw", $0) } ?? "",
+                 fraction: now.gpuTemp.map { $0 / 100 }, tint: now.gpuTemp.map { TempStatus($0).color } ?? Color.running,
+                 tag: now.gpuTemp.map { (TempStatus($0).label, TempStatus($0).color) })
+        }
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) { tiles.frame(minWidth: 200) }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) { tiles }
         }
     }
 
@@ -100,7 +168,7 @@ private func gb(_ bytes: Int64) -> Double { Double(bytes) / 1e9 }
 
 // MARK: Pieces
 
-/// Reserved status colours always come with a word and an icon.
+/// Reserved status colours always come with a word.
 enum TempStatus {
     case good(String), warning(String), critical(String)
 
@@ -110,104 +178,163 @@ enum TempStatus {
     }
 
     var label: String { switch self { case .good(let s), .warning(let s), .critical(let s): s } }
-    var color: Color { switch self { case .good: VizColor.good; case .warning: VizColor.warning; case .critical: VizColor.critical } }
+    var color: Color { switch self { case .good: Color.running; case .warning: VizColor.warning; case .critical: Color.danger } }
     var icon: String { switch self { case .good: "checkmark.circle.fill"; case .warning: "exclamationmark.triangle.fill"; case .critical: "flame.fill" } }
+}
+
+/// A card with the design's 13pt semibold title and an optional mono note on the right.
+private struct Panel<Trailing: View, Content: View>: View {
+    let title: String
+    @ViewBuilder var trailing: Trailing
+    @ViewBuilder var content: Content
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.text)
+                Spacer(minLength: 0)
+                trailing
+            }
+            content
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .card(padding: 18)
+    }
+}
+
+private func note(_ s: String, mono: Bool = true) -> some View {
+    Text(s).font(.system(size: 12, design: mono ? .monospaced : .default)).foregroundStyle(Color.text3).lineLimit(1)
 }
 
 private struct Tile: View {
     let title: String
-    let symbol: String
-    let tint: Color
     let value: String
+    let unit: String
     let detail: String
-    var fraction: Double? = nil
-    var status: TempStatus? = nil
+    var fraction: Double?
+    let tint: Color
+    var tag: (String, Color)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                IconTile(symbol: symbol, tint: tint, size: 24)
-                Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(title).font(.system(size: 13)).foregroundStyle(Color.text3).lineLimit(1)
                 Spacer(minLength: 0)
-                if let status {
-                    Label(status.label, systemImage: status.icon).font(.caption2.weight(.semibold))
-                        .labelStyle(.titleAndIcon).foregroundStyle(status.color)
-                }
+                if let tag { Text(tag.0).font(.system(size: 12)).foregroundStyle(tag.1) }
             }
-            Text(value).font(.system(.title, design: .rounded).weight(.bold)).monospacedDigit()
-                .minimumScaleFactor(0.6).lineLimit(1)
-                .contentTransition(.numericText())
-            if let fraction { Meter(fraction: fraction, tint: tint) }
-            Text(detail).font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(value).font(.system(size: 28, weight: .semibold)).tracking(-0.8).monospacedDigit()
+                    .contentTransition(.numericText())
+                Text(unit).font(.system(size: 14)).foregroundStyle(Color.text3)
+            }
+            .lineLimit(1).minimumScaleFactor(0.6)
+            Meter(fraction: fraction ?? 0, tint: tint)
+            Text(detail).font(.system(size: 12)).foregroundStyle(Color.text2).monospacedDigit().lineLimit(1)
         }
-        .card(padding: 14)
+        .padding(.horizontal, 2)
+        .card(padding: 16)
+        .accessibilityElement(children: .combine)
     }
 }
 
-/// A rounded gradient bar that eases between readings.
+/// A 4pt bar that eases between readings.
 private struct Meter: View {
     let fraction: Double
     let tint: Color
     var body: some View {
         GeometryReader { g in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.secondary.opacity(0.15))
-                Capsule().fill(LinearGradient(colors: [tint.opacity(0.7), tint], startPoint: .leading, endPoint: .trailing))
-                    .frame(width: g.size.width * min(max(fraction, 0), 1))
-            }
+            RoundedRectangle(cornerRadius: .corner(999)).fill(Color(light: 0xE4E4E7, dark: 0x222227))
+                .overlay(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: .corner(999)).fill(tint).frame(width: max(fraction > 0 ? 2 : 0, g.size.width * min(max(fraction, 0), 1)))
+                }
         }
-        .frame(height: 6)
+        .frame(height: 4)
         .animation(.smooth, value: fraction)
     }
 }
 
-/// One series over the last five minutes, with a hover readout.
+/// One series over the chosen range, with a hover readout.
 private struct HistoryChart: View {
     let title: String
     let unit: String
+    let color: Color
     let points: [(Date, Double)]
     let domain: ClosedRange<Double>
+    let range: Int
     @State private var hover: Date?
 
     var body: some View {
         let shown = hover.flatMap { h in points.min { abs($0.0.timeIntervalSince(h)) < abs($1.0.timeIntervalSince(h)) } } ?? points.last
-        Card {
+        let end = points.last?.0 ?? .now
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title).font(.headline)
+                Text(title).font(.system(size: 13, weight: .semibold))
                 Spacer()
-                Text(shown.map { format($0.1) } ?? "—").font(.subheadline.weight(.semibold)).monospacedDigit()
-                    .foregroundStyle(VizColor.series[0])
+                Text(shown.map { format($0.1) } ?? "—").font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(color)
                     .contentTransition(.numericText())
             }
             Chart {
                 ForEach(points, id: \.0) { p in
                     AreaMark(x: .value("Time", p.0), y: .value(unit, p.1))
-                        .foregroundStyle(LinearGradient(colors: [VizColor.series[0].opacity(0.3), VizColor.series[0].opacity(0.02)],
-                                                        startPoint: .top, endPoint: .bottom))
-                        .interpolationMethod(.monotone)
+                        .foregroundStyle(color.opacity(0.12))
                     LineMark(x: .value("Time", p.0), y: .value(unit, p.1))
-                        .foregroundStyle(VizColor.series[0])
-                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
-                        .interpolationMethod(.monotone)
+                        .foregroundStyle(color)
+                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                 }
                 if let hover, let shown {
-                    RuleMark(x: .value("Time", hover)).foregroundStyle(.secondary.opacity(0.5))
+                    RuleMark(x: .value("Time", hover)).foregroundStyle(Color.text2.opacity(0.5))
                     PointMark(x: .value("Time", shown.0), y: .value(unit, shown.1))
-                        .foregroundStyle(VizColor.series[0]).symbolSize(60)
+                        .foregroundStyle(color).symbolSize(50)
                 }
             }
             .chartYScale(domain: domain)
-            .chartXScale(domain: (points.last?.0 ?? .now).addingTimeInterval(-300)...(points.last?.0 ?? .now))
+            .chartXScale(domain: end.addingTimeInterval(-Double(range))...end)
             .chartPlotStyle { $0.clipped() }
-            .chartXAxis { AxisMarks(values: .stride(by: .minute)) { AxisGridLine(); AxisValueLabel(format: .dateTime.hour().minute()) } }
-            .chartYAxis { AxisMarks(position: .leading) { AxisGridLine(); AxisValueLabel() } }
+            .chartXAxis {
+                AxisMarks(preset: .aligned, values: .stride(by: .minute, count: range > 600 ? 15 : 1)) {
+                    AxisValueLabel(format: .dateTime.hour().minute())
+                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(Color.text2)
+                }
+            }
+            .chartYAxis {
+                AxisMarks(values: .automatic(desiredCount: 4)) { v in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 1)).foregroundStyle(v.index == 0 ? Color.hairline : OverviewColor.grid)
+                }
+            }
             .chartXSelection(value: $hover)
-            .frame(height: 130)
+            .frame(height: 140)
         }
+        .padding(.horizontal, 2)
+        .padding(.bottom, -4)
+        .card(padding: 16)
     }
 
     private func format(_ v: Double) -> String {
         unit == "%" ? String(format: "%.0f%%", v) : unit == "GB" ? String(format: "%.1f GB", v) : String(format: "%.0f %@", v, unit)
+    }
+}
+
+/// A 12pt rounded bar of segments on a track, with 2pt gaps.
+private struct StackBar: View {
+    let parts: [(String, Double, Color)]
+    let total: Double
+
+    var body: some View {
+        GeometryReader { g in
+            HStack(spacing: 2) {
+                ForEach(parts.filter { $0.1 > 0 }, id: \.0) { name, v, color in
+                    Rectangle().fill(color)
+                        .frame(width: max(2, g.size.width * v / max(1, total)))
+                        .help(name + ": " + String(format: "%.1f GB", v / 1e9))
+                }
+                Spacer(minLength: 0)
+            }
+            .background(OverviewColor.track)
+            .clipShape(RoundedRectangle(cornerRadius: .corner(999)))
+        }
+        .frame(height: 12)
+        .animation(.smooth, value: total)
+        .accessibilityHidden(true)
     }
 }
 
@@ -216,59 +343,49 @@ private struct MemoryBreakdown: View {
     let sample: SparkMonitor.Sample
 
     var body: some View {
-        let parts = self.parts
-        Card(title: "Memory by Process") {
-            GeometryReader { g in
-                HStack(spacing: 2) {
-                    let usable = g.size.width - CGFloat(parts.count - 1) * 2
-                    ForEach(parts, id: \.name) { p in
-                        RoundedRectangle(cornerRadius: 4).fill(p.color)
-                            .frame(width: width(p.bytes, of: usable))
-                            .help(p.name + ": " + String(format: "%.1f GB", gb(p.bytes)))
-                    }
-                }
-            }
-            .frame(height: 22)
-            FlowLegend(items: parts.map { ($0.name, String(format: "%.1f GB", gb($0.bytes)), $0.color) })
+        let procs = self.procs
+        let other = max(0, sample.memUsed - procs.reduce(0) { $0 + $1.bytes })
+        let parts = procs.map { ($0.name, Double($0.bytes), $0.color) } + [("System and other", Double(other), OverviewColor.other)]
+        Panel(title: "Memory by process") {
+            note(String(format: "%.1f GB used · %.1f GB available", gb(sample.memUsed), gb(sample.memAvailable)))
+        } content: {
+            StackBar(parts: parts, total: Double(sample.memTotal))
+            FlowLegend(items: parts.map { ($0.0, String(format: "%.1f GB", $0.1 / 1e9), $0.2) }
+                       + [("Available", String(format: "%.1f GB", gb(sample.memAvailable)), nil)])
             if sample.processes.isEmpty {
-                Text("No process is using the GPU.").font(.caption).foregroundStyle(.secondary)
+                Text("No process is using the GPU.").font(.system(size: 12)).foregroundStyle(Color.text2)
             }
             if sample.swapTotal - sample.swapFree > 1 << 30 {
                 Label(String(format: "%.1f GB in swap: memory is overcommitted", gb(sample.swapTotal - sample.swapFree)),
                       systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption).foregroundStyle(VizColor.warning)
+                    .font(.system(size: 12)).foregroundStyle(VizColor.warning)
             }
+        }
+    }
+
+    /// Engine processes in their badge colour, others in the chart slots.
+    private var procs: [(name: String, bytes: Int64, color: Color)] {
+        sample.processes.prefix(VizColor.series.count).enumerated().map { i, p in
+            let engine = ["TensorFold", "vLLM", "Ollama", "ComfyUI"].first { p.name.localizedCaseInsensitiveContains($0) }
+            return (p.name, p.bytes, engine.map(EngineBadge.color) ?? VizColor.series[i])
         }
     }
 }
 
-extension MemoryBreakdown {
-    typealias Part = (name: String, bytes: Int64, color: Color)
-
-    var parts: [Part] {
-        let procs = Array(sample.processes.prefix(VizColor.series.count))
-        let other = max(0, sample.memUsed - procs.reduce(0) { $0 + $1.bytes })
-        var out: [Part] = procs.enumerated().map { i, p in (p.name, p.bytes, VizColor.series[i]) }
-        out.append(("System and other", other, Color.secondary.opacity(0.55)))
-        out.append(("Available", sample.memAvailable, Color.secondary.opacity(0.18)))
-        return out
-    }
-
-    func width(_ bytes: Int64, of usable: CGFloat) -> CGFloat {
-        max(0, usable * CGFloat(bytes) / CGFloat(max(1, sample.memTotal)))
-    }
-}
-
+/// Swatch, name and a mono value; a nil colour draws an outlined swatch (what's free).
 private struct FlowLegend: View {
-    let items: [(String, String, Color)]
+    let items: [(String, String, Color?)]
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), alignment: .leading)], alignment: .leading, spacing: 6) {
+        FlowLayout {
             ForEach(items, id: \.0) { name, value, color in
-                HStack(spacing: 6) {
-                    RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 10, height: 10)
-                    Text(name).font(.caption)
-                    Text(value).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: .corner(2)).fill(color ?? OverviewColor.track)
+                        .overlay { if color == nil { RoundedRectangle(cornerRadius: .corner(2)).strokeBorder(OverviewColor.trackLine) } }
+                        .frame(width: 8, height: 8)
+                    Text(name).foregroundStyle(Color.text3).lineLimit(1)
+                    Text(value).font(.system(size: 12, design: .monospaced)).foregroundStyle(Color.text).lineLimit(1)
                 }
+                .font(.system(size: 13))
             }
         }
     }
@@ -277,21 +394,38 @@ private struct FlowLegend: View {
 private struct CoresCard: View {
     let samples: [SparkMonitor.Sample]
     var body: some View {
-        let cores: [(Int, Double)] = {
-            guard samples.count > 1, let now = samples.last else { return [] }
+        let now = samples.last
+        let cores: [Double] = {
+            guard samples.count > 1, let now else { return [] }
             let prev = samples[samples.count - 2]
-            return (0..<now.coreCount).compactMap { i in SparkMonitor.cpuPercent("cpu\(i)", from: prev, to: now).map { (i, $0) } }
+            return (0..<now.coreCount).map { i in SparkMonitor.cpuPercent("cpu\(i)", from: prev, to: now) ?? 0 }
         }()
-        Card(title: "CPU Cores") {
-            Chart(cores, id: \.0) { c in
-                BarMark(x: .value("Core", "\(c.0)"), y: .value("%", c.1), width: .ratio(0.7))
-                    .foregroundStyle(VizColor.series[0])
-                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 3, topTrailingRadius: 3))
+        Panel(title: "CPU cores") {
+            if let now { note("\(now.coreCount) cores · load " + (now.load.first.map { String(format: "%.2f", $0) } ?? "—"), mono: false) }
+        } content: {
+            HStack(alignment: .bottom, spacing: 4) {
+                ForEach(cores.indices, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: .corner(4)).fill(OverviewColor.track)
+                        .overlay(alignment: .bottom) {
+                            GeometryReader { g in
+                                Rectangle().fill(OverviewColor.load)
+                                    .frame(height: max(2, g.size.height * min(cores[i], 100) / 100))
+                                    .frame(maxHeight: .infinity, alignment: .bottom)
+                            }
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: .corner(4)))
+                        .help("Core \(i): \(Int(cores[i]))%")
+                }
             }
-            .chartYScale(domain: 0...100)
-            .chartXAxis { AxisMarks { AxisValueLabel().font(.system(size: 8)) } }
-            .chartYAxis { AxisMarks(position: .leading, values: [0, 50, 100]) { AxisGridLine(); AxisValueLabel() } }
-            .frame(height: 120)
+            .frame(height: 96)
+            .animation(.smooth, value: cores)
+            .accessibilityElement()
+            .accessibilityLabel("CPU cores")
+            .accessibilityValue(cores.isEmpty ? "No reading yet" : "Busiest core \(Int(cores.max() ?? 0))%")
+            if !cores.isEmpty {
+                HStack { Text("0"); Spacer(); Text("\(cores.count - 1)") }
+                    .font(.system(size: 11, design: .monospaced)).foregroundStyle(Color.text2)
+            }
         }
     }
 }
@@ -299,27 +433,27 @@ private struct CoresCard: View {
 private struct TemperaturesCard: View {
     let sample: SparkMonitor.Sample
     var body: some View {
-        Card(title: "Temperatures") {
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
-                if let t = sample.gpuTemp { row("GPU", t) }
-                if let t = sample.zones.max() { row("System, hottest sensor", t) }
-                if let t = sample.nvmeTemp { row("SSD", t) }
+        let rows = [("GPU", sample.gpuTemp), ("System · hottest sensor", sample.zones.max()), ("SSD", sample.nvmeTemp)]
+            .compactMap { n, t in t.map { (n, $0) } }
+        Panel(title: "Temperatures") { EmptyView() } content: {
+            VStack(spacing: 0) {
+                ForEach(rows, id: \.0) { name, t in
+                    // ponytail: the GPU thresholds stand in for every sensor; they're conservative for system and SSD too.
+                    let s = TempStatus(t)
+                    HStack {
+                        Text(name).font(.system(size: 13))
+                        Spacer()
+                        Text(String(format: "%.0f °C", t)).font(.system(size: 13, design: .monospaced))
+                        Text(s.label).font(.system(size: 12)).foregroundStyle(s.color).frame(minWidth: 44, alignment: .trailing)
+                    }
+                    .padding(.vertical, 10)
+                    .overlay(alignment: .bottom) { if name != rows.last?.0 { Hairline() } }
+                }
             }
+            .padding(.top, -6)
             if !sample.zones.isEmpty {
-                Text("System sensors: " + sample.zones.map { String(format: "%.0f", $0) }.joined(separator: " · ") + " °C")
-                    .font(.caption).foregroundStyle(.secondary).monospacedDigit()
-            }
-            Spacer(minLength: 0)  // stretch to the CPU Cores card beside it
-        }
-    }
-
-    private func row(_ name: String, _ t: Double) -> some View {
-        GridRow {
-            Text(name)
-            Text(String(format: "%.0f °C", t)).monospacedDigit().gridColumnAlignment(.trailing)
-            if name == "GPU" {
-                let s = TempStatus(t)
-                Label(s.label, systemImage: s.icon).font(.caption).foregroundStyle(s.color)
+                note("Sensors " + sample.zones.map { String(format: "%.0f", $0) }.joined(separator: " · ") + " °C")
+                    .foregroundStyle(Color.text2)
             }
         }
     }
@@ -328,21 +462,30 @@ private struct TemperaturesCard: View {
 private struct StorageCard: View {
     @Environment(AppState.self) private var state
     let sample: SparkMonitor.Sample
+    @State private var measuring = false
 
     var body: some View {
-        Card(title: "Storage") {
-            let used = Double(sample.diskUsed) / Double(max(1, sample.diskTotal))
-            HStack {
-                Text(String(format: "%.0f GB free of %.0f GB", gb(sample.diskFree), gb(sample.diskTotal))).monospacedDigit()
-                Spacer()
-                Button { Task { await state.measureStorage() } } label: { Label("Measure", systemImage: "arrow.clockwise") }
-                    .controlSize(.small)
+        let colors = [VizColor.warning, OverviewColor.load, OverviewColor.pink, OverviewColor.memory, OverviewColor.heat]
+        let folders = state.sparkStorage?.folders ?? []
+        let known = folders.reduce(0) { $0 + $1.1 }
+        let parts = folders.enumerated().map { i, f in (f.0, Double(f.1), colors[i % colors.count]) }
+            + [(folders.isEmpty ? "Used" : "Other", Double(max(0, sample.diskUsed - known)), OverviewColor.other)]
+        Panel(title: "Storage") {
+            note(String(format: "%@ GB free of %@ GB", Int(gb(sample.diskFree)).formatted(), Int(gb(sample.diskTotal)).formatted()))
+            Spacer().frame(width: 6)
+            Button {
+                measuring = true
+                Task { await state.measureStorage(); measuring = false }
+            } label: {
+                if measuring { ProgressView().controlSize(.small) } else { Text("Measure again") }
             }
-            Meter(fraction: used, tint: used > 0.9 ? VizColor.critical : VizColor.series[0])
-            if let st = state.sparkStorage {
-                FlowLegend(items: st.folders.map { ($0.0, String(format: "%.1f GB", gb($0.1)), Color.clear) }
-                           + (st.docker.map { [("Docker images", $0, Color.clear)] } ?? []))
-            }
+            .buttonStyle(DesignButtonStyle(prominent: false, height: 30))
+            .fixedSize()
+            .disabled(measuring || state.route == nil)
+        } content: {
+            StackBar(parts: parts, total: Double(sample.diskTotal))
+            FlowLegend(items: parts.map { ($0.0, String(format: "%.1f GB", $0.1 / 1e9), $0.2) }
+                       + (state.sparkStorage?.docker.map { [("Docker images", $0, nil)] } ?? []))
         }
     }
 }
@@ -407,7 +550,7 @@ struct SSHKeysView: View {
                     Text(name(k)).font(.headline)
                     if isMine {
                         Text("This Mac").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(Color.brand.opacity(0.15), in: Capsule()).foregroundStyle(Color.brand)
+                            .background(Color.brand.opacity(0.15), in: RoundedRectangle(cornerRadius: .corner(999))).foregroundStyle(Color.brand)
                     }
                 }
                 Text("\(k.type)  \(k.fingerprint)").font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
@@ -551,7 +694,7 @@ struct WiFiView: View {
                     if n.secured { Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary).accessibilityLabel("Secured") }
                     if n.inUse {
                         Text("Connected").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(Color.brand.opacity(0.15), in: Capsule()).foregroundStyle(Color.brand)
+                            .background(Color.brand.opacity(0.15), in: RoundedRectangle(cornerRadius: .corner(999))).foregroundStyle(Color.brand)
                     }
                 }
                 Text([n.secured ? n.security : "Open", n.saved ? "Saved" : nil, "\(n.signal)%"].compactMap { $0 }.joined(separator: " · "))

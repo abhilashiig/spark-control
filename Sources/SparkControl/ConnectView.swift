@@ -21,10 +21,14 @@ struct ConnectView: View {
                 CopyRow(title: "Base URL", value: state.apiBaseURL)
                 CopyRow(title: "API key", value: key,
                         note: state.config.gateway.apiKey.isEmpty ? "No key required; any value works" : nil)
-                Picker("Model", selection: Binding(get: { model?.id }, set: { modelID = $0 })) {
-                    ForEach(models) { r in
-                        Text(r.name + (state.phase(for: r) == .ready ? "  ·  running" : "")).tag(Optional(r.id))
+                LabeledContent("Model") {
+                    Picker("Model", selection: Binding(get: { model?.id }, set: { modelID = $0 })) {
+                        ForEach(models) { r in
+                            Text(r.name + (state.phase(for: r) == .ready ? "  ·  running" : "")).tag(Optional(r.id))
+                        }
                     }
+                    .labelsHidden()
+                    .fixedSize()
                 }
                 if let model { CopyRow(title: "Model name", value: model.apiID) }
             } header: {
@@ -32,20 +36,20 @@ struct ConnectView: View {
             }
 
             Section {
-                Picker("Example", selection: $snippet) {
-                    ForEach(Snippet.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                ZStack(alignment: .topTrailing) {
-                    Text(code)
-                        .font(.callout.monospaced())
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
-                        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.cardBorder))
-                    CopyButton(text: code).padding(8)
+                VStack(alignment: .leading, spacing: 12) {
+                    Segments(selection: $snippet, options: Snippet.allCases.map { ($0, $0.rawValue) })
+                    ZStack(alignment: .topTrailing) {
+                        Text(code)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(Color.text)
+                            .lineSpacing(3)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .background(Color.well, in: RoundedRectangle(cornerRadius: .corner(9), style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: .corner(9), style: .continuous).strokeBorder(Color.cardBorder))
+                        CopyButton(text: code).padding(6)
+                    }
                 }
             } header: {
                 Text("Quick Start")
@@ -62,7 +66,7 @@ struct ConnectView: View {
                         ModelAvatar(name: r.name, phase: state.phase(for: r), size: 24)
                         Text(r.name).fontWeight(.medium)
                         Spacer()
-                        Text(r.apiID).font(.body.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+                        Text(r.apiID).font(.system(size: 12, design: .monospaced)).foregroundStyle(Color.text2).textSelection(.enabled)
                         CopyButton(text: r.apiID)
                     }
                 }
@@ -123,7 +127,8 @@ private struct CopyRow: View {
     var body: some View {
         LabeledContent {
             HStack(spacing: 6) {
-                Text(value).font(.body.monospaced()).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
+                Text(value).font(.system(size: 12, design: .monospaced)).foregroundStyle(Color.text)
+                    .textSelection(.enabled).lineLimit(1).truncationMode(.middle)
                 CopyButton(text: value)
             }
         } label: {

@@ -282,9 +282,7 @@ private struct DeviceCard: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 10)
-        .frame(minHeight: 48)
-        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
+        .frame(minHeight: 40)
         .accessibilityElement(children: .combine)
         .help(state.route.flatMap { r in state.config.device.map { "\($0.host(r)) over \(r.label)" } } ?? "")
     }

@@ -390,6 +390,8 @@ private struct RequestDetail: View {
                 ForEach(Tab.allCases, id: \.self) { t in
                     Button { tab = t } label: {
                         Text(t.rawValue)
+                            .lineLimit(1)
+                            .fixedSize()
                             .font(.system(size: 13, weight: tab == t ? .medium : .regular))
                             .foregroundStyle(tab == t ? Color.text : Color.text3)
                             .padding(.horizontal, 10)
@@ -400,21 +402,23 @@ private struct RequestDetail: View {
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(tab == t ? .isSelected : [])
                 }
-                Spacer(minLength: 8)
-                Button(copied ? "Copied" : "Copy as cURL") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(curl(e), forType: .string)
-                    copied = true
-                    Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
-                }
-                .buttonStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundStyle(Color.link)
+                Spacer(minLength: 0)
             }
             .overlay(alignment: .bottom) { Hairline() }
             if tab == .request || tab == .json {
-                Text("As sent to the Spark")
-                    .font(.system(size: 12)).foregroundStyle(Color.text2)
+                HStack {
+                    Text("As sent to the Spark").foregroundStyle(Color.text2)
+                    Spacer(minLength: 8)
+                    Button(copied ? "Copied" : "Copy as cURL") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(curl(e), forType: .string)
+                        copied = true
+                        Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.link)
+                }
+                .font(.system(size: 12))
             }
             let obj = (try? JSONSerialization.jsonObject(with: Data(e.forwarded.utf8))) as? [String: Any]
             let messages = obj.map(Transform.messages) ?? []

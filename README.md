@@ -4,26 +4,38 @@
 
 # Spark Control
 
-**Your NVIDIA DGX Spark, from your Mac.**
+### Your DGX Spark, as if it were part of your Mac.
 
-Start and switch local AI models with one click, chat with them, open a shell on the Spark,
-and give every app on your Mac one OpenAI-compatible API.
+Big local models, one click away. No SSH, no start scripts, no port numbers.
 
-[Download the latest release](https://github.com/abhilashiig/spark-control/releases/latest) · macOS 15+ · Apple Silicon
+**[Download for Mac](https://github.com/abhilashiig/spark-control/releases/latest)** · macOS 15+ · Apple Silicon · Free and open source
 
 </div>
 
 <p align="center">
-  <img src="docs/screenshots/models.png" width="860" alt="All your models in one table, each with a start button and its engine, status and context window">
+  <img src="docs/screenshots/light/models.png" width="860" alt="All your models in one table, each with a start button and its engine, status and context window">
 </p>
 
----
+## The idea
 
-## Why
+The DGX Spark is a lot of AI for the money: 128 GB of memory for models a laptop can't hold, and prompt
+processing fast enough that long coding-agent prompts don't keep you waiting. But out of the box it's a
+Linux box in the corner: SSH sessions, Docker commands, start scripts and port numbers.
 
-A DGX Spark is a powerful box for running models, but using it day to day means SSH sessions, start
-scripts, port numbers and remembering which model is running. Spark Control turns that into a Mac app:
-pick a model, press play, and point your tools at `http://localhost:18080/v1`.
+**Spark Control makes it disappear behind your Mac.** Press ▶︎ and a model is running. Chat with it in a
+native app. Point Kilo Code, Pi or any OpenAI app at `localhost`, and it answers as if the model lived on
+your Mac, while the Spark does the heavy lifting.
+
+| On your own | With Spark Control |
+|---|---|
+| SSH in, find the start script, remember the flags | Press ▶︎ |
+| Which model is running? On which port? | One table, one URL: `http://localhost:18080/v1` |
+| Guess what fits in memory, stop the old model by hand | It shows what fits and stops only what's in the way |
+| Edit every coding tool's config for each new model | Kilo Code, Pi and Hermes set up and kept in sync |
+| `htop`, `nvidia-smi` and `df` in three terminals | Live CPU, GPU, memory, temperatures and disk on one page |
+| "How fast is it really?" | Every request's speed, tokens and cost, as it happens |
+
+<p align="center"><b>Get started in three steps:</b> connect to your Spark → download a model → press ▶︎.</p>
 
 ## What you can do
 
@@ -38,13 +50,17 @@ pick a model, press play, and point your tools at `http://localhost:18080/v1`.
 - **Per-model settings:** context window, speculative decoding, memory, and rules that fill in or override
   request parameters (say, a default temperature).
 
-<img src="docs/screenshots/model.png" width="860" alt="A model's page: memory, requests and benchmark at the top, and the recipe Spark Control uses to start and stop it">
+<img src="docs/screenshots/light/model.png" width="860" alt="A model's page: memory, requests and benchmark at the top, and the recipe Spark Control uses to start and stop it">
 
-<img src="docs/screenshots/tensorfold.png" width="860" alt="The TensorFold page: models tested on one GB10, ready to download or add">
+<img src="docs/screenshots/light/tensorfold.png" width="860" alt="The TensorFold page: models tested on one GB10, ready to download or add">
+
+<img src="docs/screenshots/light/vllm.png" width="860" alt="The vLLM page: NVFP4 models for the Spark, ready to download or add">
 
 ### 💬 Chat
 Built-in chat with any of your models. Attach images, PDFs and text files, or paste a screenshot with ⌘V.
 Chats get a title automatically, and you can edit and resend any message.
+
+<img src="docs/screenshots/light/chat.png" width="860" alt="Chat: a conversation with a running model, its thinking folded away and its speed under the reply">
 
 ### 🔌 One API for everything
 - An **OpenAI-compatible endpoint on your Mac** (`http://localhost:18080/v1`) that forwards to whichever
@@ -55,9 +71,11 @@ Chats get a title automatically, and you can edit and resend any message.
   Kilo Code's codebase indexing at a small embedding model on the Spark, pulled with Ollama.
 - Only apps on your Mac can reach it, unless you choose to allow other devices.
 
+<img src="docs/screenshots/light/api.png" width="860" alt="API Access: the base URL, a ready-to-run snippet, and Kilo Code, Pi and Hermes kept in sync">
+
 ### 📊 See what's happening
 
-<img src="docs/screenshots/overview.png" width="860" alt="The Overview page: live memory, CPU, GPU and temperature charts, memory by process and storage">
+<img src="docs/screenshots/light/overview.png" width="860" alt="The Overview page: live memory, CPU, GPU and temperature charts, memory by process and storage">
 
 - **Overview:** live CPU, GPU, memory, power and temperatures, plus disk usage.
   The **DGX Dashboard** button opens NVIDIA's dashboard with no manual tunnel.
@@ -66,13 +84,13 @@ Chats get a title automatically, and you can edit and resend any message.
 - **Benchmark** a model on the Spark: prefill and decode speed across context lengths and batch sizes.
 - A **menu bar icon** shows what's running and lets you stop a model or copy the API URL.
 
-<img src="docs/screenshots/requests.png" width="860" alt="The Requests page: live API calls with tokens, latency and speed, and one request's timing in detail">
+<img src="docs/screenshots/light/requests.png" width="860" alt="The Requests page: live API calls with tokens, latency and speed, and one request's timing in detail">
 
-<img src="docs/screenshots/usage.png" width="860" alt="The Usage page: cost, requests, cache hit rate, speed and breakdowns by model and client">
+<img src="docs/screenshots/light/usage.png" width="860" alt="The Usage page: cost, requests, cache hit rate, speed and breakdowns by model and client">
 
 ### 🖥️ Work on the Spark
 
-<img src="docs/screenshots/terminal.png" width="860" alt="The Terminal page: a shell on the Spark in a tab">
+<img src="docs/screenshots/light/terminal.png" width="860" alt="The Terminal page: a shell on the Spark in a tab">
 
 - **Terminal:** real shells on the Spark in tabs, with colour, mouse and resizing, so vim, htop and tmux
   just work. Five colour themes and the shortcuts you know from Terminal.app (⌘T, ⌘W, ⌘K, ⌘1–9, ⌘+ ⌘−).
@@ -83,7 +101,7 @@ Chats get a title automatically, and you can edit and resend any message.
   can't join sends it back to the one it was on.
 - **ComfyUI** for image generation: installed and started on the Spark, opened in your browser.
 
-<img src="docs/screenshots/comfyui.png" width="860" alt="The ComfyUI page: start the server and download starter image models">
+<img src="docs/screenshots/light/comfyui.png" width="860" alt="The ComfyUI page: start the server and download starter image models">
 
 ## Getting started
 

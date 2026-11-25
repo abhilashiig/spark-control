@@ -425,14 +425,18 @@ private struct RequestDetail: View {
             if tab == .request, let obj, !messages.isEmpty {
                 conversation(obj, messages)
             } else {
-                Text(text(e, tab))
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(Color(light: 0x3F3F46, dark: 0xD4D4D8))
-                    .lineSpacing(3)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .codeBox()
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(Transform.chunks(text(e, tab)).enumerated()), id: \.offset) { _, piece in
+                        Text(piece)
+                    }
+                }
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(Color(light: 0x3F3F46, dark: 0xD4D4D8))
+                .lineSpacing(3)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .codeBox()
             }
         }
     }
@@ -495,7 +499,9 @@ private struct RequestDetail: View {
     private func text(_ e: RequestEntry, _ tab: Tab) -> String {
         switch tab {
         case .request, .json:
-            return e.forwarded.isEmpty && e.method != "GET" ? "(not kept, older requests drop their body to save memory)" : Self.pretty(e.forwarded)
+            if e.forwarded.isEmpty && e.method != "GET" { return "(not kept, older requests drop their body to save memory)" }
+            let cut = e.forwarded.utf8.count >= (1 << 20) - 3  // kept bodies stop at 1 MB
+            return (cut ? "(over 1 MB, only the first 1 MB was kept)\n\n" : "") + Self.pretty(e.forwarded)
         case .response:
             // Only the outcome is kept, not the reply body.
             var lines = ["status: \(e.status == 0 ? "in progress" : String(e.status))"]

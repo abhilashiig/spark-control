@@ -10,6 +10,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - Request bodies up to 1 MB are kept instead of 64 KB, so long agent requests no longer show up as one unformatted line. Older requests keep their stats but drop their body once ~4 MB is in use.
 - Spark Control is now open source under the BSD 3-Clause License. The name and logo stay trademarks (see TRADEMARKS.md).
 
+### Fixed
+- Requests: a request body over 1 MB no longer shows as an empty box that scrolls forever. It shows the first 1 MB as text and says the rest wasn't kept.
+
 ## [1.14.0] - 2026-11-25
 
 ### Fixed

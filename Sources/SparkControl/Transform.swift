@@ -201,6 +201,20 @@ enum Transform {
         }
     }
 
+    /// Long text in pieces of at most `size` characters, cut after a newline where one is near, so each piece fits
+    /// in one SwiftUI Text (a single Text of a megabyte draws nothing yet still takes its full height).
+    static func chunks(_ s: String, size: Int = 4000) -> [Substring] {
+        var out: [Substring] = [], rest = s[...]
+        while rest.count > size {
+            let window = rest.prefix(size)
+            let end = window.lastIndex(of: "\n").map { rest.index(after: $0) } ?? window.endIndex
+            out.append(rest[..<end])
+            rest = rest[end...]
+        }
+        if !rest.isEmpty || out.isEmpty { out.append(rest) }
+        return out
+    }
+
     /// The conversation in a request body, in order: OpenAI chat, Anthropic messages and Responses `input`.
     static func messages(_ body: [String: Any]) -> [(role: String, text: String)] {
         var out: [(role: String, text: String)] = []

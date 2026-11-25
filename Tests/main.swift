@@ -101,6 +101,13 @@ let resp = Transform.messages(["instructions": "x", "input": [["type": "function
                                                              ["type": "function_call_output", "output": "a.txt"]]])
 check(resp.map(\.role) == ["system", "assistant", "tool"] && resp[1].text == "→ ls({})", "Responses input items")
 
+// Long request bodies split into drawable pieces
+let big = String(repeating: "x", count: 9000) + "\n" + String(repeating: "line\n", count: 2000)
+let pieces = Transform.chunks(big)
+check(pieces.joined() == big && pieces.allSatisfy { $0.count <= 4000 }, "chunks keep every character, none too long")
+check(pieces.dropFirst(3).allSatisfy { $0.last == "\n" }, "chunks cut after a newline when there is one")
+check(Transform.chunks("") == [""], "empty text is one chunk")
+
 // SSE cost injection
 let line = Data(#"data: {"id":"1","choices":[],"usage":{"prompt_tokens":1000000,"completion_tokens":500000}}\#n"#.utf8)
 let (out, usage) = Transform.sseLine(line, recipe: recipe, inject: true)

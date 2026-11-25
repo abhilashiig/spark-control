@@ -462,6 +462,7 @@ extension Recipe {
         reasoning = try c.decodeIfPresent(Bool.self, forKey: .reasoning)
         images = try c.decodeIfPresent(Bool.self, forKey: .images)
         effort = try c.decodeIfPresent(String.self, forKey: .effort)
+        context = try c.decodeIfPresent(Int.self, forKey: .context)
         modelSampling = try c.value(.modelSampling, or: d.modelSampling)
         api = try c.decodeIfPresent(String.self, forKey: .api)
     }

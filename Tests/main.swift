@@ -613,6 +613,9 @@ check((ctxPi["models"] as! [[String: Any]]).map { $0["contextWindow"] as? Int } 
       && (try! ClientTool.hermes.apply(to: "", models: [long], gateway: gw)).contains("      context_length: 131072"),
       "context from the start command, 250K when it can't be read, in all three tools")
 var setCtx = vl; setCtx.context = 64_000
+var saved = setCtx; saved.effort = "low"
+let reloaded = try! JSONDecoder().decode(Recipe.self, from: try! JSONEncoder().encode(saved))
+check(reloaded.context == 64_000 && reloaded.effort == "low", "context window and thinking effort survive a save and reload")
 check(setCtx.contextWindow == 64_000 && { var l = long; l.context = 64_000; return l.contextWindow == 131_072 }(),
       "a hand-set context fills in only where the start command doesn't say")
 

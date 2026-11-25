@@ -142,13 +142,10 @@ Pushing a `vX.Y.Z` tag builds a DMG and publishes a release. Changes are listed 
 
 ## License
 
-Spark Control is **source-available, not open source**. It's licensed under the
-[PolyForm Noncommercial License 1.0.0](LICENSE.md):
+Spark Control is open source under the [BSD 3-Clause License](LICENSE.md): use, modify and share it,
+commercially or not, as long as you keep the copyright notice.
 
-- Free for personal and noncommercial use: run it, modify it and share it.
-- Selling it or using it commercially is not permitted without a separate license.
-
-Commercial licensing: [hello@grabians.com](mailto:hello@grabians.com) ·
+Contact: [hello@grabians.com](mailto:hello@grabians.com) ·
 [grabians.com](https://grabians.com) (Grabians Connected LLP) ·
 [grabconnected.com](https://grabconnected.com) (Grab Connected Tech Inc.)
 

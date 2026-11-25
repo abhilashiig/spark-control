@@ -7,8 +7,8 @@ If you fork or modify Spark Control:
 
 - Use a different name and logo.
 - Don't imply that your version is the official app or that Grabians Connected LLP endorses it.
-- Credit the original and link to https://github.com/abhilashiig/spark-control, as the Required Notice
-  in [LICENSE.md](LICENSE.md) requires.
+- Keep the copyright notice, as [LICENSE.md](LICENSE.md) requires, and credit the original with a link to
+  https://github.com/abhilashiig/spark-control.
 
 NVIDIA and DGX Spark are trademarks of NVIDIA Corporation. Spark Control is not affiliated with or
 endorsed by NVIDIA.

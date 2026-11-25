@@ -8,7 +8,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ### Changed
 - The request detail on the Requests page now shows the conversation as readable messages (with the parameters and tool names above them); long messages collapse with Show All, and the raw body moved to a JSON tab that wraps instead of scrolling sideways.
 - Request bodies up to 1 MB are kept instead of 64 KB, so long agent requests no longer show up as one unformatted line. Older requests keep their stats but drop their body once ~4 MB is in use.
-- Spark Control is now source-available under the PolyForm Noncommercial License 1.0.0: free for personal and noncommercial use, modification and sharing. Selling it or using it commercially needs a separate license (hello@grabians.com).
+- Spark Control is now open source under the BSD 3-Clause License. The name and logo stay trademarks (see TRADEMARKS.md).
 
 ## [1.14.0] - 2026-11-25
 

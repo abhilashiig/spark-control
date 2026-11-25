@@ -329,7 +329,7 @@ struct RequestEntry: Identifiable {
     let model: String
     let client: String
     let userAgent: String
-    let forwarded: String
+    var forwarded: String
     /// What the forwarded body asked of thinking (Transform.thinkingLabel).
     var thinking: String?
     var status = 0

@@ -89,6 +89,18 @@ check(Transform.thinkingLabel(q38Off) == "Off" && Transform.thinkingLabel(q36On)
       && Transform.thinkingLabel(["reasoning_effort": 0.5]) == "0.5" && Transform.thinkingLabel(["reasoning_effort": "none"]) == "Off"
       && Transform.thinkingLabel([:]) == nil, "thinking label from the forwarded body")
 
+// Request bodies read as a conversation
+let chat = Transform.messages(["system": [["type": "text", "text": "Be brief."]], "messages": [
+    ["role": "user", "content": [["type": "text", "text": "Hi"], ["type": "image_url", "image_url": [:]]]],
+    ["role": "assistant", "content": NSNull(), "tool_calls": [["function": ["name": "ls", "arguments": "{}"]]]],
+    ["role": "tool", "content": "a.txt"],
+] as [[String: Any]]])
+check(chat.map(\.role) == ["system", "user", "assistant", "tool"], "message roles in order")
+check(chat[0].text == "Be brief." && chat[1].text == "Hi\n\n[image_url]" && chat[2].text == "→ ls({})", "message text")
+let resp = Transform.messages(["instructions": "x", "input": [["type": "function_call", "name": "ls", "arguments": "{}"],
+                                                             ["type": "function_call_output", "output": "a.txt"]]])
+check(resp.map(\.role) == ["system", "assistant", "tool"] && resp[1].text == "→ ls({})", "Responses input items")
+
 // SSE cost injection
 let line = Data(#"data: {"id":"1","choices":[],"usage":{"prompt_tokens":1000000,"completion_tokens":500000}}\#n"#.utf8)
 let (out, usage) = Transform.sseLine(line, recipe: recipe, inject: true)

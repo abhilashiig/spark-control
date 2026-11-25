@@ -201,6 +201,40 @@ enum Transform {
         }
     }
 
+    /// The conversation in a request body, in order: OpenAI chat, Anthropic messages and Responses `input`.
+    static func messages(_ body: [String: Any]) -> [(role: String, text: String)] {
+        var out: [(role: String, text: String)] = []
+        for key in ["system", "instructions"] {
+            if let s = body[key] { let t = text(s); if !t.isEmpty { out.append(("system", t)) } }
+        }
+        if let s = body["input"] as? String { out.append(("user", s)) }
+        for m in (body["messages"] ?? body["input"]) as? [[String: Any]] ?? [] {
+            let calls = (m["tool_calls"] as? [Any] ?? []).map { text(($0 as? [String: Any])?["function"] ?? $0) }
+            let t = ([text(m["content"] ?? m["output"] ?? (m["name"] != nil ? m : ""))] + calls).filter { !$0.isEmpty }
+            let type = m["type"] as? String ?? ""
+            out.append((m["role"] as? String ?? (type.hasSuffix("output") ? "tool" : "assistant"), t.joined(separator: "\n\n")))
+        }
+        return out
+    }
+
+    /// Readable text of a content value: plain text, parts, tool calls as `→ name(args)`, other parts as `[type]`.
+    static func text(_ v: Any) -> String {
+        switch v {
+        case let s as String: return s
+        case let a as [Any]: return a.map(text).filter { !$0.isEmpty }.joined(separator: "\n\n")
+        case let d as [String: Any]:
+            if let t = d["text"] as? String { return t }
+            if let name = d["name"] as? String {
+                let args = d["arguments"] ?? d["input"] ?? ""
+                let s = args as? String ?? serialize(args).map { String(decoding: $0, as: UTF8.self) } ?? ""
+                return "→ \(name)(\(s))"
+            }
+            if let c = d["content"] ?? d["output"] { return text(c) }
+            return "[\(d["type"] as? String ?? "part")]"
+        default: return ""
+        }
+    }
+
     /// A model's chat-title reply, minus any thinking, quotes, markdown and "Title:" prefix.
     static func chatTitle(_ raw: String) -> String? {
         var t = raw

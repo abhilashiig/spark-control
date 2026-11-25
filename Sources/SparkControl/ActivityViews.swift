@@ -300,8 +300,9 @@ private struct RequestDetail: View {
     let close: () -> Void
     @State private var tab = Tab.request
     @State private var copied = false
+    @State private var expanded: Set<Int> = []
 
-    enum Tab: String, CaseIterable { case request = "Request", response = "Response", headers = "Headers" }
+    enum Tab: String, CaseIterable { case request = "Request", json = "JSON", response = "Response", headers = "Headers" }
 
     var body: some View {
         let e = entry
@@ -332,6 +333,7 @@ private struct RequestDetail: View {
                 body(e).padding(20)
             }
         }
+        .onChange(of: entry.id) { expanded = [] }
     }
 
     private var timing: some View {
@@ -410,29 +412,86 @@ private struct RequestDetail: View {
                 .foregroundStyle(Color.link)
             }
             .overlay(alignment: .bottom) { Hairline() }
-            if tab == .request {
+            if tab == .request || tab == .json {
                 Text("As sent to the Spark")
                     .font(.system(size: 12)).foregroundStyle(Color.text2)
             }
-            ScrollView(.horizontal) {
+            let obj = (try? JSONSerialization.jsonObject(with: Data(e.forwarded.utf8))) as? [String: Any]
+            let messages = obj.map(Transform.messages) ?? []
+            if tab == .request, let obj, !messages.isEmpty {
+                conversation(obj, messages)
+            } else {
                 Text(text(e, tab))
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(Color(light: 0x3F3F46, dark: 0xD4D4D8))
                     .lineSpacing(3)
                     .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
+                    .codeBox()
             }
-            .background(Color(light: 0xFAFAFA, dark: 0x0A0A0B), in: RoundedRectangle(cornerRadius: .corner(10), style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: .corner(10), style: .continuous).strokeBorder(Color.cardBorder))
+        }
+    }
+
+    private func conversation(_ obj: [String: Any], _ messages: [(role: String, text: String)]) -> some View {
+        LazyVStack(alignment: .leading, spacing: 10) {
+            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                ForEach(Self.params(obj), id: \.0) { k, v in
+                    GridRow {
+                        Text(k).foregroundStyle(Color.text3)
+                        Text(v).foregroundStyle(Color.text).textSelection(.enabled)
+                    }
+                }
+            }
+            .font(.system(size: 12, design: .monospaced))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .codeBox()
+            ForEach(Array(messages.enumerated()), id: \.offset) { i, m in
+                let open = expanded.contains(i)
+                let long = m.text.count > 1000 || m.text.reduce(0) { $1 == "\n" ? $0 + 1 : $0 } > 12
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(m.role.capitalized).font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.text2)
+                        Spacer()
+                        if long {
+                            Button(open ? "Show Less" : "Show All") {
+                                if open { expanded.remove(i) } else { expanded.insert(i) }
+                            }
+                            .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Color.link)
+                        }
+                    }
+                    Text(m.text.isEmpty ? "(empty)" : m.text)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(m.text.isEmpty ? Color.text3 : Color.text)
+                        .lineSpacing(2)
+                        .lineLimit(open ? nil : 12)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(12)
+                .codeBox()
+            }
+        }
+    }
+
+    /// Everything but the conversation, one line each; tools by name.
+    private static func params(_ obj: [String: Any]) -> [(String, String)] {
+        obj.keys.sorted().compactMap { k in
+            if ["messages", "input", "system", "instructions"].contains(k) { return nil }
+            if k == "tools", let tools = obj[k] as? [[String: Any]] {
+                return (k, tools.compactMap { ($0["function"] as? [String: Any])?["name"] as? String ?? $0["name"] as? String }
+                    .joined(separator: ", "))
+            }
+            let v = obj[k] as? String ?? Transform.serialize(obj[k]!).map { String(decoding: $0, as: UTF8.self) } ?? ""
+            return (k, v)
         }
     }
 
     private func text(_ e: RequestEntry, _ tab: Tab) -> String {
         switch tab {
-        case .request:
-            return Self.pretty(e.forwarded)
+        case .request, .json:
+            return e.forwarded.isEmpty && e.method != "GET" ? "(not kept, older requests drop their body to save memory)" : Self.pretty(e.forwarded)
         case .response:
             // Only the outcome is kept, not the reply body.
             var lines = ["status: \(e.status == 0 ? "in progress" : String(e.status))"]
@@ -468,6 +527,13 @@ private struct RequestDetail: View {
     }
 
     static func secs(_ v: Double) -> String { v.formatted(.number.precision(.fractionLength(2))) + " s" }
+}
+
+private extension View {
+    func codeBox() -> some View {
+        background(Color(light: 0xFAFAFA, dark: 0x0A0A0B), in: RoundedRectangle(cornerRadius: .corner(10), style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: .corner(10), style: .continuous).strokeBorder(Color.cardBorder))
+    }
 }
 
 /// A green "Live" pill, grey while paused.

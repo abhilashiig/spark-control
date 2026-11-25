@@ -859,12 +859,15 @@ final class AppState {
     func beginRequest(method: String, path: String, model: String, client: String, userAgent: String, body: Data,
                       thinking: String? = nil) -> UUID {
         let e = RequestEntry(method: method, path: path, model: model, client: client, userAgent: userAgent,
-                             forwarded: String(decoding: body.prefix(64 << 10), as: UTF8.self), thinking: thinking)
+                             forwarded: String(decoding: body.prefix(1 << 20), as: UTF8.self), thinking: thinking)
         requests.insert(e, at: 0)
-        // At most 200 entries and ~4 MB of request bodies, so long prompts don't pile up in memory.
+        // At most 200 entries and ~4 MB of request bodies; older entries keep their stats but drop the body.
+        if requests.count > 200 { requests.removeLast(requests.count - 200) }
         var bytes = 0
-        let keep = requests.prefix(200).prefix { bytes += $0.forwarded.utf8.count; return bytes <= 4 << 20 }.count
-        requests.removeSubrange(max(keep, 1)...)
+        for i in requests.indices.dropFirst() where !requests[i].forwarded.isEmpty {
+            bytes += requests[i].forwarded.utf8.count
+            if bytes + e.forwarded.utf8.count > 4 << 20 { requests[i].forwarded = "" }
+        }
         return e.id
     }
 

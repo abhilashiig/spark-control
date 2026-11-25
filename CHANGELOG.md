@@ -5,6 +5,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-11-25
+
 ### Fixed
 - Thinking level in Pi, Kilo Code and Hermes now reaches the model. Qwen3.8 models (and Arete) get their own low, medium or xhigh effort instead of always thinking at xhigh, Inkling gets every level, gpt-oss gets low, medium or high, and other models switch thinking on or off. Pi's config is updated on launch.
 - Kilo Code, Pi and Hermes now know each model's context window, read from its context setting. Custom models whose window can't be read get 250K, or the Context Window set on their page.

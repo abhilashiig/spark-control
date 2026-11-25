@@ -112,15 +112,25 @@ final class AppState {
     /// Why the GPU clock cap couldn't be set or removed, shown in Settings until it works.
     var gpuCapError: String?
     var showSetup: Bool
-    var launchAtLogin = SMAppService.mainApp.status == .enabled {
+    var launchAtLogin = AppState.restoreLaunchAtLogin() {
         didSet {
             guard launchAtLogin != oldValue else { return }
+            UserDefaults.standard.set(launchAtLogin, forKey: "openAtLogin")
             do {
                 if launchAtLogin { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
             } catch {
                 event("Open at Login: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// Ad-hoc signed builds get a new code identity with every update, and macOS then reports the login item as
+    /// off for the new build. Keep the choice ourselves and register this build again.
+    private static func restoreLaunchAtLogin() -> Bool {
+        let on = UserDefaults.standard.bool(forKey: "openAtLogin") || SMAppService.mainApp.status == .enabled
+        if on, SMAppService.mainApp.status != .enabled { try? SMAppService.mainApp.register() }
+        UserDefaults.standard.set(on, forKey: "openAtLogin")
+        return on
     }
 
     @ObservationIgnored private var transition: Task<Void, Error>?

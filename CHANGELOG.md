@@ -11,6 +11,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - Spark Control is now open source under the BSD 3-Clause License. The name and logo stay trademarks (see TRADEMARKS.md).
 
 ### Fixed
+- Open at Login stays on after an update. Each new version used to show it as off and drop the app from Login Items.
 - Requests: a request body over 1 MB no longer shows as an empty box that scrolls forever. It shows the first 1 MB as text and says the rest wasn't kept.
 
 ## [1.14.0] - 2026-11-25

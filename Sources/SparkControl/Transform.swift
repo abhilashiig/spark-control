@@ -25,6 +25,7 @@ enum Transform {
         if recipe.modelSampling {
             for k in samplingKeys where body.removeValue(forKey: k) != nil { changed.insert(k) }
         }
+        if path.hasSuffix("chat/completions") { changed.formUnion(thinking(&body, recipe: recipe)) }
         for rule in recipe.rules where !rule.key.isEmpty {
             switch rule.kind {
             case .remove:
@@ -46,6 +47,33 @@ enum Transform {
                 body["stream_options"] = options
                 changed.insert("stream_options")
             }
+        }
+        return changed
+    }
+
+    /// A client's thinking level, from `reasoning_effort` (Pi) or `reasoning.effort`/`enabled` (OpenRouter's SDK, Kilo).
+    /// gpt-oss takes low/medium/high. The Spark's other reasoning models can only switch thinking on or off through
+    /// their chat template, and vLLM rejects an effort it doesn't know, so it becomes `enable_thinking`.
+    static func thinking(_ body: inout [String: Any], recipe: Recipe) -> Set<String> {
+        let r = body["reasoning"] as? [String: Any]
+        guard recipe.hasReasoning,
+              let effort = (body["reasoning_effort"] as? String ?? r?["effort"] as? String
+                            ?? (r?["enabled"] as? Bool == false ? "none" : nil))?.lowercased()
+        else { return [] }
+        let off = ["none", "off", "minimal"].contains(effort)
+        if recipe.ids.contains("gpt-oss") {
+            let level = off || effort == "low" ? "low" : effort == "medium" ? "medium" : "high"
+            guard body["reasoning_effort"] as? String != level else { return [] }
+            body["reasoning_effort"] = level
+            return ["reasoning_effort"]
+        }
+        var changed = Set<String>()
+        if body.removeValue(forKey: "reasoning_effort") != nil { changed.insert("reasoning_effort") }
+        var kwargs = body["chat_template_kwargs"] as? [String: Any] ?? [:]
+        if kwargs["enable_thinking"] == nil { // the client's own switch wins
+            kwargs["enable_thinking"] = !off
+            body["chat_template_kwargs"] = kwargs
+            changed.insert("chat_template_kwargs")
         }
         return changed
     }

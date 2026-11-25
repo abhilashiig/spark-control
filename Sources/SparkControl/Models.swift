@@ -109,7 +109,7 @@ struct Recipe: Codable, Identifiable, Hashable {
     /// Fixes the API model name to what it is now.
     mutating func freezeAPI() { if api == nil, !isBlank { api = apiID } }
 
-    private var ids: String { (name + " " + upstreamModel).lowercased() }
+    var ids: String { (name + " " + upstreamModel).lowercased() }
     // ponytail: name heuristics for common Spark models; the toggles on the model's page override them.
     var hasReasoning: Bool {
         reasoning ?? (startCommand.contains("--reasoning-parser") || ids.contains(#/qwen3|nemotron|deepseek|gpt-oss|gemma-?\s?4|glm|kimi|think|laguna/#))

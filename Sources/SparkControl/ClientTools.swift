@@ -123,14 +123,17 @@ enum ClientTool: String, CaseIterable, Identifiable {
             "api": "openai-completions",
             "apiKey": g.apiKey,
             "headers": [header: "Pi"],
-            // The Spark's servers reject the developer role and reasoning_effort.
-            "compat": ["supportsDeveloperRole": false, "supportsReasoningEffort": false],
+            // The Spark's servers reject the developer role. reasoning_effort is turned into on/off thinking by the
+            // gateway; Pi sends nothing for "off" unless the model maps it.
+            "compat": ["supportsDeveloperRole": false],
             "models": models.map { r in
-                [
+                var m: [String: Any] = [
                     "id": r.apiID, "name": r.name, "reasoning": r.hasReasoning,
                     "input": r.takesImages ? ["text", "image"] : ["text"],
                     "cost": ["input": r.priceIn, "output": r.priceOut, "cacheRead": r.priceCache ?? r.priceIn, "cacheWrite": 0],
-                ] as [String: Any]
+                ]
+                if r.hasReasoning { m["thinkingLevelMap"] = ["off": "none"] }
+                return m
             },
         ]
     }

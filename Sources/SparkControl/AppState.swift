@@ -137,6 +137,7 @@ final class AppState {
         let g = Gateway(state: self)
         gateway = g
         g.start(port: loaded.gateway.port, lan: loaded.gateway.allowLAN)
+        syncTools() // an update can change what the tools' entries should say
         monitor.pathUpdateHandler = { [weak self] _ in
             Task { @MainActor in self?.networkChanged("the Mac's network changed") }
         }

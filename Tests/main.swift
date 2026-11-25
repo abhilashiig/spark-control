@@ -47,6 +47,26 @@ check((stream["stream_options"] as? [String: Any])?["include_usage"] as? Bool ==
 var optedOut: [String: Any] = ["model": "x", "stream": true, "stream_options": ["include_usage": false]]
 check(Transform.apply(&optedOut, recipe: plain, path: "/v1/chat/completions", streamUsage: true).isEmpty, "client's choice respected")
 
+// Thinking level → enable_thinking, or a clamped reasoning_effort for gpt-oss
+let qwen = Recipe(name: "Qwen3.8", startCommand: "", stopCommand: "", upstreamModel: "Qwen/Qwen3.8")
+var piOff: [String: Any] = ["model": "Qwen/Qwen3.8", "reasoning_effort": "none"]
+check(Transform.apply(&piOff, recipe: qwen, path: "/v1/chat/completions", streamUsage: false) == ["reasoning_effort", "chat_template_kwargs"]
+      && piOff["reasoning_effort"] == nil && (piOff["chat_template_kwargs"] as? [String: Any])?["enable_thinking"] as? Bool == false,
+      "Pi off → thinking off, effort dropped")
+var kiloHigh: [String: Any] = ["model": "x", "reasoning": ["effort": "high"], "chat_template_kwargs": ["foo": 1]]
+Transform.apply(&kiloHigh, recipe: qwen, path: "/v1/chat/completions", streamUsage: false)
+let kk = kiloHigh["chat_template_kwargs"] as? [String: Any]
+check(kk?["enable_thinking"] as? Bool == true && kk?["foo"] as? Int == 1, "reasoning.effort → thinking on, other kwargs kept")
+var own2: [String: Any] = ["model": "x", "reasoning_effort": "high", "chat_template_kwargs": ["enable_thinking": false]]
+Transform.apply(&own2, recipe: qwen, path: "/v1/chat/completions", streamUsage: false)
+check((own2["chat_template_kwargs"] as? [String: Any])?["enable_thinking"] as? Bool == false, "client's enable_thinking wins")
+let oss = Recipe(name: "gpt-oss-120b", startCommand: "", stopCommand: "", upstreamModel: "openai/gpt-oss-120b")
+var ossX: [String: Any] = ["model": "x", "reasoning_effort": "xhigh"]
+Transform.apply(&ossX, recipe: oss, path: "/v1/chat/completions", streamUsage: false)
+check(ossX["reasoning_effort"] as? String == "high" && ossX["chat_template_kwargs"] == nil, "gpt-oss effort clamped")
+var noLevel: [String: Any] = ["model": "Qwen/Qwen3.8"]
+check(Transform.apply(&noLevel, recipe: qwen, path: "/v1/chat/completions", streamUsage: false).isEmpty, "no level → untouched")
+
 // SSE cost injection
 let line = Data(#"data: {"id":"1","choices":[],"usage":{"prompt_tokens":1000000,"completion_tokens":500000}}\#n"#.utf8)
 let (out, usage) = Transform.sseLine(line, recipe: recipe, inject: true)
@@ -543,6 +563,9 @@ let pp = (try! JSONSerialization.jsonObject(with: Data(piOut.utf8)) as! [String:
 let pm = ((pp["spark-control"] as! [String: Any])["models"] as! [[String: Any]])[0]
 check(pp["homelab"] != nil && pm["id"] as? String == "qwen3.8-27b" && pm["input"] as? [String] == ["text", "image"]
       && (pm["cost"] as! [String: Any]).count == 4, "Pi: model with images, reasoning and all four cost rates")
+check((pm["thinkingLevelMap"] as? [String: String])?["off"] == "none"
+      && ((pp["spark-control"] as! [String: Any])["compat"] as! [String: Any])["supportsReasoningEffort"] == nil,
+      "Pi: thinking levels reach the gateway, off as none")
 check(ClientTool.pi.isAdded(try! ClientTool.pi.apply(to: "", models: [], gateway: gw)), "Pi: a missing file gets created")
 
 let yaml = """

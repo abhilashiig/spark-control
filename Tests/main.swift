@@ -75,6 +75,7 @@ check(think(oss, ["reasoning_effort": "xhigh"])["reasoning_effort"] as? String =
       && think(oss, ["reasoning_effort": "none"])["reasoning_effort"] as? String == "low" && kw(think(oss, ["reasoning_effort": "none"])) == nil,
       "gpt-oss: clamped to low/medium/high, never off")
 check(think(ink, ["reasoning_effort": "minimal"])["reasoning_effort"] as? String == "minimal"
+      && think(ink, ["reasoning_effort": "max"])["reasoning_effort"] as? String == "xhigh"
       && think(ink, ["reasoning_effort": "none"])["reasoning_effort"] as? String == "none"
       && think(ink, ["reasoning_effort": 0.5])["reasoning_effort"] as? Double == 0.5
       && think(q38, ["reasoning_effort": "auto"])["reasoning_effort"] as? String == "auto", "Inkling: names pass; numbers and unknowns untouched")
@@ -559,6 +560,16 @@ check(kp["other"] != nil && kj["model"] as? String == "openrouter/x" && sc["npm"
       && (kvl["cost"] as! [String: Any])["output"] as? Double == 0.8
       && ((sc["models"] as! [String: Any])["nemotron-lightning"] as! [String: Any])["attachment"] as? Bool == false,
       "Kilo: provider replaced via the OpenRouter SDK, the rest kept")
+let kv = kvl["variants"] as! [String: [String: Any]]
+func effort(_ v: [String: Any]?) -> String? { (v?["reasoning"] as? [String: Any])?["effort"] as? String }
+check(Set(kv.filter { $0.value["disabled"] == nil }.keys) == ["off", "low", "medium", "xhigh"]
+      && effort(kv["off"]) == "none" && effort(kv["xhigh"]) == "xhigh"
+      && ["none", "minimal", "high", "max"].allSatisfy { kv[$0]?["disabled"] as? Bool == true },
+      "Kilo: Qwen3.8 variants off, low, medium, xhigh; Kilo's other effort names disabled")
+let onOff = ClientTool.kilo.apply
+let q36Kilo = ((try! JSONSerialization.jsonObject(with: Data(try! onOff("", [Recipe(name: "Qwen3.6 35B", startCommand: "x", stopCommand: "")], gw).utf8)) as! [String: Any])["provider"] as! [String: Any])
+let q36v = (((q36Kilo["spark-control"] as! [String: Any])["models"] as! [String: Any])["qwen3.6-35b"] as! [String: Any])["variants"] as! [String: [String: Any]]
+check(Set(q36v.filter { $0.value["disabled"] == nil }.keys) == ["off", "on"] && effort(q36v["on"]) == "high", "Kilo: on/off models get Off and On")
 check(try! ClientTool.kilo.apply(to: kiloOut, models: [vl, textOnly], gateway: gw) == kiloOut && ClientTool.kilo.isAdded(kiloOut),
       "Kilo: applying twice changes nothing")
 
@@ -584,9 +595,15 @@ let pp = (try! JSONSerialization.jsonObject(with: Data(piOut.utf8)) as! [String:
 let pm = ((pp["spark-control"] as! [String: Any])["models"] as! [[String: Any]])[0]
 check(pp["homelab"] != nil && pm["id"] as? String == "qwen3.8-27b" && pm["input"] as? [String] == ["text", "image"]
       && (pm["cost"] as! [String: Any]).count == 4, "Pi: model with images, reasoning and all four cost rates")
-check((pm["thinkingLevelMap"] as? [String: String])?["off"] == "none"
+let lm = pm["thinkingLevelMap"] as! [String: Any]
+check(lm["off"] as? String == "none" && lm["low"] as? String == "low" && lm["medium"] as? String == "medium" && lm["xhigh"] as? String == "xhigh"
+      && lm["minimal"] is NSNull && lm["high"] is NSNull && lm["max"] is NSNull
       && ((pp["spark-control"] as! [String: Any])["compat"] as! [String: Any])["supportsReasoningEffort"] == nil,
-      "Pi: thinking levels reach the gateway, off as none")
+      "Pi: Qwen3.8 offers off, low, medium and xhigh once each")
+check(Recipe(name: "gpt-oss-120b", startCommand: "", stopCommand: "").thinkingChoices == ["low", "medium", "high"]
+      && Recipe(name: "Inkling 2 Mini", startCommand: "", stopCommand: "").thinkingChoices == ["none", "minimal", "low", "medium", "high", "xhigh"]
+      && Recipe(name: "Qwen3.6 35B", startCommand: "", stopCommand: "").thinkingChoices == ["none", "high"],
+      "thinking choices: gpt-oss can't turn off, Inkling has every distinct level, on/off models get off and on")
 check(ClientTool.pi.isAdded(try! ClientTool.pi.apply(to: "", models: [], gateway: gw)), "Pi: a missing file gets created")
 var long = vl; long.startCommand = "vllm serve q --max-model-len 131072"
 let ctxPi = ((try! JSONSerialization.jsonObject(with: Data(try! ClientTool.pi.apply(to: "", models: [long, vl], gateway: gw).utf8)) as! [String: Any])["providers"] as! [String: Any])["spark-control"] as! [String: Any]
@@ -594,6 +611,9 @@ check((ctxPi["models"] as! [[String: Any]]).map { $0["contextWindow"] as? Int } 
       && (kvl["limit"] as? [String: Int])?["context"] == 250_000
       && (try! ClientTool.hermes.apply(to: "", models: [long], gateway: gw)).contains("      context_length: 131072"),
       "context from the start command, 250K when it can't be read, in all three tools")
+var setCtx = vl; setCtx.context = 64_000
+check(setCtx.contextWindow == 64_000 && { var l = long; l.context = 64_000; return l.contextWindow == 131_072 }(),
+      "a hand-set context fills in only where the start command doesn't say")
 
 let yaml = """
 # Hermes

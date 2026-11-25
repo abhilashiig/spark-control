@@ -348,6 +348,13 @@ struct ModelView: View {
                     if r.wrappedValue.tensorfold != nil { r.wrappedValue.startCommand = TensorFold.withVision(r.wrappedValue.startCommand, $0) }
                 }).labelsHidden()
             }
+            if r.wrappedValue.servedContext == nil {
+                Hairline()
+                row("Context Window", sub: "Told to Pi, Kilo and Hermes.") {
+                    TextField("Context Window", value: r.context, format: .number, prompt: Text("250,000"))
+                        .multilineTextAlignment(.trailing).frame(maxWidth: 120)
+                }
+            }
             Hairline()
             row("Model's Own Sampling", sub: "Ignores the temperature, top_p and other sampling values clients send, so the model maker's defaults apply.") {
                 Toggle("Model's Own Sampling", isOn: r.modelSampling).labelsHidden()
@@ -451,9 +458,8 @@ struct ModelView: View {
 
     /// The model's own default, Off where it can stop thinking, then the levels its template accepts.
     private func effortPicker(_ r: Binding<Recipe>) -> some View {
-        let levels = r.wrappedValue.effortLevels ?? []
-        let offs = r.wrappedValue.ids.contains("gpt-oss") ? [] : ["none"]
-        var options = offs + levels.filter { $0 != "none" }
+        // On/off models think by default, so Off is their only other choice.
+        var options = r.wrappedValue.effortLevels == nil ? ["none"] : r.wrappedValue.thinkingChoices
         if let e = r.wrappedValue.effort, !options.contains(e) { options.append(e) } // a level the model no longer lists
         return Picker("Thinking Effort", selection: r.effort) {
             Text("Model Default").tag(String?.none)

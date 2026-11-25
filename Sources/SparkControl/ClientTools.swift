@@ -116,7 +116,7 @@ enum ClientTool: String, CaseIterable, Identifiable {
                     "cost": ["input": r.priceIn, "output": r.priceOut, "cache_read": r.priceCache ?? r.priceIn],
                     // 32K output is Kilo's own cap, so this changes nothing but the context.
                     "limit": ["context": context(r), "output": 32_000],
-                ] as [String: Any])
+                ].merging(r.hasReasoning ? ["variants": kiloVariants(r)] : [:]) { a, _ in a })
             }, uniquingKeysWith: { a, _ in a }),
         ]
     }
@@ -128,8 +128,8 @@ enum ClientTool: String, CaseIterable, Identifiable {
             "api": "openai-completions",
             "apiKey": g.apiKey,
             "headers": [header: "Pi"],
-            // The Spark's servers reject the developer role. reasoning_effort is turned into on/off thinking by the
-            // gateway; Pi sends nothing for "off" unless the model maps it.
+            // The Spark's servers reject the developer role. reasoning_effort reaches the gateway, which fits it to
+            // each model's template.
             "compat": ["supportsDeveloperRole": false],
             "models": models.map { r in
                 var m: [String: Any] = [
@@ -137,10 +137,33 @@ enum ClientTool: String, CaseIterable, Identifiable {
                     "input": r.takesImages ? ["text", "image"] : ["text"],
                     "cost": ["input": r.priceIn, "output": r.priceOut, "cacheRead": r.priceCache ?? r.priceIn, "cacheWrite": 0],
                 ]
-                if r.hasReasoning { m["thinkingLevelMap"] = ["off": "none"] }
+                if r.hasReasoning { m["thinkingLevelMap"] = piLevels(r) }
                 return m
             },
         ]
+    }
+
+    /// Kilo's reasoning picker for the model: one variant per level, sent as OpenRouter's `reasoning.effort` for
+    /// the gateway to fit to the template, and Kilo's own effort-named variants switched off where the model
+    /// has no such level. On/off models get Off and On.
+    private static func kiloVariants(_ r: Recipe) -> [String: Any] {
+        let choices = r.thinkingChoices
+        var v: [String: Any] = Dictionary(uniqueKeysWithValues: Transform.efforts.map { ($0, ["disabled": true] as [String: Any]) })
+        for e in choices {
+            let key = e == "none" ? "off" : r.effortLevels == nil ? "on" : e
+            v[key] = ["reasoning": ["effort": e]]
+        }
+        return v
+    }
+
+    /// Every Pi level mapped to the effort sent for it, or null to hide it, so Pi's picker lists the model's own
+    /// levels once each (Pi shows xhigh and max only when they're mapped; off sends none instead of nothing).
+    private static func piLevels(_ r: Recipe) -> [String: Any] {
+        let choices = r.thinkingChoices
+        return Dictionary(uniqueKeysWithValues: ["off", "minimal", "low", "medium", "high", "xhigh", "max"].map { level in
+            let effort = level == "off" ? "none" : level
+            return (level, choices.contains(effort) ? effort as Any : NSNull())
+        })
     }
 
     /// Hermes prices requests from the gateway's /v1/models and has no per-model reasoning flag.

@@ -97,6 +97,8 @@ struct Recipe: Codable, Identifiable, Hashable {
     var effort: String?
     /// Strip the client's sampling fields so the engine uses the model's own defaults (its generation_config.json).
     var modelSampling = false
+    /// Context window to tell clients when the app can't read it from the start command.
+    var context: Int?
     /// The API model name, fixed once the model is added or first started so renaming it doesn't break clients.
     /// nil = not fixed yet: follows the name.
     var api: String?
@@ -113,8 +115,11 @@ struct Recipe: Codable, Identifiable, Hashable {
 
     var ids: String { (name + " " + upstreamModel).lowercased() }
 
-    /// Context the model is served with, when the app can tell (vLLM and TensorFold models).
-    var contextWindow: Int? {
+    /// Context the model is served with, when the app can tell (vLLM and TensorFold models), else the one set by hand.
+    var contextWindow: Int? { servedContext ?? context }
+
+    /// Context read from the start command or the catalog.
+    var servedContext: Int? {
         if let n = VLLM.context(of: startCommand) { return n }
         guard let m = TensorFold.model(tensorfold) else { return VLLM.model(vllm)?.window }
         switch TensorFold.context(of: startCommand) {
@@ -126,17 +131,24 @@ struct Recipe: Codable, Identifiable, Hashable {
 
     /// Effort names the model's chat template accepts, lowest first; nil = it only switches thinking on or off.
     /// Qwen3.8's template (and Arete's, a fine-tune of it) raises on any other name and defaults to xhigh;
-    /// Inkling's maps every standard name to its 0–0.99 scale.
+    /// Inkling's maps every standard name to its 0–0.99 scale (none = 0, max = xhigh = 0.99, so max is left out).
     var effortLevels: [String]? {
         if ids.contains("gpt-oss") { return ["low", "medium", "high"] }
         if ids.contains(#/qwen3\.8|arete/#) { return ["low", "medium", "xhigh"] }
-        if ids.contains("inkling") { return Transform.efforts }
+        if ids.contains("inkling") { return ["none", "minimal", "low", "medium", "high", "xhigh"] }
         return nil
+    }
+
+    /// The distinct levels a client should offer, lowest first, as effort names ("none" = off).
+    /// On/off models get none and high (on); gpt-oss can't stop thinking, so it has no none.
+    var thinkingChoices: [String] {
+        guard let levels = effortLevels else { return ["none", "high"] }
+        return (levels.contains("none") || ids.contains("gpt-oss") ? [] : ["none"]) + levels
     }
 
     // ponytail: name heuristics for common Spark models; the toggles on the model's page override them.
     var hasReasoning: Bool {
-        reasoning ?? (startCommand.contains("--reasoning-parser") || ids.contains(#/qwen3|nemotron|deepseek|gpt-oss|gemma-?\s?4|glm|kimi|think|laguna/#))
+        reasoning ?? (startCommand.contains("--reasoning-parser") || ids.contains(#/qwen3|nemotron|deepseek|gpt-oss|gemma-?\s?4|glm|kimi|think|laguna|inkling/#))
     }
     /// TensorFold serves images only with --vision, so its start command decides; elsewhere the toggle,
     /// else families that ship a vision encoder.

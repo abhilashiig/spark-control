@@ -567,6 +567,12 @@ check((pm["thinkingLevelMap"] as? [String: String])?["off"] == "none"
       && ((pp["spark-control"] as! [String: Any])["compat"] as! [String: Any])["supportsReasoningEffort"] == nil,
       "Pi: thinking levels reach the gateway, off as none")
 check(ClientTool.pi.isAdded(try! ClientTool.pi.apply(to: "", models: [], gateway: gw)), "Pi: a missing file gets created")
+var long = vl; long.startCommand = "vllm serve q --max-model-len 131072"
+let ctxPi = ((try! JSONSerialization.jsonObject(with: Data(try! ClientTool.pi.apply(to: "", models: [long, vl], gateway: gw).utf8)) as! [String: Any])["providers"] as! [String: Any])["spark-control"] as! [String: Any]
+check((ctxPi["models"] as! [[String: Any]]).map { $0["contextWindow"] as? Int } == [131_072, 250_000]
+      && (kvl["limit"] as? [String: Int])?["context"] == 250_000
+      && (try! ClientTool.hermes.apply(to: "", models: [long], gateway: gw)).contains("      context_length: 131072"),
+      "context from the start command, 250K when it can't be read, in all three tools")
 
 let yaml = """
 # Hermes

@@ -95,6 +95,9 @@ enum ClientTool: String, CaseIterable, Identifiable {
 
     // MARK: Per-tool provider entries
 
+    /// The model's served context; custom models whose window the app can't read get 250K.
+    private static func context(_ r: Recipe) -> Int { r.contextWindow ?? 250_000 }
+
     /// Kilo (an OpenCode fork) only shows a request's cost with OpenRouter's SDK, which reads `usage.cost` from the
     /// response; the plain OpenAI-compatible one ignores it. `cost` also lets it price from the token counts.
     /// The OpenRouter SDK refuses to start without an API key.
@@ -111,6 +114,8 @@ enum ClientTool: String, CaseIterable, Identifiable {
                     "tool_call": true,
                     "modalities": ["input": r.takesImages ? ["text", "image"] : ["text"], "output": ["text"]],
                     "cost": ["input": r.priceIn, "output": r.priceOut, "cache_read": r.priceCache ?? r.priceIn],
+                    // 32K output is Kilo's own cap, so this changes nothing but the context.
+                    "limit": ["context": context(r), "output": 32_000],
                 ] as [String: Any])
             }, uniquingKeysWith: { a, _ in a }),
         ]
@@ -128,7 +133,7 @@ enum ClientTool: String, CaseIterable, Identifiable {
             "compat": ["supportsDeveloperRole": false],
             "models": models.map { r in
                 var m: [String: Any] = [
-                    "id": r.apiID, "name": r.name, "reasoning": r.hasReasoning,
+                    "id": r.apiID, "name": r.name, "reasoning": r.hasReasoning, "contextWindow": context(r),
                     "input": r.takesImages ? ["text", "image"] : ["text"],
                     "cost": ["input": r.priceIn, "output": r.priceOut, "cacheRead": r.priceCache ?? r.priceIn, "cacheWrite": 0],
                 ]
@@ -152,7 +157,7 @@ enum ClientTool: String, CaseIterable, Identifiable {
         if let first = models.first { lines.append("  model: \(quote(first.apiID))") }
         lines.append(models.isEmpty ? "  models: {}" : "  models:")
         for r in models {
-            lines += ["    \(quote(r.apiID)):", "      supports_vision: \(r.takesImages)"]
+            lines += ["    \(quote(r.apiID)):", "      supports_vision: \(r.takesImages)", "      context_length: \(context(r))"]
         }
         return lines
     }

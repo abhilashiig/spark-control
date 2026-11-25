@@ -7,6 +7,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ### Fixed
 - Thinking level in Pi and Kilo Code now works: off (or minimal) turns the model's thinking off, any other level turns it on. gpt-oss gets low, medium or high. Pi's config is updated on launch.
+- Kilo Code, Pi and Hermes now know each model's context window, read from its context setting. Custom models whose window can't be read get 250K.
 
 ### Changed
 - Shorter copy across the app: fewer captions and explanations, terser tooltips and buttons (Send Test, Open Config, Restore). API Access drops its intro, section notes and the Use in Snippet action.

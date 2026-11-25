@@ -1171,19 +1171,6 @@ private struct ChatStats: View {
     }
 }
 
-private extension Recipe {
-    /// Context the start command asks for, when the app can tell (vLLM and TensorFold models).
-    var contextWindow: Int? {
-        if let n = VLLM.context(of: startCommand) { return n }
-        guard let m = TensorFold.model(tensorfold) else { return nil }
-        switch TensorFold.context(of: startCommand) {
-        case .window(let n): return n
-        case .yarn(let f): return m.window * f
-        case .engineDefault: return nil
-        }
-    }
-}
-
 /// Inline Markdown per paragraph, fenced code blocks rendered as monospaced boxes.
 private struct MarkdownText: View {
     let text: String

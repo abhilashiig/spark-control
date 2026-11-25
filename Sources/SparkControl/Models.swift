@@ -111,6 +111,17 @@ struct Recipe: Codable, Identifiable, Hashable {
 
     var ids: String { (name + " " + upstreamModel).lowercased() }
     // ponytail: name heuristics for common Spark models; the toggles on the model's page override them.
+    /// Context the model is served with, when the app can tell (vLLM and TensorFold models).
+    var contextWindow: Int? {
+        if let n = VLLM.context(of: startCommand) { return n }
+        guard let m = TensorFold.model(tensorfold) else { return VLLM.model(vllm)?.window }
+        switch TensorFold.context(of: startCommand) {
+        case .window(let n): return n
+        case .yarn(let f): return m.window * f
+        case .engineDefault: return nil
+        }
+    }
+
     var hasReasoning: Bool {
         reasoning ?? (startCommand.contains("--reasoning-parser") || ids.contains(#/qwen3|nemotron|deepseek|gpt-oss|gemma-?\s?4|glm|kimi|think|laguna/#))
     }

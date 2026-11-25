@@ -18,16 +18,24 @@ Big local models, one click away. No SSH, no start scripts, no port numbers.
 
 ## The idea
 
-The DGX Spark is a lot of AI for the money: 128 GB of memory for models a laptop can't hold, and prompt
-processing fast enough that long coding-agent prompts don't keep you waiting. But out of the box it's a
-Linux box in the corner: SSH sessions, Docker commands, start scripts and port numbers.
+Plenty of long-time Mac users would rather not live with anything that isn't a Mac. The DGX Spark is hard
+to pass up anyway: a lot of AI for the money in a small, quiet box on your desk, with 128 GB of memory for
+models a laptop can't hold, and prompt processing fast enough that long coding-agent prompts don't keep
+you waiting. Out of the box, though, it's a Linux machine: SSH sessions, Docker commands,
+start scripts and port numbers.
+
+So what if it were simply part of your Apple setup?
 
 **Spark Control makes it disappear behind your Mac.** Press ▶︎ and a model is running. Chat with it in a
 native app. Point Kilo Code, Pi or any OpenAI app at `localhost`, and it answers as if the model lived on
 your Mac, while the Spark does the heavy lifting.
 
+📱 **Coming next:** an iPhone app, so your Spark comes with you too.
+
 | On your own | With Spark Control |
 |---|---|
+| Install vLLM, TensorFold and ComfyUI by hand | One click each, on the Spark |
+| Hunt for flags, quantizations and drafts that work on a GB10 | Models come tuned and measured on one |
 | SSH in, find the start script, remember the flags | Press ▶︎ |
 | Which model is running? On which port? | One table, one URL: `http://localhost:18080/v1` |
 | Guess what fits in memory, stop the old model by hand | It shows what fits and stops only what's in the way |
@@ -35,14 +43,17 @@ your Mac, while the Spark does the heavy lifting.
 | `htop`, `nvidia-smi` and `df` in three terminals | Live CPU, GPU, memory, temperatures and disk on one page |
 | "How fast is it really?" | Every request's speed, tokens and cost, as it happens |
 
-<p align="center"><b>Get started in three steps:</b> connect to your Spark → download a model → press ▶︎.</p>
+<p align="center"><b>Get started in three steps:</b> connect to your Spark → install an engine and download a model → press ▶︎.</p>
 
 ## What you can do
 
 ### 🚀 Run models
 - **One table for every model**, whatever runs it. Start, stop and switch with a click.
-- **Four engines:** **TensorFold** builds tested on the GB10, **vLLM** with NVFP4 models, **Ollama** (search
+- **Four engines, each installed on the Spark with one click:** **TensorFold**, **vLLM**, **Ollama** (search
   ollama.com for sizes that fit the Spark's memory and pull them), and any **custom** server that speaks the OpenAI API.
+- **Models tuned for the Spark:** the TensorFold and vLLM catalogs list models tested on a GB10, each with
+  the quantization, speculative decoding, context window and memory that worked best there, and notes on the
+  speed measured. Download, press ▶︎, and it starts with those settings.
 - **Downloads happen on the Spark itself**, with progress in the app. Nothing big goes through your Mac.
 - **Hugging Face:** search Hugging Face and download any model straight onto the Spark. See everything in its
   model cache, what's downloading and what's in use, and delete what isn't. Install the `hf` tool and sign the Spark in to Hugging Face for gated models, all from the app.
@@ -142,7 +153,8 @@ print(reply.choices[0].message.content)
 - The app reaches the Spark over **SSH with your own key**, and its models over your network or Tailscale.
 - **Services without a login stay private:** ComfyUI and the DGX Dashboard listen only on the Spark itself
   and are reached through SSH tunnels.
-- **Nothing is installed on the Spark unless you ask for it**, and nothing needs `sudo`.
+- **Nothing is installed on the Spark unless you ask for it**, and only Ollama's installer needs `sudo`
+  (your password is used once and never stored).
 - **Costs are estimates** from the prices you set. Nothing is billed.
 
 Settings, chats and usage history live in `~/Library/Application Support/Spark Control/`.

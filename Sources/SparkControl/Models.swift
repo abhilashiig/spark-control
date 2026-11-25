@@ -148,7 +148,7 @@ struct Recipe: Codable, Identifiable, Hashable {
 
     // ponytail: name heuristics for common Spark models; the toggles on the model's page override them.
     var hasReasoning: Bool {
-        reasoning ?? (startCommand.contains("--reasoning-parser") || ids.contains(#/qwen3|nemotron|deepseek|gpt-oss|gemma-?\s?4|glm|kimi|think|laguna|inkling/#))
+        reasoning ?? (effortLevels != nil || startCommand.contains("--reasoning-parser") || ids.contains(#/qwen3|nemotron|deepseek|gpt-oss|gemma-?\s?4|glm|kimi|think|laguna|inkling/#))
     }
     /// TensorFold serves images only with --vision, so its start command decides; elsewhere the toggle,
     /// else families that ship a vision encoder.

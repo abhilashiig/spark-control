@@ -520,6 +520,7 @@ check((try? JSONDecoder().decode(SharedModels.self, from: JSONEncoder().encode(S
 let gw = ClientTool.Gateway(baseURL: "http://localhost:18080/v1", apiKey: "sk-local")
 var vl = Recipe(name: "Qwen3.8 27B", startCommand: "x", stopCommand: "", priceIn: 0.2, priceOut: 0.8)
 let textOnly = Recipe(name: "Nemotron Lightning", startCommand: "x", stopCommand: "")
+check(Recipe(name: "Arete 27B", startCommand: "tensorfold serve", stopCommand: "", tensorfold: "arete-27b").hasReasoning, "a model with known effort levels reasons")
 check(vl.hasReasoning && vl.takesImages && textOnly.hasReasoning && !textOnly.takesImages, "capabilities guessed from the name")
 check(!Recipe(name: "Qwen3.6", startCommand: "tensorfold serve", stopCommand: "", tensorfold: "q").takesImages
       && Recipe(name: "Gemma", startCommand: "tensorfold serve --vision", stopCommand: "", tensorfold: "g").takesImages,

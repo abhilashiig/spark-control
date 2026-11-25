@@ -211,7 +211,8 @@ final class Gateway: @unchecked Sendable {
         let streaming = body?["stream"] as? Bool == true
         let client = Transform.client(spark: req.header(ClientTool.header), title: req.header("x-title"), userAgent: req.header("user-agent"))
         let entry = await state.beginRequest(method: req.method, path: path, model: recipe.apiID, client: client,
-                                             userAgent: req.header("user-agent") ?? "", body: forwarded)
+                                             userAgent: req.header("user-agent") ?? "", body: forwarded,
+                                             thinking: Transform.thinkingLabel(body))
         let started = Date()
 
         var up = URLRequest(url: url)

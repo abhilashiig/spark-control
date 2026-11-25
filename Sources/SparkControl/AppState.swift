@@ -856,9 +856,10 @@ final class AppState {
                         active: activeRecipe, running: Set(runningRecipes.map(\.id)))
     }
 
-    func beginRequest(method: String, path: String, model: String, client: String, userAgent: String, body: Data) -> UUID {
+    func beginRequest(method: String, path: String, model: String, client: String, userAgent: String, body: Data,
+                      thinking: String? = nil) -> UUID {
         let e = RequestEntry(method: method, path: path, model: model, client: client, userAgent: userAgent,
-                             forwarded: String(decoding: body.prefix(64 << 10), as: UTF8.self))
+                             forwarded: String(decoding: body.prefix(64 << 10), as: UTF8.self), thinking: thinking)
         requests.insert(e, at: 0)
         // At most 200 entries and ~4 MB of request bodies, so long prompts don't pile up in memory.
         var bytes = 0

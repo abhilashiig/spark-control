@@ -305,6 +305,8 @@ struct RequestEntry: Identifiable {
     let client: String
     let userAgent: String
     let forwarded: String
+    /// What the forwarded body asked of thinking (Transform.thinkingLabel).
+    var thinking: String?
     var status = 0
     var duration = 0.0
     var prompt = 0

@@ -66,6 +66,8 @@ Transform.apply(&ossX, recipe: oss, path: "/v1/chat/completions", streamUsage: f
 check(ossX["reasoning_effort"] as? String == "high" && ossX["chat_template_kwargs"] == nil, "gpt-oss effort clamped")
 var noLevel: [String: Any] = ["model": "Qwen/Qwen3.8"]
 check(Transform.apply(&noLevel, recipe: qwen, path: "/v1/chat/completions", streamUsage: false).isEmpty, "no level → untouched")
+check(Transform.thinkingLabel(piOff) == "Off" && Transform.thinkingLabel(kiloHigh) == "On" && Transform.thinkingLabel(ossX) == "High"
+      && Transform.thinkingLabel(noLevel) == nil, "thinking label from the forwarded body")
 
 // SSE cost injection
 let line = Data(#"data: {"id":"1","choices":[],"usage":{"prompt_tokens":1000000,"completion_tokens":500000}}\#n"#.utf8)

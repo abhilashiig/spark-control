@@ -78,6 +78,12 @@ enum Transform {
         return changed
     }
 
+    /// What a forwarded body asks of thinking: "Off"/"On", gpt-oss's level, or nil when it leaves the model's default.
+    static func thinkingLabel(_ body: [String: Any]?) -> String? {
+        if let on = (body?["chat_template_kwargs"] as? [String: Any])?["enable_thinking"] as? Bool { return on ? "On" : "Off" }
+        return (body?["reasoning_effort"] as? String)?.capitalized
+    }
+
     /// JSONSerialization prints 0.7 as 0.69999999999999996. Swap floats for decimals of their
     /// shortest form so rewritten bodies keep the client's exact numbers.
     static func serialize(_ obj: Any) -> Data? {

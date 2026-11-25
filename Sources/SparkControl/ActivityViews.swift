@@ -206,6 +206,7 @@ private struct RequestRow: View {
                 RoundedRectangle(cornerRadius: .corner(2)).fill(ModelColor.of(e.model)).frame(width: 8, height: 8)
                 Text(e.model.isEmpty ? "—" : e.model).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.text)
                     .lineLimit(2)
+                if let t = e.thinking { ThinkingBadge(level: t, ignored: t == "Off" && e.reasoning > 0) }
             }
             .frame(minWidth: 140, maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
@@ -248,6 +249,24 @@ private struct StatusBadge: View {
             .padding(.vertical, 2)
             .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: .corner(5), style: .continuous))
             .fixedSize()
+    }
+}
+
+/// Thinking as the gateway forwarded it; amber when it was off but the model reasoned anyway.
+private struct ThinkingBadge: View {
+    let level: String
+    let ignored: Bool
+    var body: some View {
+        let color = ignored ? VizColor.warning : Color.text2
+        Label(level, systemImage: "brain")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: .corner(5), style: .continuous))
+            .fixedSize()
+            .help(ignored ? "Thinking was off, but the model reasoned anyway" : "Thinking \(level.lowercased())")
+            .accessibilityLabel(ignored ? "Thinking off, ignored by the model" : "Thinking \(level.lowercased())")
     }
 }
 

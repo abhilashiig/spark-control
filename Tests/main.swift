@@ -47,27 +47,46 @@ check((stream["stream_options"] as? [String: Any])?["include_usage"] as? Bool ==
 var optedOut: [String: Any] = ["model": "x", "stream": true, "stream_options": ["include_usage": false]]
 check(Transform.apply(&optedOut, recipe: plain, path: "/v1/chat/completions", streamUsage: true).isEmpty, "client's choice respected")
 
-// Thinking level → enable_thinking, or a clamped reasoning_effort for gpt-oss
-let qwen = Recipe(name: "Qwen3.8", startCommand: "", stopCommand: "", upstreamModel: "Qwen/Qwen3.8")
-var piOff: [String: Any] = ["model": "Qwen/Qwen3.8", "reasoning_effort": "none"]
-check(Transform.apply(&piOff, recipe: qwen, path: "/v1/chat/completions", streamUsage: false) == ["reasoning_effort", "chat_template_kwargs"]
-      && piOff["reasoning_effort"] == nil && (piOff["chat_template_kwargs"] as? [String: Any])?["enable_thinking"] as? Bool == false,
-      "Pi off → thinking off, effort dropped")
-var kiloHigh: [String: Any] = ["model": "x", "reasoning": ["effort": "high"], "chat_template_kwargs": ["foo": 1]]
-Transform.apply(&kiloHigh, recipe: qwen, path: "/v1/chat/completions", streamUsage: false)
-let kk = kiloHigh["chat_template_kwargs"] as? [String: Any]
-check(kk?["enable_thinking"] as? Bool == true && kk?["foo"] as? Int == 1, "reasoning.effort → thinking on, other kwargs kept")
-var own2: [String: Any] = ["model": "x", "reasoning_effort": "high", "chat_template_kwargs": ["enable_thinking": false]]
-Transform.apply(&own2, recipe: qwen, path: "/v1/chat/completions", streamUsage: false)
-check((own2["chat_template_kwargs"] as? [String: Any])?["enable_thinking"] as? Bool == false, "client's enable_thinking wins")
-let oss = Recipe(name: "gpt-oss-120b", startCommand: "", stopCommand: "", upstreamModel: "openai/gpt-oss-120b")
-var ossX: [String: Any] = ["model": "x", "reasoning_effort": "xhigh"]
-Transform.apply(&ossX, recipe: oss, path: "/v1/chat/completions", streamUsage: false)
-check(ossX["reasoning_effort"] as? String == "high" && ossX["chat_template_kwargs"] == nil, "gpt-oss effort clamped")
-var noLevel: [String: Any] = ["model": "Qwen/Qwen3.8"]
-check(Transform.apply(&noLevel, recipe: qwen, path: "/v1/chat/completions", streamUsage: false).isEmpty, "no level → untouched")
-check(Transform.thinkingLabel(piOff) == "Off" && Transform.thinkingLabel(kiloHigh) == "On" && Transform.thinkingLabel(ossX) == "High"
-      && Transform.thinkingLabel(noLevel) == nil, "thinking label from the forwarded body")
+// Thinking level → what each model's template accepts
+func think(_ r: Recipe, _ b: [String: Any]) -> [String: Any] {
+    var b = b; Transform.apply(&b, recipe: r, path: "/v1/chat/completions", streamUsage: false); return b
+}
+func kw(_ b: [String: Any]) -> Bool? { (b["chat_template_kwargs"] as? [String: Any])?["enable_thinking"] as? Bool }
+let q38 = Recipe(name: "Qwen3.8 Flash", startCommand: "", stopCommand: "")
+let onOff36 = Recipe(name: "Qwen3.6 35B", startCommand: "", stopCommand: "")
+let oss = Recipe(name: "gpt-oss-120b", startCommand: "", stopCommand: "")
+let ink = Recipe(name: "Inkling 2 Mini", startCommand: "", stopCommand: "")
+// Qwen3.8: only low/medium/xhigh (anything else raises in its template), off through enable_thinking
+let q38Off = think(q38, ["reasoning_effort": "none"])
+check(q38Off["reasoning_effort"] == nil && kw(q38Off) == false, "Qwen3.8: off → enable_thinking false, effort dropped")
+check(think(q38, ["reasoning_effort": "high"])["reasoning_effort"] as? String == "xhigh"
+      && think(q38, ["reasoning_effort": "minimal"])["reasoning_effort"] as? String == "low"
+      && think(q38, ["reasoning": ["effort": "medium"]])["reasoning_effort"] as? String == "medium"
+      && think(q38, ["reasoning_effort": "max"])["reasoning_effort"] as? String == "xhigh"
+      && kw(think(q38, ["reasoning_effort": "low"])) == nil, "Qwen3.8: levels mapped to low/medium/xhigh, kwargs left alone")
+let q38Own = think(q38, ["reasoning_effort": "high", "chat_template_kwargs": ["enable_thinking": false]])
+check(kw(q38Own) == false && q38Own["reasoning_effort"] as? String == "xhigh", "client's enable_thinking wins, effort still made valid")
+// On/off models
+let q36Off = think(onOff36, ["reasoning_effort": "minimal"]), q36On = think(onOff36, ["reasoning": ["effort": "high"], "chat_template_kwargs": ["foo": 1]])
+check(kw(q36Off) == false && q36Off["reasoning_effort"] == nil && kw(q36On) == true
+      && (q36On["chat_template_kwargs"] as? [String: Any])?["foo"] as? Int == 1, "on/off models: minimal = off, high = on, other kwargs kept")
+// gpt-oss can't stop thinking; Inkling takes every standard name; numbers and unknown names pass untouched
+check(think(oss, ["reasoning_effort": "xhigh"])["reasoning_effort"] as? String == "high"
+      && think(oss, ["reasoning_effort": "none"])["reasoning_effort"] as? String == "low" && kw(think(oss, ["reasoning_effort": "none"])) == nil,
+      "gpt-oss: clamped to low/medium/high, never off")
+check(think(ink, ["reasoning_effort": "minimal"])["reasoning_effort"] as? String == "minimal"
+      && think(ink, ["reasoning_effort": "none"])["reasoning_effort"] as? String == "none"
+      && think(ink, ["reasoning_effort": 0.5])["reasoning_effort"] as? Double == 0.5
+      && think(q38, ["reasoning_effort": "auto"])["reasoning_effort"] as? String == "auto", "Inkling: names pass; numbers and unknowns untouched")
+// The model's default effort fills in only when the request has none
+var q38Low = q38; q38Low.effort = "low"
+var q36Off2 = onOff36; q36Off2.effort = "none"
+check(think(q38Low, [:])["reasoning_effort"] as? String == "low" && think(q38Low, ["reasoning_effort": "high"])["reasoning_effort"] as? String == "xhigh"
+      && kw(think(q36Off2, [:])) == false && think(q38, [:]).isEmpty && think(Recipe(name: "x", startCommand: "", stopCommand: ""), ["reasoning_effort": "high"])["reasoning_effort"] as? String == "high",
+      "default effort only when unset; no default or no reasoning → untouched")
+check(Transform.thinkingLabel(q38Off) == "Off" && Transform.thinkingLabel(q36On) == "On" && Transform.thinkingLabel(think(q38, ["reasoning_effort": "high"])) == "X-High"
+      && Transform.thinkingLabel(["reasoning_effort": 0.5]) == "0.5" && Transform.thinkingLabel(["reasoning_effort": "none"]) == "Off"
+      && Transform.thinkingLabel([:]) == nil, "thinking label from the forwarded body")
 
 // SSE cost injection
 let line = Data(#"data: {"id":"1","choices":[],"usage":{"prompt_tokens":1000000,"completion_tokens":500000}}\#n"#.utf8)

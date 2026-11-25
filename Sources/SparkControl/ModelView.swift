@@ -337,6 +337,10 @@ struct ModelView: View {
             row("Reasoning", note: r.wrappedValue.isEmbedding && r.wrappedValue.hasReasoning ? "Embedding models don't produce reasoning; turn this off" : nil) {
                 Toggle("Reasoning", isOn: Binding { r.wrappedValue.hasReasoning } set: { r.wrappedValue.reasoning = $0 }).labelsHidden()
             }
+            if r.wrappedValue.hasReasoning {
+                Hairline()
+                row("Thinking Effort", sub: "For requests that don't set one.") { effortPicker(r) }
+            }
             Hairline()
             row("Image input") {
                 Toggle("Image input", isOn: Binding { r.wrappedValue.takesImages } set: {
@@ -443,6 +447,20 @@ struct ModelView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(12), style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: .corner(12), style: .continuous).strokeBorder(border))
+    }
+
+    /// The model's own default, Off where it can stop thinking, then the levels its template accepts.
+    private func effortPicker(_ r: Binding<Recipe>) -> some View {
+        let levels = r.wrappedValue.effortLevels ?? []
+        let offs = r.wrappedValue.ids.contains("gpt-oss") ? [] : ["none"]
+        var options = offs + levels.filter { $0 != "none" }
+        if let e = r.wrappedValue.effort, !options.contains(e) { options.append(e) } // a level the model no longer lists
+        return Picker("Thinking Effort", selection: r.effort) {
+            Text("Model Default").tag(String?.none)
+            ForEach(options, id: \.self) { Text(Transform.effortLabel($0)).tag(Optional($0)) }
+        }
+        .labelsHidden()
+        .fixedSize()
     }
 
     private func row(_ label: String, sub: String? = nil, note: String? = nil, @ViewBuilder _ trailing: () -> some View) -> some View {

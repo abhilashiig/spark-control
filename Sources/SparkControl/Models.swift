@@ -93,6 +93,8 @@ struct Recipe: Codable, Identifiable, Hashable {
     /// Whether it thinks before answering and accepts images. nil = guessed from its name and start command.
     var reasoning: Bool?
     var images: Bool?
+    /// Thinking effort for requests that don't ask for one ("none" = off). nil = the model's own default.
+    var effort: String?
     /// Strip the client's sampling fields so the engine uses the model's own defaults (its generation_config.json).
     var modelSampling = false
     /// The API model name, fixed once the model is added or first started so renaming it doesn't break clients.
@@ -110,7 +112,7 @@ struct Recipe: Codable, Identifiable, Hashable {
     mutating func freezeAPI() { if api == nil, !isBlank { api = apiID } }
 
     var ids: String { (name + " " + upstreamModel).lowercased() }
-    // ponytail: name heuristics for common Spark models; the toggles on the model's page override them.
+
     /// Context the model is served with, when the app can tell (vLLM and TensorFold models).
     var contextWindow: Int? {
         if let n = VLLM.context(of: startCommand) { return n }
@@ -122,6 +124,17 @@ struct Recipe: Codable, Identifiable, Hashable {
         }
     }
 
+    /// Effort names the model's chat template accepts, lowest first; nil = it only switches thinking on or off.
+    /// Qwen3.8's template (and Arete's, a fine-tune of it) raises on any other name and defaults to xhigh;
+    /// Inkling's maps every standard name to its 0–0.99 scale.
+    var effortLevels: [String]? {
+        if ids.contains("gpt-oss") { return ["low", "medium", "high"] }
+        if ids.contains(#/qwen3\.8|arete/#) { return ["low", "medium", "xhigh"] }
+        if ids.contains("inkling") { return Transform.efforts }
+        return nil
+    }
+
+    // ponytail: name heuristics for common Spark models; the toggles on the model's page override them.
     var hasReasoning: Bool {
         reasoning ?? (startCommand.contains("--reasoning-parser") || ids.contains(#/qwen3|nemotron|deepseek|gpt-oss|gemma-?\s?4|glm|kimi|think|laguna/#))
     }
@@ -436,6 +449,7 @@ extension Recipe {
         backendKey = try c.decodeIfPresent(String.self, forKey: .backendKey)
         reasoning = try c.decodeIfPresent(Bool.self, forKey: .reasoning)
         images = try c.decodeIfPresent(Bool.self, forKey: .images)
+        effort = try c.decodeIfPresent(String.self, forKey: .effort)
         modelSampling = try c.value(.modelSampling, or: d.modelSampling)
         api = try c.decodeIfPresent(String.self, forKey: .api)
     }

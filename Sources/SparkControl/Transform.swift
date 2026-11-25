@@ -51,37 +51,63 @@ enum Transform {
         return changed
     }
 
-    /// A client's thinking level, from `reasoning_effort` (Pi) or `reasoning.effort`/`enabled` (OpenRouter's SDK, Kilo).
-    /// gpt-oss takes low/medium/high. The Spark's other reasoning models can only switch thinking on or off through
-    /// their chat template, and vLLM rejects an effort it doesn't know, so it becomes `enable_thinking`.
+    /// Standard effort names, lowest first.
+    static let efforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+    static func effortLabel(_ e: String) -> String {
+        switch e { case "none": "Off"; case "xhigh": "X-High"; default: e.capitalized }
+    }
+
+    /// The thinking level a client asked for, from `reasoning_effort` (Pi) or `reasoning.effort`/`enabled`
+    /// (OpenRouter's SDK, Kilo), else the model's default effort, turned into something its template accepts:
+    /// a name from `effortLevels` (the nearest one at or above the ask), or `enable_thinking` for on/off models
+    /// and for off where the levels have no "none". Templates raise on names they don't know, so nothing else
+    /// is sent. A numeric or unknown effort is the client's own business and passes untouched.
     static func thinking(_ body: inout [String: Any], recipe: Recipe) -> Set<String> {
+        guard recipe.hasReasoning else { return [] }
         let r = body["reasoning"] as? [String: Any]
-        guard recipe.hasReasoning,
-              let effort = (body["reasoning_effort"] as? String ?? r?["effort"] as? String
-                            ?? (r?["enabled"] as? Bool == false ? "none" : nil))?.lowercased()
+        if body["reasoning_effort"] != nil, !(body["reasoning_effort"] is String) { return [] }
+        let asked = body["reasoning_effort"] as? String ?? r?["effort"] as? String
+            ?? (r?["enabled"] as? Bool == false ? "none" : nil)
+        guard let e = (asked ?? recipe.effort)?.lowercased(),
+              let rank = efforts.firstIndex(of: e == "off" ? "none" : e)
         else { return [] }
-        let off = ["none", "off", "minimal"].contains(effort)
-        if recipe.ids.contains("gpt-oss") {
-            let level = off || effort == "low" ? "low" : effort == "medium" ? "medium" : "high"
-            guard body["reasoning_effort"] as? String != level else { return [] }
-            body["reasoning_effort"] = level
-            return ["reasoning_effort"]
+
+        var level: String? // nil = thinking off (or on, for on/off models) through enable_thinking
+        var thinks = rank > 1 // on/off models: minimal is as good as off
+        if let levels = recipe.effortLevels {
+            let rankOf = { efforts.firstIndex(of: $0) ?? 0 }
+            let canTurnOff = !recipe.ids.contains("gpt-oss")
+            if levels.contains(efforts[rank]) { level = efforts[rank] }
+            else if rank == 0 && canTurnOff { level = nil }
+            else { level = levels.first { rankOf($0) >= rank } ?? levels.last }
+            thinks = level != nil
         }
+
         var changed = Set<String>()
+        if let level {
+            if body["reasoning_effort"] as? String != level { body["reasoning_effort"] = level; changed.insert("reasoning_effort") }
+            return changed
+        }
         if body.removeValue(forKey: "reasoning_effort") != nil { changed.insert("reasoning_effort") }
         var kwargs = body["chat_template_kwargs"] as? [String: Any] ?? [:]
         if kwargs["enable_thinking"] == nil { // the client's own switch wins
-            kwargs["enable_thinking"] = !off
+            kwargs["enable_thinking"] = thinks
             body["chat_template_kwargs"] = kwargs
             changed.insert("chat_template_kwargs")
         }
         return changed
     }
 
-    /// What a forwarded body asks of thinking: "Off"/"On", gpt-oss's level, or nil when it leaves the model's default.
+    /// What a forwarded body asks of thinking: Off/On, an effort level, or nil when it leaves the model's default.
     static func thinkingLabel(_ body: [String: Any]?) -> String? {
-        if let on = (body?["chat_template_kwargs"] as? [String: Any])?["enable_thinking"] as? Bool { return on ? "On" : "Off" }
-        return (body?["reasoning_effort"] as? String)?.capitalized
+        let on = (body?["chat_template_kwargs"] as? [String: Any])?["enable_thinking"] as? Bool
+        if on == false { return "Off" }
+        switch body?["reasoning_effort"] {
+        case let e as String: return effortLabel(e)
+        case let n as NSNumber where CFGetTypeID(n) != CFBooleanGetTypeID(): return n.stringValue
+        default: return on == true ? "On" : nil
+        }
     }
 
     /// JSONSerialization prints 0.7 as 0.69999999999999996. Swap floats for decimals of their

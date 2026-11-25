@@ -6,11 +6,12 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ## [Unreleased]
 
 ### Fixed
-- Thinking level in Pi and Kilo Code now works: off (or minimal) turns the model's thinking off, any other level turns it on. gpt-oss gets low, medium or high. Pi's config is updated on launch.
+- Thinking level in Pi and Kilo Code now reaches the model. Qwen3.8 models (and Arete) get their own low, medium or xhigh effort instead of always thinking at xhigh, Inkling gets every level, gpt-oss gets low, medium or high, and other models switch thinking on or off. Pi's config is updated on launch.
 - Kilo Code, Pi and Hermes now know each model's context window, read from its context setting. Custom models whose window can't be read get 250K.
 
 ### Added
-- Requests shows a thinking badge next to the model (Off, On, or gpt-oss's level) as the gateway sent it. It turns amber when thinking was off but the model reasoned anyway.
+- Thinking Effort on a reasoning model's page: the effort used when a request doesn't set one, such as Medium or Low for Qwen3.8 models that think too long, or Off.
+- Requests shows a thinking badge next to the model (Off, On, or the effort level) as the gateway sent it. It turns amber when thinking was off but the model reasoned anyway.
 
 ### Changed
 - Shorter copy across the app: fewer captions and explanations, terser tooltips and buttons (Send Test, Open Config, Restore). API Access drops its intro, section notes and the Use in Snippet action.

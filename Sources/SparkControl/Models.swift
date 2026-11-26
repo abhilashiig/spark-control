@@ -221,6 +221,8 @@ struct Config: Codable, Equatable {
     var lastActive: UUID?
     /// Keep the Spark's GPU clock capped (see GPUCap). Off unless the user turns it on.
     var gpuCap = false
+    /// Optional TP-Link Tapo smart plug on the LAN for power-cycling the DGX Spark on.
+    var tapo = TapoPlugConfig()
 
     static let seed = Config(device: nil, recipes: [
         Recipe(name: "Qwen3.8 Flash", startCommand: "qwen-start", stopCommand: "qwen-stop"),
@@ -515,5 +517,6 @@ extension Config {
         gateway = try c.value(.gateway, or: GatewaySettings())
         lastActive = try c.decodeIfPresent(UUID.self, forKey: .lastActive)
         gpuCap = try c.value(.gpuCap, or: false)
+        tapo = try c.value(.tapo, or: TapoPlugConfig())
     }
 }

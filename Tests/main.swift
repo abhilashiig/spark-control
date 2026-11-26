@@ -846,4 +846,22 @@ check(bash("exec </dev/null; set -- off\n" + GPUCap.script).1.contains("__OK__")
 check(!bash("exec </dev/null; set -- on\n" + GPUCap.script).1.contains("__NEEDS_SUDO__"), "capping checks nvidia-smi before sudo")
 check(GPUCap.unit.contains("-lgc 0,\(GPUCap.mhz)") && GPUCap.unit.contains("-rgc"), "unit caps on start, resets on stop")
 
+// Tapo TPAP (SPAKE2+) crypto primitives & Config persistence
+check(TapoP256.isOnCurve(TapoP256.G) && TapoP256.isOnCurve(TapoP256.M) && TapoP256.isOnCurve(TapoP256.N), "P-256 generator points on curve")
+check(TapoP256.mul(TapoP256.n, TapoP256.G) == nil, "n * G == identity")
+check(TapoP256.add(TapoP256.mul(U256(12345, 0, 0, 0), TapoP256.M), TapoP256.mul(U256(67890, 0, 0, 0), TapoP256.M))
+      == TapoP256.mul(U256(12345 + 67890, 0, 0, 0), TapoP256.M), "P-256 scalar multiplication linearity")
+let tapoKey = Data([0x2b,0x7e,0x15,0x16,0x28,0xae,0xd2,0xa6,0xab,0xf7,0x15,0x88,0x09,0xcf,0x4f,0x3c])
+let tapoNonce = Data([0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1a,0x1b])
+let tapoMsg = Data(#"{"method":"set_device_info","params":{"device_on":true}}"#.utf8)
+let tapoCT = try! TapoCrypto.aesCCMEncrypt(key: tapoKey, nonce: tapoNonce, plaintext: tapoMsg, tagLength: 16)
+check((try? TapoCrypto.aesCCMDecrypt(key: tapoKey, nonce: tapoNonce, ciphertextAndTag: tapoCT, tagLength: 16)) == tapoMsg, "AES-128-CCM round-trip")
+// Regression test: Data slice with non-zero startIndex (like raw.dropFirst(4) from /ds responses) must not crash.
+let tapoFramed = Data([0, 0, 0, 1]) + tapoCT
+check((try? TapoCrypto.aesCCMDecrypt(key: tapoKey, nonce: tapoNonce, ciphertextAndTag: tapoFramed.dropFirst(4), tagLength: 16)) == tapoMsg, "AES-128-CCM decrypts non-zero-based Data slices")
+let tapoCMAC = try! TapoCrypto.aesCMAC(key: tapoKey, message: Data())
+check(tapoCMAC.map { String(format: "%02x", $0) }.joined() == "bb1d6929e95937287fa37d129b756746", "AES-CMAC RFC 4493 empty vector")
+let tapoCfg = try! JSONDecoder().decode(Config.self, from: Data(#"{"recipes":[]}"#.utf8))
+check(!tapoCfg.tapo.enabled && tapoCfg.tapo.powerCycleDelaySeconds == 10, "old configs default TapoPlugConfig cleanly")
+
 print("All checks passed")

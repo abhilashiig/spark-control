@@ -111,6 +111,14 @@ final class AppState {
     var gatewayError: String?
     /// Why the GPU clock cap couldn't be set or removed, shown in Settings until it works.
     var gpuCapError: String?
+    /// Live state of the configured Tapo smart plug, when last read.
+    var tapoStatus: TapoPlugStatus?
+    var tapoPhase: TapoPowerPhase = .idle
+    var tapoDiscovered: [TapoDiscoveredDevice] = []
+    var tapoScanning = false
+    /// Bumped when the Keychain password is saved or cleared so views re-check `tapoConfigured`.
+    var tapoKeychainVersion = 0
+    @ObservationIgnored private var tapoTask: Task<Void, Never>?
     var showSetup: Bool
     var launchAtLogin = AppState.restoreLaunchAtLogin() {
         didSet {
@@ -768,6 +776,183 @@ final class AppState {
         external = nil
         offline = true
         return nil
+    }
+
+    // MARK: Tapo Smart Plug
+
+    var tapoHasPassword: Bool {
+        _ = tapoKeychainVersion
+        return TapoKeychain.hasPassword(account: config.tapo.email)
+    }
+
+    var tapoConfigured: Bool {
+        config.tapo.enabled
+            && !config.tapo.host.trimmingCharacters(in: .whitespaces).isEmpty
+            && !config.tapo.email.trimmingCharacters(in: .whitespaces).isEmpty
+            && tapoHasPassword
+    }
+
+    func saveTapoPassword(_ password: String) {
+        if TapoKeychain.savePassword(password, account: config.tapo.email) {
+            tapoKeychainVersion += 1
+        }
+    }
+
+    func clearTapoPassword() {
+        TapoKeychain.deletePassword(account: config.tapo.email)
+        tapoKeychainVersion += 1
+    }
+
+    func scanTapoPlugs() async {
+        tapoScanning = true
+        defer { tapoScanning = false }
+        let extra = config.tapo.host.trimmingCharacters(in: .whitespaces)
+        let found = await TapoDiscovery.scan(extraHost: extra.isEmpty ? nil : extra)
+        tapoDiscovered = found
+
+        // Auto-select when exactly one smart plug is found and no host is set yet.
+        if extra.isEmpty, found.count == 1, let only = found.first {
+            config.tapo.host = only.ip
+            config.tapo.mac = only.mac
+            config.tapo.model = only.model
+        } else if !config.tapo.mac.isEmpty,
+                  let matched = found.first(where: { Self.normMAC($0.mac) == Self.normMAC(config.tapo.mac) }),
+                  matched.ip != config.tapo.host {
+            // Auto-update IP if DHCP reassigned the saved plug.
+            config.tapo.host = matched.ip
+            config.tapo.model = matched.model
+            event("Updated Tapo plug IP to \(matched.ip) (matched MAC \(matched.mac))")
+        }
+    }
+
+    private static func normMAC(_ mac: String) -> String {
+        mac.replacingOccurrences(of: "-", with: "").replacingOccurrences(of: ":", with: "").uppercased()
+    }
+
+    private func makeTapoClient(hostOverride: String? = nil) throws -> TapoTPAPClient {
+        let host = (hostOverride ?? config.tapo.host).trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = config.tapo.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty, !email.isEmpty else { throw TapoError.notConfigured }
+        guard let pw = TapoKeychain.loadPassword(account: email), !pw.isEmpty else { throw TapoError.missingPassword }
+        return TapoTPAPClient(host: host, username: email, password: pw)
+    }
+
+    /// Runs a Tapo operation; if it fails to connect and we know the plug's MAC, re-scans the LAN to handle DHCP IP changes and retries once.
+    private func withTapoClient<T>(_ op: (TapoTPAPClient) async throws -> T) async throws -> T {
+        let client = try makeTapoClient()
+        do {
+            return try await op(client)
+        } catch {
+            guard !config.tapo.mac.isEmpty else { throw error }
+            let found = await TapoDiscovery.scan(extraHost: nil)
+            if let matched = found.first(where: { Self.normMAC($0.mac) == Self.normMAC(config.tapo.mac) }),
+               matched.ip != config.tapo.host {
+                config.tapo.host = matched.ip
+                event("Smart plug moved to \(matched.ip) — updated automatically")
+                let retryClient = try makeTapoClient(hostOverride: matched.ip)
+                return try await op(retryClient)
+            }
+            throw error
+        }
+    }
+
+    @discardableResult
+    func refreshTapo() async -> String? {
+        do {
+            let status = try await withTapoClient { try await $0.getStatus() }
+            tapoStatus = status
+            if case .failed = tapoPhase { tapoPhase = .idle }
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    func setTapoPower(_ on: Bool) async -> String? {
+        guard !tapoPhase.isBusy else { return "Smart plug is busy." }
+        tapoPhase = on ? .turningOn : .turningOff
+        do {
+            try await withTapoClient { client in
+                try await client.setPower(on)
+                tapoStatus = try? await client.getStatus()
+            }
+            tapoPhase = .idle
+            event("Turned smart plug \(on ? "ON" : "OFF") (\(config.tapo.host))")
+            return nil
+        } catch {
+            let msg = error.localizedDescription
+            tapoPhase = .failed(msg)
+            event("Smart plug error: \(msg)")
+            return msg
+        }
+    }
+
+    /// Powers on the DGX Spark via the Tapo smart plug:
+    /// 1. Checks current plug state.
+    /// 2. If currently ON, turns it OFF and waits `powerCycleDelaySeconds` (default 10s).
+    /// 3. Turns the plug ON so the DGX Spark boots automatically on AC restore.
+    /// 4. Polls until the Spark answers over SSH (up to 3 minutes) and notifies.
+    func powerOnSparkViaTapo() {
+        guard !tapoPhase.isBusy else { return }
+        tapoTask?.cancel()
+        tapoTask = Task { @MainActor in
+            do {
+                tapoPhase = .checking
+                let (client, current) = try await withTapoClient { c in
+                    (c, try await c.getStatus())
+                }
+                tapoStatus = current
+
+                if current.isOn {
+                    let delay = max(3, min(60, config.tapo.powerCycleDelaySeconds))
+                    tapoPhase = .turningOff
+                    event("Power-cycling Spark: turning smart plug OFF for \(delay)s")
+                    try await client.setPower(false)
+                    tapoStatus = TapoPlugStatus(isOn: false, model: current.model, nickname: current.nickname,
+                                                fwVer: current.fwVer, hwVer: current.hwVer, onTime: 0,
+                                                rssi: current.rssi, currentPowerWatts: 0)
+                    for remaining in stride(from: delay, through: 1, by: -1) {
+                        guard !Task.isCancelled else { tapoPhase = .idle; return }
+                        tapoPhase = .waiting(remaining: remaining)
+                        try? await Task.sleep(for: .seconds(1))
+                    }
+                } else {
+                    event("Smart plug is already OFF — turning it ON to boot the Spark")
+                }
+
+                guard !Task.isCancelled else { tapoPhase = .idle; return }
+                tapoPhase = .turningOn
+                try await client.setPower(true)
+                tapoStatus = try? await client.getStatus()
+                event("Smart plug turned ON — waiting for DGX Spark to boot")
+                tapoPhase = .waitingForSpark
+
+                for _ in 0..<60 {
+                    guard !Task.isCancelled else { tapoPhase = .idle; return }
+                    try? await Task.sleep(for: .seconds(3))
+                    await selectRoute()
+                    await refresh()
+                    if !offline, route != nil {
+                        tapoPhase = .idle
+                        event("DGX Spark is online")
+                        Notify.post("DGX Spark is online", "Booted via Tapo smart plug.")
+                        return
+                    }
+                }
+                tapoPhase = .idle
+            } catch {
+                let msg = error.localizedDescription
+                tapoPhase = .failed(msg)
+                event("Smart plug power-on failed: \(msg)")
+            }
+        }
+    }
+
+    func cancelTapoPowerCycle() {
+        tapoTask?.cancel()
+        tapoTask = nil
+        tapoPhase = .idle
     }
 
     /// Makes the Spark match the GPU clock cap setting: installs the cap's boot service when on, removes it when off.

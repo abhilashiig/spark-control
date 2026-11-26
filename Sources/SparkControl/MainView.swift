@@ -136,9 +136,10 @@ private struct Sidebar: View {
             }
             .scrollIndicators(.never)
             Spacer(minLength: 16)
+            TapoPowerBanner().padding(.bottom, 6)
             HStack(spacing: 6) {
                 MemoryMeter()
-                ShutdownButton().frame(width: 34, height: 34)
+                SparkPowerButton().frame(width: 34, height: 34)
             }
         }
         .padding(.horizontal, 12)

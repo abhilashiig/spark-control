@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Added
+- Settings → Smart Plug (Optional): remote power-on for your DGX Spark using a local Wi-Fi smart plug (currently supports TP-Link Tapo/Kasa plugs on TPAP firmware with automatic LAN discovery, MAC-based DHCP recovery, macOS Keychain password storage, live status/wattage, and one-click Power On Spark from the sidebar and menu bar).
+
 ### Changed
 - The request detail on the Requests page now shows the conversation as readable messages (with the parameters and tool names above them); long messages collapse with Show All, and the raw body moved to a JSON tab that wraps instead of scrolling sideways.
 - Request bodies up to 1 MB are kept instead of 64 KB, so long agent requests no longer show up as one unformatted line. Older requests keep their stats but drop their body once ~4 MB is in use.

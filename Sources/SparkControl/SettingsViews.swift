@@ -4,6 +4,7 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             Tab("Spark", systemImage: "server.rack") { DeviceSettings() }
+            Tab("Smart Plug", systemImage: "powerplug") { TapoSettingsView() }
             Tab("API", systemImage: "network") { GatewaySettingsView() }
             Tab("General", systemImage: "gearshape") { GeneralSettings() }
         }

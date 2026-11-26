@@ -60,6 +60,23 @@ struct MenuBarView: View {
 
             Divider().padding(.horizontal, 10).padding(.vertical, 5)
 
+            if state.tapoConfigured && (state.route == nil || state.tapoPhase.isBusy) {
+                MenuRow(action: {
+                    if state.tapoPhase.isBusy {
+                        state.cancelTapoPowerCycle()
+                    } else {
+                        state.powerOnSparkViaTapo()
+                    }
+                }) {
+                    IconTile(symbol: state.tapoPhase.isBusy ? "xmark" : "power", tint: state.tapoPhase.isBusy ? .orange : Color.running, size: 22)
+                    Text(state.tapoPhase.isBusy ? state.tapoPhase.label : "Power On Spark")
+                    Spacer()
+                    if state.tapoPhase.isBusy {
+                        Text("Cancel").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             ForEach(state.runningRecipes) { r in
                 MenuRow(action: { state.stop(r) }) {
                     IconTile(symbol: "stop.fill", tint: .red, size: 22)

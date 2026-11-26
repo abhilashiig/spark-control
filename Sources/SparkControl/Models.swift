@@ -195,8 +195,9 @@ extension Recipe {
     /// The model ID a TensorFold or vLLM start command serves under. The backend model ID must match it, or a start waits
     /// out its whole timeout for a name the server never lists (a recipe switched from vLLM to TensorFold kept the old one).
     var servedName: String? {
-        let flag = tensorfold != nil ? "--name" : vllm != nil ? "--served-model-name" : nil
-        guard let flag, let m = startCommand.firstMatch(of: try! Regex("(?:^|\\s)\(flag)\\s+\"?([^\\s\"]+)")),
+        // With the adapter on, the adapter's name: requests to the base name skip it.
+        let flag = tensorfold != nil ? "--name" : vllm == nil ? nil : startCommand.contains("--lora-modules ") ? "--lora-modules" : "--served-model-name"
+        guard let flag, let m = startCommand.firstMatch(of: try! Regex("(?:^|\\s)\(flag)\\s+\"?([^\\s\"=]+)")),
               let id = m.output[1].substring else { return nil }
         return String(id)
     }

@@ -19,6 +19,9 @@ enum VLLM {
         var repo: TensorFold.Repo
         /// A separate MTP drafter (Gemma 4's assistant checkpoints); nil drafts from the model's own MTP head.
         var drafter: TensorFold.Repo?
+        /// A LoRA adapter the page can switch on (pinned revision). vLLM serves it as a second model named
+        /// `<served>-super`, which the gateway then sends requests to.
+        var adapter: TensorFold.Repo?
         /// Its own vLLM image, for a model no vLLM release serves yet: Download pulls it, Delete removes it.
         var image: String?
         /// Drafted tokens per step that measured fastest on a Spark, or 2 where nobody has published a sweep.
@@ -48,7 +51,7 @@ enum VLLM {
 
         /// Download records live in TensorFold's data folder, so they get a prefix no TensorFold model has.
         var key: String { "vllm-" + id }
-        var downloads: [TensorFold.Repo] { [repo] + (drafter.map { [$0] } ?? []) }
+        var downloads: [TensorFold.Repo] { [repo] + (drafter.map { [$0] } ?? []) + (adapter.map { [$0] } ?? []) }
         var runImage: String { image ?? VLLM.image }
     }
 
@@ -63,8 +66,10 @@ enum VLLM {
               note: "NVIDIA NVFP4. MTP ×3 measured about 100 tok/s single-stream on a GB10, +45% over no drafts."),
         Model(id: "qwen3.8-27b", name: "Qwen3.8 27B",
               repo: .init(id: "nvidia/Qwen3.8-27B-NVFP4", revision: "482ca0f3832238542f8f5295dde86b5f22711d80"),
+              // Rank 96, trained on the bf16 base with RL inside pi, Hermes Agent and OpenCode.
+              adapter: .init(id: "harness-hub/Qwen3.8-27B-super-adapter", revision: "3358a71529ce56aba0095addd6a60a66d7c4228b"),
               parsers: qwenParsers,
-              note: "NVIDIA NVFP4, the model NVIDIA's Spark vLLM playbook picks for 128 GB. Dense, so slower per token than the MoE models."),
+              note: "NVIDIA NVFP4, the model NVIDIA's Spark vLLM playbook picks for 128 GB. Dense, so slower per token than the MoE models. Includes Harness Hub's coding-agent adapter, off until you turn it on."),
         // llm-compressor mixed precision (NVFP4 MLPs, FP8 attention and a calibrated FP8 KV cache, read from
         // config.json), so no --quantization or --kv-cache-dtype. Gated with auto-approval on Hugging Face.
         Model(id: "qwen3.8-27b-uncensored", name: "Qwen3.8 27B Uncensored",
@@ -257,6 +262,16 @@ enum VLLM {
         guard n > 0 else { return plain }
         let draft = m.drafter.map { #""model":"\#($0.id)","# } ?? ""
         return plain + #" --speculative-config '{\#(m.spec),\#(draft)"num_speculative_tokens":\#(n)}'"#
+    }
+
+    static func adapterOn(_ command: String) -> Bool { command.contains(" --enable-lora ") }
+
+    /// Serves the model's adapter beside the base model, from its pinned snapshot (the server runs offline).
+    /// 128 is vLLM's next allowed --max-lora-rank above the adapter's 96.
+    static func withAdapter(_ command: String, _ on: Bool, model m: Model) -> String {
+        let plain = command.replacing(try! Regex(" --enable-lora --max-lora-rank [0-9]+ --lora-modules [^ ]+"), with: "")
+        guard on, let a = m.adapter, let rev = a.revision, let name = flagValue("--served-model-name", in: plain) else { return plain }
+        return plain + " --enable-lora --max-lora-rank 128 --lora-modules \(name)-super=/root/.cache/huggingface/hub/\(a.cacheName)/snapshots/\(rev)"
     }
 
     private static func flagValue(_ flag: String, in command: String) -> String? {

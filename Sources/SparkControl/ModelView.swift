@@ -668,6 +668,17 @@ private struct VLLMSection: View {
             } label: {
                 Text("MTP drafts")
             }
+            if let a = model.adapter {
+                Toggle(isOn: Binding { VLLM.adapterOn(recipe.startCommand) } set: {
+                    recipe.startCommand = VLLM.withAdapter(recipe.startCommand, $0, model: model)
+                }) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Coding agent adapter")
+                        Text(a.id).font(.system(size: 12)).foregroundStyle(Color.text2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
         }
     }
 }

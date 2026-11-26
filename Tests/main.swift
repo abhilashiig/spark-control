@@ -385,6 +385,17 @@ let vqOld = vqStart.replacingOccurrences(of: " --enable-prompt-tokens-details", 
 check(VLLM.synced(vqOld, model: vq.id).components(separatedBy: "--enable-prompt-tokens-details").count == 2
       && VLLM.synced(vqStart, model: vq.id).components(separatedBy: "--enable-prompt-tokens-details").count == 2,
       "vLLM commands report cached tokens, saved ones gain the flag once")
+// vLLM: the 27B's coding-agent adapter toggles on and off, and the backend model ID follows it
+let v27 = VLLM.model("qwen3.8-27b")!
+let v27Start = VLLM.startCommand(v27, port: 18302, name: "qwen3-8-27b")
+let v27On = VLLM.withAdapter(v27Start, true, model: v27)
+var v27Recipe = Recipe(name: "Qwen3.8 27B", startCommand: v27On, stopCommand: ""); v27Recipe.vllm = v27.id
+check(!VLLM.adapterOn(v27Start) && VLLM.adapterOn(v27On) && VLLM.withAdapter(v27On, false, model: v27) == v27Start
+      && VLLM.withAdapter(v27On, true, model: v27) == v27On && v27.downloads.count == 2
+      && v27On.contains("--max-lora-rank 128 --lora-modules qwen3-8-27b-super=/root/.cache/huggingface/hub/models--harness-hub--Qwen3.8-27B-super-adapter/snapshots/3358a71529ce56aba0095addd6a60a66d7c4228b")
+      && v27Recipe.servedName == "qwen3-8-27b-super" && VLLM.drafts(of: v27On) == 2
+      && VLLM.withAdapter(vqStart, true, model: vq) == vqStart,
+      "the 27B's adapter switches on and off once, is served as <name>-super, and models without one ignore it")
 // vLLM: request limit, fixed KV cache (skips the memory profiling that fails on the GB10), and saved commands kept in step
 let vu = VLLM.model("qwen3.8-27b-uncensored")!
 let vuStart = VLLM.startCommand(vu, port: 18301, name: "u")

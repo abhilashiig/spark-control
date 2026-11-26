@@ -40,7 +40,7 @@ struct TapoSettingsView: View {
                     Text("Turn your DGX Spark on from the sidebar or menu bar while it's shut down.")
                 }
             } footer: {
-                Text("How it works: DGX Spark boots automatically when AC power is restored. When you click Power On Spark, Spark Control briefly turns the smart plug off (if it isn't already off) and back on.")
+                Text("How it works: DGX Spark boots automatically when AC power is restored. Spark Control talks to the plug directly on your local Wi-Fi (or remotely only if another always-on device at home runs a Tailscale subnet router). When you're away without local access to the plug, Power On Spark is hidden automatically.")
             }
 
             if state.config.tapo.enabled {
@@ -53,10 +53,21 @@ struct TapoSettingsView: View {
                     HStack(spacing: 10) {
                         if !state.config.tapo.host.isEmpty {
                             Image(systemName: "powerplug.fill")
-                                .foregroundStyle(Color.running)
+                                .foregroundStyle(state.tapoConfigured ? (state.tapoReachable ? Color.running : .orange) : Color.running)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(state.config.tapo.model.isEmpty ? "Smart Plug" : state.config.tapo.model)
-                                    .fontWeight(.medium)
+                                HStack(spacing: 6) {
+                                    Text(state.config.tapo.model.isEmpty ? "Smart Plug" : state.config.tapo.model)
+                                        .fontWeight(.medium)
+                                    if state.tapoConfigured {
+                                        Text(state.tapoReachable ? "Reachable" : "Not reachable here")
+                                            .font(.caption2.weight(.semibold))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 1)
+                                            .background((state.tapoReachable ? Color.running : Color.orange).opacity(0.14),
+                                                        in: RoundedRectangle(cornerRadius: .corner(999)))
+                                            .foregroundStyle(state.tapoReachable ? Color.running : .orange)
+                                    }
+                                }
                                 Text([state.config.tapo.host, state.config.tapo.mac.isEmpty ? nil : state.config.tapo.mac]
                                     .compactMap { $0 }.joined(separator: " · "))
                                     .font(.caption.monospaced())
@@ -122,6 +133,12 @@ struct TapoSettingsView: View {
                         Text("No smart plugs responded on your local network. Check System Settings → Privacy & Security → Local Network for Spark Control, or enter the IP manually below.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+
+                    if state.tapoConfigured && !state.tapoReachable {
+                        Label("Smart plug isn't reachable from this network. Local network access (same Wi-Fi, or a Tailscale subnet router at home) is required — Power On Spark is hidden while you're away.", systemImage: "wifi.exclamationmark")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
                     }
 
                     DisclosureGroup("Enter IP address manually", isExpanded: $showManualIP) {
@@ -201,6 +218,10 @@ struct TapoSettingsView: View {
                         in: 3...60,
                         step: 1
                     )
+                    Toggle(isOn: tapo.autoPowerOffOnShutdown) {
+                        Text("Turn off plug 10s after Spark shuts down")
+                        Text("Waits until this Mac loses connection to the Spark, then cuts plug power 10 seconds later.")
+                    }
 
                     if let s = state.tapoStatus {
                         HStack(spacing: 10) {
@@ -300,6 +321,8 @@ struct TapoSettingsView: View {
                     await state.scanTapoPlugs()
                     didScan = true
                 }
+            } else if state.tapoConfigured {
+                Task { await state.checkTapoReachable() }
             }
         }
         .onChange(of: state.config.tapo.enabled) { _, on in
@@ -416,7 +439,7 @@ struct SparkPowerButton: View {
     @State private var error: String?
 
     private var canPowerOn: Bool {
-        state.sshTarget == nil && state.tapoConfigured
+        state.sshTarget == nil && state.tapoCanPowerOn
     }
 
     var body: some View {
@@ -455,9 +478,11 @@ struct SparkPowerButton: View {
                 }
             }
         } message: {
-            Text(state.tapoConfigured
-                 ? "Every running model is stopped first. You can power the Spark back on later using your smart plug."
-                 : "Every running model is stopped first. You'll need to power the Spark back on by hand.")
+            Text(state.tapoCanPowerOn && state.config.tapo.autoPowerOffOnShutdown
+                 ? "Every running model is stopped first. Once the Spark disconnects, the smart plug will turn off 10 seconds later."
+                 : state.tapoConfigured
+                     ? "Every running model is stopped first. You can power the Spark back on later using your smart plug."
+                     : "Every running model is stopped first. You'll need to power the Spark back on by hand.")
         }
         .sheet(isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             SudoPasswordSheet(title: "Shut Down Spark", button: "Shut Down", role: .destructive, target: state.sshTarget ?? "", error: error) {

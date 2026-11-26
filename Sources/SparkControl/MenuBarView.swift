@@ -60,7 +60,7 @@ struct MenuBarView: View {
 
             Divider().padding(.horizontal, 10).padding(.vertical, 5)
 
-            if state.tapoConfigured && (state.route == nil || state.tapoPhase.isBusy) {
+            if (state.tapoCanPowerOn && state.route == nil) || state.tapoPhase.isBusy {
                 MenuRow(action: {
                     if state.tapoPhase.isBusy {
                         state.cancelTapoPowerCycle()

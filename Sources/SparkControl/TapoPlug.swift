@@ -14,14 +14,17 @@ struct TapoPlugConfig: Codable, Equatable {
     var email = ""
     /// Seconds to keep the plug powered OFF before turning it back ON when power-cycling the DGX Spark.
     var powerCycleDelaySeconds = 10
+    /// Automatically turn the smart plug OFF 10 seconds after the Spark disconnects following a shutdown from the app.
+    var autoPowerOffOnShutdown = true
 
-    init(enabled: Bool = false, host: String = "", mac: String = "", model: String = "", email: String = "", powerCycleDelaySeconds: Int = 10) {
+    init(enabled: Bool = false, host: String = "", mac: String = "", model: String = "", email: String = "", powerCycleDelaySeconds: Int = 10, autoPowerOffOnShutdown: Bool = true) {
         self.enabled = enabled
         self.host = host
         self.mac = mac
         self.model = model
         self.email = email
         self.powerCycleDelaySeconds = powerCycleDelaySeconds
+        self.autoPowerOffOnShutdown = autoPowerOffOnShutdown
     }
 
     init(from decoder: Decoder) throws {
@@ -32,6 +35,7 @@ struct TapoPlugConfig: Codable, Equatable {
         model = try c.decodeIfPresent(String.self, forKey: .model) ?? ""
         email = try c.decodeIfPresent(String.self, forKey: .email) ?? ""
         powerCycleDelaySeconds = try c.decodeIfPresent(Int.self, forKey: .powerCycleDelaySeconds) ?? 10
+        autoPowerOffOnShutdown = try c.decodeIfPresent(Bool.self, forKey: .autoPowerOffOnShutdown) ?? true
     }
 }
 
@@ -64,11 +68,13 @@ enum TapoPowerPhase: Equatable {
     case waiting(remaining: Int)
     case turningOn
     case waitingForSpark
+    case waitingForShutdown
+    case cuttingPower(remaining: Int)
     case failed(String)
 
     var isBusy: Bool {
         switch self {
-        case .checking, .turningOff, .waiting, .turningOn, .waitingForSpark: return true
+        case .checking, .turningOff, .waiting, .turningOn, .waitingForSpark, .waitingForShutdown, .cuttingPower: return true
         case .idle, .failed: return false
         }
     }
@@ -81,6 +87,8 @@ enum TapoPowerPhase: Equatable {
         case .waiting(let s): return "Off · waiting \(s)s…"
         case .turningOn: return "Turning plug on…"
         case .waitingForSpark: return "Plug on · booting Spark…"
+        case .waitingForShutdown: return "Waiting for Spark to shut down…"
+        case .cuttingPower(let s): return "Spark off · cutting plug in \(s)s…"
         case .failed(let msg): return msg
         }
     }

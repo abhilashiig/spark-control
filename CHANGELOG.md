@@ -6,7 +6,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ## [Unreleased]
 
 ### Added
-- Settings → Smart Plug (Optional): remote power-on for your DGX Spark using a local Wi-Fi smart plug (currently supports TP-Link Tapo/Kasa plugs on TPAP firmware with automatic LAN discovery, MAC-based DHCP recovery, macOS Keychain password storage, live status/wattage, and one-click Power On Spark from the sidebar and menu bar).
+- Settings → Smart Plug (Optional): remote power-on for your DGX Spark using a local Wi-Fi smart plug (currently supports TP-Link Tapo/Kasa plugs on TPAP firmware with automatic LAN discovery, MAC-based DHCP recovery, macOS Keychain password storage, live reachability gating so Power On Spark is hidden when away without local access, running-Spark safety guard on manual Turn Off, automatic plug power-off 10 seconds after Spark disconnects on shutdown, and one-click Power On Spark from the sidebar and menu bar).
 
 ### Changed
 - The request detail on the Requests page now shows the conversation as readable messages (with the parameters and tool names above them); long messages collapse with Show All, and the raw body moved to a JSON tab that wraps instead of scrolling sideways.

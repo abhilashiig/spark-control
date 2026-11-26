@@ -116,6 +116,9 @@ final class AppState {
     var tapoPhase: TapoPowerPhase = .idle
     var tapoDiscovered: [TapoDiscoveredDevice] = []
     var tapoScanning = false
+    /// Whether the configured smart plug is currently reachable on TCP port 80 from this Mac's network
+    /// (same Wi-Fi, or via a Tailscale subnet router). Hides Power On Spark when away without local reachability.
+    var tapoReachable = false
     /// Bumped when the Keychain password is saved or cleared so views re-check `tapoConfigured`.
     var tapoKeychainVersion = 0
     @ObservationIgnored private var tapoTask: Task<Void, Never>?
@@ -161,11 +164,13 @@ final class AppState {
         }
         monitor.start(queue: .main)
         Task {
+            if tapoConfigured { await checkTapoReachable() }
             while true {
                 try? await Task.sleep(for: .seconds(15))
                 if route == nil { await selectRoute() }
                 if Date().timeIntervalSince(lastPull) > 60 { await pullModels() }
                 await refresh()
+                if tapoConfigured && (offline || route == nil) { await checkTapoReachable() }
                 if Date().timeIntervalSince(spark.last?.date ?? .distantPast) > 10 { await sampleSpark() }
                 // Follow downloads while their pages are closed too, so finishing ones can notify.
                 if hf?.downloads.contains(where: { $0.state == .running }) == true { await hfRefresh() }
@@ -323,6 +328,7 @@ final class AppState {
             guard !Task.isCancelled else { return }
             await selectRoute()
             await refresh()
+            if tapoConfigured { await checkTapoReachable() }
         }
     }
 
@@ -758,7 +764,7 @@ final class AppState {
     /// Without a password it tries passwordless sudo and polkit; with one, it goes to `sudo -S` over stdin
     /// and is never stored or put on a command line.
     func shutdownSpark(password: String? = nil) async -> String? {
-        guard let target = sshTarget else { return "The Spark is unreachable." }
+        guard let target = sshTarget, let r = route, let host = config.device?.host(r) else { return "The Spark is unreachable." }
         await stopAndWait()
         event("Shutting down the Spark")
         // --no-block queues the poweroff and returns, so ssh exits cleanly before the link drops.
@@ -775,6 +781,7 @@ final class AppState {
         activeID = nil
         external = nil
         offline = true
+        schedulePlugOffAfterShutdown(sparkHost: host)
         return nil
     }
 
@@ -790,6 +797,20 @@ final class AppState {
             && !config.tapo.host.trimmingCharacters(in: .whitespaces).isEmpty
             && !config.tapo.email.trimmingCharacters(in: .whitespaces).isEmpty
             && tapoHasPassword
+    }
+
+    /// True only when a smart plug is configured AND reachable from this Mac's current network.
+    var tapoCanPowerOn: Bool {
+        tapoConfigured && tapoReachable
+    }
+
+    func checkTapoReachable() async {
+        guard tapoConfigured else {
+            tapoReachable = false
+            return
+        }
+        let host = config.tapo.host.trimmingCharacters(in: .whitespacesAndNewlines)
+        tapoReachable = await Probe.tcp(host, 80, timeout: 1.5) != nil
     }
 
     func saveTapoPassword(_ password: String) {
@@ -861,6 +882,7 @@ final class AppState {
         do {
             let status = try await withTapoClient { try await $0.getStatus() }
             tapoStatus = status
+            tapoReachable = true
             if case .failed = tapoPhase { tapoPhase = .idle }
             return nil
         } catch {
@@ -945,6 +967,53 @@ final class AppState {
                 let msg = error.localizedDescription
                 tapoPhase = .failed(msg)
                 event("Smart plug power-on failed: \(msg)")
+            }
+        }
+    }
+
+    /// After a clean Spark shutdown, waits until the Spark actually disconnects (SSH port 22 stops answering),
+    /// then waits 10 seconds and turns off the smart plug so no AC power is left on.
+    func schedulePlugOffAfterShutdown(sparkHost: String) {
+        guard tapoConfigured, config.tapo.autoPowerOffOnShutdown else { return }
+        tapoTask?.cancel()
+        tapoTask = Task { @MainActor in
+            await checkTapoReachable()
+            guard tapoReachable else { return }
+            tapoPhase = .waitingForShutdown
+            event("Waiting for Spark to disconnect before turning smart plug OFF…")
+            var disconnected = false
+            for _ in 0..<45 {
+                guard !Task.isCancelled else { tapoPhase = .idle; return }
+                if await Probe.tcp(sparkHost, 22, timeout: 2) == nil {
+                    disconnected = true
+                    break
+                }
+                try? await Task.sleep(for: .seconds(2))
+            }
+            guard disconnected else {
+                tapoPhase = .idle
+                event("Spark stayed reachable after shutdown — skipped turning smart plug OFF")
+                return
+            }
+            for remaining in stride(from: 10, through: 1, by: -1) {
+                guard !Task.isCancelled else { tapoPhase = .idle; return }
+                tapoPhase = .cuttingPower(remaining: remaining)
+                try? await Task.sleep(for: .seconds(1))
+            }
+            guard !Task.isCancelled else { tapoPhase = .idle; return }
+            tapoPhase = .turningOff
+            do {
+                try await withTapoClient { client in
+                    try await client.setPower(false)
+                    tapoStatus = try? await client.getStatus()
+                }
+                tapoPhase = .idle
+                event("Turned smart plug OFF 10s after Spark disconnected")
+                Notify.post("Smart plug turned off", "Cut power 10 seconds after DGX Spark shut down.")
+            } catch {
+                let msg = error.localizedDescription
+                tapoPhase = .failed(msg)
+                event("Couldn't turn smart plug OFF after shutdown: \(msg)")
             }
         }
     }

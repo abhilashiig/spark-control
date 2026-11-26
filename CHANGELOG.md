@@ -10,6 +10,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - Settings → Smart Plug (Optional): remote power-on for your DGX Spark using a local Wi-Fi smart plug (currently supports TP-Link Tapo/Kasa plugs on TPAP firmware with automatic LAN discovery, MAC-based DHCP recovery, macOS Keychain password storage, live reachability gating so Power On Spark is hidden when away without local access, running-Spark safety guard on manual Turn Off, automatic plug power-off 10 seconds after Spark disconnects on shutdown, and one-click Power On Spark from the sidebar and menu bar).
 
 ### Changed
+- Models: each row shows the model's Model ID (the name clients use) instead of its backend model ID, and the side panel calls it Model ID. The panel no longer shows the backend's port and direct endpoint, which skipped the gateway; clients connect through API Access.
 - The request detail on the Requests page now shows the conversation as readable messages (with the parameters and tool names above them); long messages collapse with Show All, and the raw body moved to a JSON tab that wraps instead of scrolling sideways.
 - Request bodies up to 1 MB are kept instead of 64 KB, so long agent requests no longer show up as one unformatted line. Older requests keep their stats but drop their body once ~4 MB is in use.
 - Spark Control is now open source under the BSD 3-Clause License. The name and logo stay trademarks (see TRADEMARKS.md).

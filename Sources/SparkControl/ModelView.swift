@@ -315,7 +315,7 @@ struct ModelView: View {
 
     @ViewBuilder private func api(_ r: Binding<Recipe>) -> some View {
         group("API", "The API name stays fixed, so renaming the model never breaks clients.") {
-            row("API model name") {
+            row("Model ID") {
                 HStack(spacing: 8) {
                     Text(r.wrappedValue.apiID).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
                         .padding(.horizontal, 8).padding(.vertical, 3)

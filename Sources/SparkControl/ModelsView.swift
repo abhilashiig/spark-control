@@ -268,7 +268,6 @@ struct ModelsView: View {
     private func source(_ r: Recipe) -> String {
         let p = state.phase(for: r)
         if p.isFailure { return p.label }
-        if !r.upstreamModel.isEmpty && r.upstreamModel != r.name { return r.upstreamModel }
         return r.apiID
     }
 
@@ -321,32 +320,15 @@ struct ModelsView: View {
                     actions(r, p)
                     VStack(spacing: 12) {
                         detail("Engine", state.engineName(r))
-                        detail("API name", r.apiID, mono: true)
+                        detail("Model ID", r.apiID, mono: true)
                         detail("Context", context(r), mono: true)
                         detail("Draft model", ["—", "Off"].contains(drafts(r)) ? "None" : drafts(r))
                         detail("Memory", state.memoryNeed(r).map { "\(Self.gb($0)) of \(Self.gb(state.sparkMemoryTotal))" } ?? "—", mono: true)
                         detail("On disk", disk(r).map { $0.formatted(.byteCount(style: .file)) } ?? "—", mono: true)
-                        detail("Port", String(state.port(of: r)), mono: true)
                     }
                     .padding(.vertical, 16)
                     .overlay(alignment: .top) { Hairline() }
                     .overlay(alignment: .bottom) { Hairline() }
-                    if let route = state.route, let d = state.config.device {
-                        let endpoint = Demo.on ? "spark.local:\(state.port(of: r))" : "\(d.host(route)):\(state.port(of: r))"
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Endpoint").font(.system(size: 12, weight: .medium)).foregroundStyle(Color.text2)
-                            HStack(spacing: 6) {
-                                Text(endpoint).font(.system(size: 12, design: .monospaced)).foregroundStyle(Color.text)
-                                    .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
-                                Spacer(minLength: 0)
-                                CopyButton(text: endpoint).buttonStyle(GhostIconStyle(size: 26)).help("Copy endpoint")
-                            }
-                            .padding(.leading, 12).padding(.trailing, 6)
-                            .frame(height: 40)
-                            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: .corner(9), style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: .corner(9), style: .continuous).strokeBorder(Color(light: 0xE4E4E7, dark: 0x26262B)))
-                        }
-                    }
                     Spacer(minLength: 0)
                     HStack(spacing: 16) {
                         Button("Settings") { selection = .model(r.id) }.foregroundStyle(Color.link)

@@ -6,7 +6,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 ## [Unreleased]
 
 ### Added
-- Qwen3.8 27B on vLLM: a Coding Agent Adapter switch on its page serves Harness Hub's super-adapter, a LoRA trained for coding agents such as pi, Hermes Agent and OpenCode. It's off by default. Already downloaded the model? Press Download once more to fetch the adapter (about 1 GB).
+- Qwen3.8 27B on vLLM: a Coding Agent Adapter switch on its page serves Harness Hub's super-adapter, a LoRA trained for coding agents such as pi, Hermes Agent and OpenCode. It's off by default. Already downloaded the model? Press Download once more to fetch the adapter (about 2 GB).
 - Settings → Smart Plug (Optional): remote power-on for your DGX Spark using a local Wi-Fi smart plug (currently supports TP-Link Tapo/Kasa plugs on TPAP firmware with automatic LAN discovery, MAC-based DHCP recovery, macOS Keychain password storage, live reachability gating so Power On Spark is hidden when away without local access, running-Spark safety guard on manual Turn Off, automatic plug power-off 10 seconds after Spark disconnects on shutdown, and one-click Power On Spark from the sidebar and menu bar).
 
 ### Changed

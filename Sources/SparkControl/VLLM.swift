@@ -190,11 +190,12 @@ enum VLLM {
         return (b + k * Double(context) / 1_048_576 + 2).rounded(.up)
     }
 
-    /// Raises the command's memory when its context needs more: vLLM refuses to start when one full-length request
-    /// doesn't fit in what's left after the weights. Never lowers it.
+    /// Raises the command's memory when its context or the adapter needs more: vLLM refuses to start when one
+    /// full-length request doesn't fit in what's left after the weights. Never lowers it.
     static func fitted(_ command: String, _ m: Model, total: Double = gb10Memory) -> String {
-        guard let n = context(of: command), let need = memoryNeeded(m, context: n),
-              (memoryFraction(of: command) ?? 0) * total / 1e9 < need - 0.5 else { return command }
+        var need = context(of: command).flatMap { memoryNeeded(m, context: $0) }
+        if adapterOn(command) { need = (need ?? m.memoryGB) + adapterGB }
+        guard let need, (memoryFraction(of: command) ?? 0) * total / 1e9 < need - 0.5 else { return command }
         return withMemory(command, need, total: total, footprint: m.footprintGB)
     }
 
@@ -266,21 +267,19 @@ enum VLLM {
 
     static func adapterOn(_ command: String) -> Bool { command.contains(" --enable-lora ") }
 
-    /// Memory the adapter adds, in GB: the 27B's weights took 22.8 GiB with it, about 2 GiB more, and its rank-128
-    /// LoRA buffers come on top. Without it, 262k context fell 0.08 GiB short of its KV cache (2026-11-26).
+    /// Memory the adapter adds to the model's own, in GB: the 27B's weights took 22.8 GiB with it, about 2 GiB more,
+    /// and its rank-128 LoRA buffers come on top. At the model's 50 GB, 262k context fell 0.08 GiB short (2026-11-26).
     static let adapterGB = 4.0
 
-    /// Serves the model's adapter beside the base model, from its pinned snapshot (the server runs offline), and
-    /// moves Memory by what the adapter takes. 128 is vLLM's next allowed --max-lora-rank above the adapter's 96.
-    static func withAdapter(_ command: String, _ on: Bool, model m: Model) -> String {
-        guard m.adapter != nil, adapterOn(command) != on else { return command }
+    /// Serves the model's adapter beside the base model, from its pinned snapshot (the server runs offline); `fitted`
+    /// raises Memory by what it takes. Off leaves Memory as it is. 128 is vLLM's next allowed --max-lora-rank above
+    /// the adapter's 96.
+    static func withAdapter(_ command: String, _ on: Bool, model m: Model, total: Double = gb10Memory) -> String {
+        guard adapterOn(command) != on else { return command }
         let plain = command.replacing(try! Regex(" --enable-lora --max-lora-rank [0-9]+ --lora-modules [^ ]+"), with: "")
-        let gb = (memoryFraction(of: plain) ?? 0) * gb10Memory / 1e9 + (on ? adapterGB : -adapterGB)
-        guard on, let a = m.adapter, let rev = a.revision, let name = flagValue("--served-model-name", in: plain) else {
-            return withMemory(plain, gb, footprint: m.footprintGB)
-        }
-        return withMemory(plain, gb, footprint: m.footprintGB)
-            + " --enable-lora --max-lora-rank 128 --lora-modules \(name)-super=/root/.cache/huggingface/hub/\(a.cacheName)/snapshots/\(rev)"
+        guard on, let a = m.adapter, let rev = a.revision, let name = flagValue("--served-model-name", in: plain) else { return plain }
+        return fitted(plain + " --enable-lora --max-lora-rank 128 --lora-modules \(name)-super=/root/.cache/huggingface/hub/\(a.cacheName)/snapshots/\(rev)",
+                      m, total: total)
     }
 
     private static func flagValue(_ flag: String, in command: String) -> String? {

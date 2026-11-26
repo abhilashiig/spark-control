@@ -390,11 +390,14 @@ let v27 = VLLM.model("qwen3.8-27b")!
 let v27Start = VLLM.startCommand(v27, port: 18302, name: "qwen3-8-27b")
 let v27On = VLLM.withAdapter(v27Start, true, model: v27)
 var v27Recipe = Recipe(name: "Qwen3.8 27B", startCommand: v27On, stopCommand: ""); v27Recipe.vllm = v27.id
-check(!VLLM.adapterOn(v27Start) && VLLM.adapterOn(v27On) && !VLLM.adapterOn(VLLM.withAdapter(v27On, false, model: v27)) && VLLM.memoryFraction(of: VLLM.withAdapter(v27On, false, model: v27)) == VLLM.memoryFraction(of: v27Start)
+check(!VLLM.adapterOn(v27Start) && VLLM.adapterOn(v27On) && !VLLM.adapterOn(VLLM.withAdapter(v27On, false, model: v27))
       && VLLM.withAdapter(v27On, true, model: v27) == v27On && v27.downloads.count == 2
       && v27On.contains("--max-lora-rank 128 --lora-modules qwen3-8-27b-super=/root/.cache/huggingface/hub/models--harness-hub--Qwen3.8-27B-super-adapter/snapshots/3358a71529ce56aba0095addd6a60a66d7c4228b")
       && v27Recipe.servedName == "qwen3-8-27b-super" && VLLM.drafts(of: v27On) == 2
       && VLLM.memoryFraction(of: v27On)! > VLLM.memoryFraction(of: v27Start)! + 0.02
+      // A command saved with the adapter on but the model's own memory (an earlier build) is raised on load
+      && VLLM.memoryFraction(of: VLLM.synced(VLLM.withMemory(v27On, 50), model: v27.id)) == VLLM.memoryFraction(of: v27On)
+      && VLLM.memoryFraction(of: VLLM.synced(VLLM.withMemory(v27On, 70), model: v27.id)) == VLLM.memoryFraction(of: VLLM.withMemory(v27On, 70))
       && VLLM.withAdapter(vqStart, true, model: vq) == vqStart,
       "the 27B's adapter switches on and off once, is served as <name>-super, and models without one ignore it")
 // vLLM: request limit, fixed KV cache (skips the memory profiling that fails on the GB10), and saved commands kept in step

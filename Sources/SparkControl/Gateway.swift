@@ -173,7 +173,7 @@ final class Gateway: @unchecked Sendable {
         }
         if req.method == "GET", path.hasPrefix("/v1/models/") {
             let id = String(path.dropFirst("/v1/models/".count)).removingPercentEncoding ?? ""
-            guard let r = s.recipes.first(where: { $0.answers(to: id) }) else {
+            guard let r = s.recipes.serving(id) else {
                 return await sendError(c, 404, "Model '\(id)' not found.", code: "model_not_found")
             }
             return await sendJSON(c, 200, modelObject(r, s))
@@ -183,7 +183,7 @@ final class Gateway: @unchecked Sendable {
         var body = req.body.isEmpty ? nil : (try? JSONSerialization.jsonObject(with: req.body)) as? [String: Any]
         let recipe: Recipe
         if let model = body?["model"] as? String {
-            guard let r = s.recipes.first(where: { $0.answers(to: model) }) else {
+            guard let r = s.recipes.serving(model) else {
                 return await sendError(c, 404, "Model '\(model)' isn't enabled in Spark Control.", code: "model_not_found")
             }
             recipe = r

@@ -203,6 +203,13 @@ extension Recipe {
     }
 }
 
+extension Array where Element == Recipe {
+    /// The model a request names. Its own model ID wins, so a model whose name or backend ID matches can't take it.
+    func serving(_ model: String) -> Recipe? {
+        first { $0.apiID == model.lowercased() } ?? first { $0.answers(to: model) }
+    }
+}
+
 struct GatewaySettings: Codable, Equatable {
     var port = 18080
     var allowLAN = false

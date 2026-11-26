@@ -15,6 +15,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 - Spark Control is now open source under the BSD 3-Clause License. The name and logo stay trademarks (see TRADEMARKS.md).
 
 ### Fixed
+- A request for one model no longer goes to a different model whose backend model ID has the same name (for example a custom Qwen3.8 27B serving as `qwen3.8-27b`), which answered "isn't running" while the model you asked for was up.
 - Open at Login stays on after an update. Each new version used to show it as off and drop the app from Login Items.
 - Requests: a request body over 1 MB no longer shows as an empty box that scrolls forever. It shows the first 1 MB as text and says the rest wasn't kept.
 

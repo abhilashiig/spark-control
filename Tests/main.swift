@@ -385,6 +385,12 @@ let vqOld = vqStart.replacingOccurrences(of: " --enable-prompt-tokens-details", 
 check(VLLM.synced(vqOld, model: vq.id).components(separatedBy: "--enable-prompt-tokens-details").count == 2
       && VLLM.synced(vqStart, model: vq.id).components(separatedBy: "--enable-prompt-tokens-details").count == 2,
       "vLLM commands report cached tokens, saved ones gain the flag once")
+// The gateway routes a model ID to that model, even when an earlier model's backend ID is the same name
+let byBackend = Recipe(name: "Qwen3.8-27B(MiaAI-Lab)", startCommand: "x", stopCommand: "", upstreamModel: "qwen3.8-27b")
+let byOwnID = Recipe(name: "Qwen3.8 27B", startCommand: "x", stopCommand: "", upstreamModel: "qwen3.8-27b-super")
+check([byBackend, byOwnID].serving("qwen3.8-27b")?.name == "Qwen3.8 27B"
+      && [byBackend].serving("qwen3.8-27b")?.name == byBackend.name && [byBackend, byOwnID].serving("nope") == nil,
+      "a model's own ID beats another model's backend ID; backend IDs still match when nothing else does")
 // vLLM: the 27B's coding-agent adapter toggles on and off, and the backend model ID follows it
 let v27 = VLLM.model("qwen3.8-27b")!
 let v27Start = VLLM.startCommand(v27, port: 18302, name: "qwen3-8-27b")

@@ -204,10 +204,9 @@ extension Recipe {
 }
 
 extension Array where Element == Recipe {
-    /// The model a request names. Its own model ID wins, so a model whose name or backend ID matches can't take it.
-    func serving(_ model: String) -> Recipe? {
-        first { $0.apiID == model.lowercased() } ?? first { $0.answers(to: model) }
-    }
+    /// The model a request names, by model ID only: names and backend IDs are Spark Control's own, and a backend ID
+    /// two models share would send requests to the wrong one.
+    func serving(_ model: String) -> Recipe? { first { $0.apiID == model.lowercased() } }
 }
 
 struct GatewaySettings: Codable, Equatable {

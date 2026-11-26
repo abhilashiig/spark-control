@@ -266,12 +266,21 @@ enum VLLM {
 
     static func adapterOn(_ command: String) -> Bool { command.contains(" --enable-lora ") }
 
-    /// Serves the model's adapter beside the base model, from its pinned snapshot (the server runs offline).
-    /// 128 is vLLM's next allowed --max-lora-rank above the adapter's 96.
+    /// Memory the adapter adds, in GB: the 27B's weights took 22.8 GiB with it, about 2 GiB more, and its rank-128
+    /// LoRA buffers come on top. Without it, 262k context fell 0.08 GiB short of its KV cache (2026-11-26).
+    static let adapterGB = 4.0
+
+    /// Serves the model's adapter beside the base model, from its pinned snapshot (the server runs offline), and
+    /// moves Memory by what the adapter takes. 128 is vLLM's next allowed --max-lora-rank above the adapter's 96.
     static func withAdapter(_ command: String, _ on: Bool, model m: Model) -> String {
+        guard m.adapter != nil, adapterOn(command) != on else { return command }
         let plain = command.replacing(try! Regex(" --enable-lora --max-lora-rank [0-9]+ --lora-modules [^ ]+"), with: "")
-        guard on, let a = m.adapter, let rev = a.revision, let name = flagValue("--served-model-name", in: plain) else { return plain }
-        return plain + " --enable-lora --max-lora-rank 128 --lora-modules \(name)-super=/root/.cache/huggingface/hub/\(a.cacheName)/snapshots/\(rev)"
+        let gb = (memoryFraction(of: plain) ?? 0) * gb10Memory / 1e9 + (on ? adapterGB : -adapterGB)
+        guard on, let a = m.adapter, let rev = a.revision, let name = flagValue("--served-model-name", in: plain) else {
+            return withMemory(plain, gb, footprint: m.footprintGB)
+        }
+        return withMemory(plain, gb, footprint: m.footprintGB)
+            + " --enable-lora --max-lora-rank 128 --lora-modules \(name)-super=/root/.cache/huggingface/hub/\(a.cacheName)/snapshots/\(rev)"
     }
 
     private static func flagValue(_ flag: String, in command: String) -> String? {

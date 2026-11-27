@@ -121,18 +121,15 @@ struct RequestsView: View {
     private func table(_ rows: [RequestEntry]) -> some View {
         let longest = rows.map(\.duration).max() ?? 0
         return GeometryReader { geo in
-            // Only scroll sideways when the columns genuinely don't fit; forcing a 2-axis scroll
-            // view on a wide table would overflow by the scrollbar gutter's width.
-            if geo.size.width >= RequestColumns.minWidth {
-                ScrollView {
-                    tableBody(rows, longest: longest, width: nil)
-                        .frame(maxWidth: .infinity)
-                }
-            } else {
-                ScrollView([.horizontal, .vertical]) {
-                    tableBody(rows, longest: longest, width: geo.size.width)
-                        .frame(width: RequestColumns.minWidth, alignment: .leading)
-                }
+            // One scroll view so crossing the width threshold keeps its identity and scroll offsets.
+            // Sideways scrolling only engages when the columns genuinely don't fit; forcing a 2-axis
+            // scroll view on a wide table would overflow by the scrollbar gutter's width.
+            let narrow = geo.size.width < RequestColumns.minWidth
+            ScrollView(narrow ? [.horizontal, .vertical] : .vertical) {
+                tableBody(rows, longest: longest, width: narrow ? geo.size.width : nil)
+                    .frame(minWidth: narrow ? RequestColumns.minWidth : nil,
+                           maxWidth: narrow ? RequestColumns.minWidth : .infinity,
+                           alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -178,7 +175,7 @@ struct RequestsView: View {
         .font(.system(size: 13))
         .multilineTextAlignment(.center)
         // Inside the sideways-scrolling table, stay in the visible viewport, not the 992 pt document.
-        .frame(width: width ?? .infinity)
+        .frame(minWidth: width, maxWidth: width ?? .infinity)
         .padding(.vertical, 56)
     }
 }

@@ -5,6 +5,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-11-27
+
 ### Added
 - Overview: a Shutdowns card lists recent shutdowns and flags forced ones (power cut or crash, no clean shutdown), with an All / Forced filter. It reads the Spark's own boot records, going back as far as Ubuntu keeps them.
 

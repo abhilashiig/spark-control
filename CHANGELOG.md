@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Added
+- Overview: a Shutdowns card lists recent shutdowns and flags forced ones (power cut or crash, no clean shutdown), with an All / Forced filter. It reads the Spark's own boot records, going back as far as Ubuntu keeps them.
+
 ### Changed
 - Smart plug: after a shutdown, the plug now turns off only once its power meter shows the Spark drawing about 1 W, rechecking every 5 seconds, so power is no longer cut while the Spark is still shutting down. If it still draws more after 5 minutes, the plug stays on.
 

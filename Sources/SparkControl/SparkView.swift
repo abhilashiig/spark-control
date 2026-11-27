@@ -69,6 +69,7 @@ struct SparkView: View {
                             VStack(spacing: 12) { pair }
                         }
                         StorageCard(sample: now)
+                        ShutdownsCard()
                     }
                     .padding(.horizontal, 28)
                     .padding(.top, 24)
@@ -487,6 +488,80 @@ private struct StorageCard: View {
             FlowLegend(items: parts.map { ($0.0, String(format: "%.1f GB", $0.1 / 1e9), $0.2) }
                        + (state.sparkStorage?.docker.map { [("Docker images", $0, nil)] } ?? []))
         }
+    }
+}
+
+/// Recent ended boots, read once per visit from wtmp and the journal, with forced ones (no clean shutdown) flagged.
+private struct ShutdownsCard: View {
+    @Environment(AppState.self) private var state
+    @AppStorage("shutdownsForcedOnly") private var forcedOnly = false
+    @State private var history: (sessions: [SparkMonitor.Session], since: Date?)?
+    @State private var failed = false
+
+    var body: some View {
+        let all = history?.sessions ?? []
+        let shown = Array((forcedOnly ? all.filter(\.forced) : all).prefix(10))
+        Panel(title: "Shutdowns") {
+            Segments(selection: $forcedOnly, options: [(false, "All"), (true, "Forced")])
+        } content: {
+            if failed {
+                Text("Couldn't read the Spark's boot history.").font(.system(size: 12)).foregroundStyle(Color.text2)
+            } else if history == nil {
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity)
+            } else if shown.isEmpty {
+                Text("No \(forcedOnly ? "forced " : "")shutdowns" + (history?.since.map { " since \($0.formatted(.dateTime.month(.abbreviated).day()))" } ?? "") + ".")
+                    .font(.system(size: 12)).foregroundStyle(Color.text2)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(shown) { s in
+                        row(s).overlay(alignment: .bottom) { if s != shown.last { Hairline() } }
+                    }
+                }
+                .padding(.top, -6)
+                .animation(.smooth, value: forcedOnly)
+            }
+        }
+        .task(id: state.sshTarget) { await load() }
+    }
+
+    private func row(_ s: SparkMonitor.Session) -> some View {
+        HStack(spacing: 10) {
+            Circle().fill(s.forced ? VizColor.warning : Color.running).frame(width: 6, height: 6)
+            Text(span(s)).font(.system(size: 13, design: .monospaced)).lineLimit(1)
+            Spacer(minLength: 8)
+            if let end = s.end {
+                Text(Self.duration.string(from: end.timeIntervalSince(s.start)) ?? "")
+                    .font(.system(size: 12, design: .monospaced)).foregroundStyle(Color.text3)
+            }
+            Text(s.forced ? "Forced" : "Clean").font(.system(size: 12))
+                .foregroundStyle(s.forced ? VizColor.warning : Color.text3)
+                .frame(minWidth: 48, alignment: .trailing)
+        }
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// "Nov 27, 01:06 → 22:47", with the end's date only when it differs.
+    private func span(_ s: SparkMonitor.Session) -> String {
+        let day = Date.FormatStyle().month(.abbreviated).day().hour().minute()
+        let time = Date.FormatStyle().hour().minute()
+        let end = s.end.map { Calendar.current.isDate($0, inSameDayAs: s.start) ? $0.formatted(time) : $0.formatted(day) } ?? "—"
+        return s.start.formatted(day) + " → " + end
+    }
+
+    private static let duration: DateComponentsFormatter = {
+        let f = DateComponentsFormatter()
+        f.allowedUnits = [.day, .hour, .minute]
+        f.unitsStyle = .abbreviated
+        f.maximumUnitCount = 2
+        return f
+    }()
+
+    private func load() async {
+        guard let target = state.sshTarget else { return }
+        let res = await SSH.run(target, "bash -c \(SSH.quote(SparkMonitor.shutdownsScript))", timeout: 20)
+        failed = res.code != 0
+        if !failed { history = SparkMonitor.parseShutdowns(res.output) }
     }
 }
 

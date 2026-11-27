@@ -128,4 +128,59 @@ enum SparkMonitor {
         }
         return (folders, docker)
     }
+
+    // MARK: Shutdowns
+
+    /// One boot of the Spark that has ended. `end` is nil when a forced shutdown predates the journal.
+    struct Session: Identifiable, Equatable {
+        let start: Date
+        let end: Date?
+        let forced: Bool
+        var id: Date { start }
+    }
+
+    /// wtmp's boot and shutdown records (Ubuntu writes them anyway), plus the journal's per-boot times, which give
+    /// a forced shutdown's last moment. Read-only.
+    static let shutdownsScript = #"""
+    for f in /var/log/wtmp.1 /var/log/wtmp; do [ -r "$f" ] && last -x -R --time-format iso -f "$f" reboot shutdown; done
+    echo "JOURNAL|$(journalctl --list-boots -o json --no-pager 2>/dev/null)"
+    """#
+
+    /// Ended boots, newest first, and when the record begins. A boot with no shutdown record before the next boot
+    /// was forced (power cut, panic). `last`'s own "crash" label is skipped: it isn't printed for every such boot.
+    static func parseShutdowns(_ output: String) -> (sessions: [Session], since: Date?) {
+        let iso = ISO8601DateFormatter()
+        var events: [(Date, isBoot: Bool)] = []
+        var journal: [(first: Date, last: Date)] = []
+        for line in output.split(separator: "\n") {
+            if line.hasPrefix("JOURNAL|") {
+                let json = (try? JSONSerialization.jsonObject(with: Data(line.dropFirst(8).utf8))) as? [[String: Any]] ?? []
+                journal = json.compactMap { b in
+                    guard let f = b["first_entry"] as? Double, let l = b["last_entry"] as? Double else { return nil }
+                    return (Date(timeIntervalSince1970: f / 1e6), Date(timeIntervalSince1970: l / 1e6))
+                }
+                continue
+            }
+            let fields = line.split(separator: " ")
+            guard let kind = fields.first, kind == "reboot" || kind == "shutdown",
+                  let date = fields.lazy.compactMap({ iso.date(from: String($0)) }).first else { continue }
+            events.append((date, kind == "reboot"))
+        }
+        events.sort { $0.0 < $1.0 }
+        var sessions: [Session] = []
+        var boot: Date?
+        for e in events {
+            if e.isBoot {
+                if let b = boot {  // a second boot with no shutdown in between
+                    let end = journal.first { abs($0.first.timeIntervalSince(b)) < 120 }?.last
+                    sessions.append(Session(start: b, end: end, forced: true))
+                }
+                boot = e.0
+            } else if let b = boot {
+                sessions.append(Session(start: b, end: e.0, forced: false))
+                boot = nil
+            }
+        }
+        return (sessions.reversed(), events.first?.0)
+    }
 }

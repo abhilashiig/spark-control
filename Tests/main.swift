@@ -503,6 +503,19 @@ check(SparkMonitor.parse("GPU|[N/A], [N/A], [N/A], [N/A]").gpuUtil == nil, "miss
 let store = SparkMonitor.parseStorage("DU|Hugging Face cache|285788099522\nDU|ComfyUI|58777820794\nDOCKER|96.61GB")
 check(store.folders.count == 2 && store.folders[0].1 == 285788099522 && store.docker == "96.61 GB", "storage parses")
 check(bash(SparkMonitor.script, syntaxOnly: true).0 == 0 && bash(SparkMonitor.storageScript, syntaxOnly: true).0 == 0, "monitor scripts parse")
+let shut = SparkMonitor.parseShutdowns("""
+reboot   system boot  2026-11-27T22:59:37+05:30   still running
+shutdown system down  2026-11-27T22:57:23+05:30 - 2026-11-27T22:59:37+05:30  (00:02)
+reboot   system boot  2026-11-27T22:55:10+05:30 - 2026-11-27T22:57:23+05:30  (00:02)
+reboot   system boot  2026-11-27T01:06:43+05:30 - 2026-11-27T22:47:35+05:30  (21:40)
+
+wtmp begins 2026-11-27T01:06:43+05:30
+JOURNAL|[{"index":-1,"first_entry":1795721804000000,"last_entry":1795770000000000}]
+""")
+check(shut.sessions.count == 2 && !shut.sessions[0].forced && shut.sessions[1].forced, "a boot followed by another boot was forced; the running one is skipped")
+check(shut.sessions[1].end == Date(timeIntervalSince1970: 1795770000), "a forced shutdown's time comes from the journal's matching boot")
+check(shut.since == ISO8601DateFormatter().date(from: "2026-11-27T01:06:43+05:30"), "history starts at the first record")
+check(bash(SparkMonitor.shutdownsScript, syntaxOnly: true).0 == 0, "shutdowns script parses")
 
 // Running side by side
 check(VLLM.memoryFraction(of: vqStart) == 0.38 && VLLM.memoryFraction(of: VLLM.withMemory(vqStart, 65)) == 0.5

@@ -14,7 +14,7 @@ struct TapoPlugConfig: Codable, Equatable {
     var email = ""
     /// Seconds to keep the plug powered OFF before turning it back ON when power-cycling the DGX Spark.
     var powerCycleDelaySeconds = 10
-    /// Automatically turn the smart plug OFF 10 seconds after the Spark disconnects following a shutdown from the app.
+    /// Automatically turn the smart plug OFF once the Spark is fully off (~1 W) after a shutdown from the app.
     var autoPowerOffOnShutdown = true
 
     init(enabled: Bool = false, host: String = "", mac: String = "", model: String = "", email: String = "", powerCycleDelaySeconds: Int = 10, autoPowerOffOnShutdown: Bool = true) {
@@ -70,11 +70,12 @@ enum TapoPowerPhase: Equatable {
     case waitingForSpark
     case waitingForShutdown
     case cuttingPower(remaining: Int)
+    case waitingForPowerDown(watts: Double)
     case failed(String)
 
     var isBusy: Bool {
         switch self {
-        case .checking, .turningOff, .waiting, .turningOn, .waitingForSpark, .waitingForShutdown, .cuttingPower: return true
+        case .checking, .turningOff, .waiting, .turningOn, .waitingForSpark, .waitingForShutdown, .cuttingPower, .waitingForPowerDown: return true
         case .idle, .failed: return false
         }
     }
@@ -89,6 +90,7 @@ enum TapoPowerPhase: Equatable {
         case .waitingForSpark: return "Plug on · booting Spark…"
         case .waitingForShutdown: return "Waiting for Spark to shut down…"
         case .cuttingPower(let s): return "Spark off · cutting plug in \(s)s…"
+        case .waitingForPowerDown(let w): return String(format: "Spark still drawing %.1f W · rechecking…", w)
         case .failed(let msg): return msg
         }
     }

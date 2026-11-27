@@ -972,7 +972,7 @@ final class AppState {
     }
 
     /// After a clean Spark shutdown, waits until the Spark actually disconnects (SSH port 22 stops answering),
-    /// then waits 10 seconds and turns off the smart plug so no AC power is left on.
+    /// waits 10 seconds, then waits (rechecking every 5s) until the plug reads ~1 W, and turns the plug off.
     func schedulePlugOffAfterShutdown(sparkHost: String) {
         guard tapoConfigured, config.tapo.autoPowerOffOnShutdown else { return }
         tapoTask?.cancel()
@@ -1000,6 +1000,25 @@ final class AppState {
                 tapoPhase = .cuttingPower(remaining: remaining)
                 try? await Task.sleep(for: .seconds(1))
             }
+            // SSH closes early in shutdown, so confirm via the plug's power meter that the Spark is really off
+            // (~1 W standby). Plugs without metering report nil and are cut straight away, as before.
+            var checks = 0
+            while true {
+                guard !Task.isCancelled else { tapoPhase = .idle; return }
+                let watts = try? await withTapoClient { try await $0.getStatus() }.currentPowerWatts
+                if let w = watts, w > 1.5 {
+                    checks += 1
+                    guard checks < 60 else {  // 5 minutes
+                        tapoPhase = .idle
+                        event(String(format: "Spark still drawing %.1f W 5 minutes after disconnecting — left smart plug ON", w))
+                        return
+                    }
+                    tapoPhase = .waitingForPowerDown(watts: w)
+                    try? await Task.sleep(for: .seconds(5))
+                    continue
+                }
+                break
+            }
             guard !Task.isCancelled else { tapoPhase = .idle; return }
             tapoPhase = .turningOff
             do {
@@ -1008,8 +1027,8 @@ final class AppState {
                     tapoStatus = try? await client.getStatus()
                 }
                 tapoPhase = .idle
-                event("Turned smart plug OFF 10s after Spark disconnected")
-                Notify.post("Smart plug turned off", "Cut power 10 seconds after DGX Spark shut down.")
+                event("Turned smart plug OFF after Spark shut down")
+                Notify.post("Smart plug turned off", "Cut power after DGX Spark shut down.")
             } catch {
                 let msg = error.localizedDescription
                 tapoPhase = .failed(msg)

@@ -219,8 +219,8 @@ struct TapoSettingsView: View {
                         step: 1
                     )
                     Toggle(isOn: tapo.autoPowerOffOnShutdown) {
-                        Text("Turn off plug 10s after Spark shuts down")
-                        Text("Waits until this Mac loses connection to the Spark, then cuts plug power 10 seconds later.")
+                        Text("Turn off plug after Spark shuts down")
+                        Text("Waits until this Mac loses connection to the Spark, then cuts plug power once it draws about 1 W.")
                     }
 
                     if let s = state.tapoStatus {
@@ -479,7 +479,7 @@ struct SparkPowerButton: View {
             }
         } message: {
             Text(state.tapoCanPowerOn && state.config.tapo.autoPowerOffOnShutdown
-                 ? "Every running model is stopped first. Once the Spark disconnects, the smart plug will turn off 10 seconds later."
+                 ? "Every running model is stopped first. Once the Spark disconnects, the smart plug turns off once the Spark is fully off."
                  : state.tapoConfigured
                      ? "Every running model is stopped first. You can power the Spark back on later using your smart plug."
                      : "Every running model is stopped first. You'll need to power the Spark back on by hand.")

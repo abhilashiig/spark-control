@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Changed
+- Smart plug: after a shutdown, the plug now turns off only once its power meter shows the Spark drawing about 1 W, rechecking every 5 seconds, so power is no longer cut while the Spark is still shutting down. If it still draws more after 5 minutes, the plug stays on.
+
 ### Fixed
 - Requests: the close button and the Request/JSON/Response/Headers tabs stay pinned while you scroll a request's detail, so a long conversation no longer hides them.
 - Requests: on narrow windows the table scrolls sideways instead of clipping columns, so every column stays reachable. The detail panel keeps its 400 pt width while the table has room to shrink, and narrows to 320 pt only once the window runs out of space.

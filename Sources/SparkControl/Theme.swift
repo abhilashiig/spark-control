@@ -273,6 +273,54 @@ struct Card<Content: View>: View {
     }
 }
 
+// MARK: Layout
+
+/// Tiles in rows that stay full: as many per row as fit at `minWidth` (never more than `maxPerRow`), each one filling
+/// its share of the row at the tallest tile's height. When the last row would be left with a single tile, the tiles
+/// spread over the rows instead, so a group whose size divides evenly never strands one — four tiles are 2 + 2 where
+/// only three would fit, never 3 + 1.
+struct BalancedGrid: Layout {
+    var minWidth: CGFloat
+    var spacing: CGFloat = 12
+    var maxPerRow: Int = .max
+
+    private struct Slot { var x: CGFloat = 0, y: CGFloat = 0, w: CGFloat = 0, h: CGFloat = 0 }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        rows(width: proposal.width ?? .infinity, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let r = rows(width: bounds.width, subviews: subviews)
+        for (slot, v) in zip(r.slots, subviews) {
+            v.place(at: CGPoint(x: bounds.minX + slot.x, y: bounds.minY + slot.y), anchor: .topLeading,
+                    proposal: ProposedViewSize(width: slot.w, height: slot.h))
+        }
+    }
+
+    private func rows(width: CGFloat, subviews: Subviews) -> (slots: [Slot], size: CGSize) {
+        let n = subviews.count
+        var cols = width.isFinite ? Int((width + spacing) / (minWidth + spacing)) : .max
+        cols = max(1, min(cols, maxPerRow, n))
+        let rowCount = n == 0 ? 0 : (n + cols - 1) / cols          // rows as equal in length as cols allow
+        var slots = Array(repeating: Slot(), count: n), y: CGFloat = 0, widest: CGFloat = 0, at = 0
+        for row in 0..<rowCount {
+            let count = n / rowCount + (row < n % rowCount ? 1 : 0)
+            let w = width.isFinite ? max(0, (width - spacing * CGFloat(count - 1)) / CGFloat(count)) : minWidth
+            var tall: CGFloat = 0
+            for k in 0..<count {
+                let h = subviews[at + k].sizeThatFits(ProposedViewSize(width: w, height: nil)).height
+                slots[at + k] = Slot(x: CGFloat(k) * (w + spacing), y: y, w: w, h: h)
+                tall = max(tall, h)
+            }
+            for k in 0..<count { slots[at + k].h = tall }   // top-align rows at the tallest tile
+            widest = max(widest, CGFloat(count) * w + CGFloat(count - 1) * spacing)
+            at += count; y += tall + spacing
+        }
+        return (slots, CGSize(width: width.isFinite ? max(widest, width) : widest, height: max(0, y - spacing)))
+    }
+}
+
 // MARK: Status
 
 extension Phase {

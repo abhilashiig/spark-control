@@ -5,6 +5,9 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Fixed
+- Overview: the four charts and the four tiles at the top now keep their rows full as you resize the window: all four side by side when there's room, two per row when there isn't, one per row only when the window is very narrow. Previously the GPU temperature chart could be left sitting alone on a fourth row, and at the default window size the charts showed one per row.
+
 ## [1.15.1] - 2026-11-27
 
 ### Added

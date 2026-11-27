@@ -52,7 +52,7 @@ struct SparkView: View {
                 if let now = samples.last {
                     VStack(alignment: .leading, spacing: 16) {
                         tiles(now, all)
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 12)], spacing: 12) {
+                        BalancedGrid(minWidth: 290, maxPerRow: 4) {
                             HistoryChart(title: "CPU", unit: "%", color: OverviewColor.load, points: cpuSeries(samples), domain: 0...100, range: range)
                             HistoryChart(title: "GPU", unit: "%", color: OverviewColor.load,
                                          points: samples.compactMap { s in s.gpuUtil.map { (s.date, $0) } }, domain: 0...100, range: range)
@@ -138,7 +138,7 @@ struct SparkView: View {
         let cpu = samples.count > 1 ? SparkMonitor.cpuPercent("cpu", from: samples[samples.count - 2], to: now) : nil
         let mem = Double(now.memUsed) / Double(max(1, now.memTotal))
         let idle = { (v: Double?) in v.map { $0 < 5 ? "Idle" : "Busy" } }
-        let tiles = Group {
+        return BalancedGrid(minWidth: 200, maxPerRow: 4) {
             Tile(title: "Memory", value: String(format: "%.0f", gb(now.memUsed)), unit: String(format: "/ %.0f GB", gb(now.memTotal)),
                  detail: String(format: "%.0f GB available", gb(now.memAvailable)),
                  fraction: mem, tint: Color.text,
@@ -153,10 +153,6 @@ struct SparkView: View {
                  detail: now.power.map { String(format: "%.0f W draw", $0) } ?? "",
                  fraction: now.gpuTemp.map { $0 / 100 }, tint: now.gpuTemp.map { TempStatus($0).color } ?? Color.running,
                  tag: now.gpuTemp.map { (TempStatus($0).label, TempStatus($0).color) })
-        }
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) { tiles.frame(minWidth: 200) }
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) { tiles }
         }
     }
 
@@ -268,7 +264,7 @@ private struct HistoryChart: View {
         let end = points.last?.0 ?? .now
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title).font(.system(size: 13, weight: .semibold))
+                Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                 Spacer()
                 Text(shown.map { format($0.1) } ?? "—").font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(color)

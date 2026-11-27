@@ -54,7 +54,7 @@ struct RequestsView: View {
             filterBar
             Hairline()
             HStack(spacing: 0) {
-                table(shown).layoutPriority(1)
+                table(shown)
                 if let current {
                     Hairline(vertical: true)
                     RequestDetail(entry: current, gatewayBase: gatewayBase) { selected = nil }
@@ -137,7 +137,7 @@ struct RequestsView: View {
                     }
                 }
                 .frame(width: max(geo.size.width, RequestColumns.minWidth))
-                .frame(minHeight: geo.size.height, alignment: .top)
+                .frame(minHeight: rows.isEmpty ? 0 : geo.size.height, alignment: .top)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -172,16 +172,16 @@ struct RequestsView: View {
 
 /// Column widths shared by the header and rows.
 private enum RequestColumns {
-    static let time: CGFloat = 96, status: CGFloat = 52, client: CGFloat = 170, tokens: CGFloat = 92, latency: CGFloat = 170, cost: CGFloat = 72
+    static let time: CGFloat = 96, status: CGFloat = 52, model: CGFloat = 200, client: CGFloat = 170, tokens: CGFloat = 92, latency: CGFloat = 170, cost: CGFloat = 72
 
     /// Smallest width that shows every column; narrower windows scroll horizontally instead of clipping.
-    static let minWidth: CGFloat = time + status + 140 + client + tokens + latency + cost + 6 * 14 + 2 * 28
+    static let minWidth: CGFloat = time + status + model + client + tokens + latency + cost + 6 * 14 + 2 * 28
 
     static var header: some View {
         HStack(spacing: 14) {
             Text("Time").frame(width: time, alignment: .leading)
             Text("Status").frame(width: status, alignment: .leading)
-            Text("Model").frame(minWidth: 140, maxWidth: .infinity, alignment: .leading)
+            Text("Model").frame(minWidth: RequestColumns.model, maxWidth: .infinity, alignment: .leading)
             Text("Client · endpoint").frame(width: client, alignment: .leading)
             Text("Tokens").frame(width: tokens, alignment: .trailing)
             Text("Latency").frame(width: latency, alignment: .leading)
@@ -215,7 +215,7 @@ private struct RequestRow: View {
                     .lineLimit(2)
                 if let t = e.thinking { ThinkingBadge(level: t, ignored: t == "Off" && e.reasoning > 0) }
             }
-            .frame(minWidth: 140, maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: RequestColumns.model, maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Text(e.client.isEmpty ? "Unknown" : e.client).font(.system(size: 13)).foregroundStyle(Color.text).lineLimit(1)
                 Text("\(e.method) \(e.path)").font(.system(size: 11, design: .monospaced)).foregroundStyle(Color.text2)

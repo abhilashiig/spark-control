@@ -348,6 +348,7 @@ private struct RequestDetail: View {
                         timing.padding(20)
                         Hairline()
                         tokens.padding(20)
+                        Hairline()
                     }
                     LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
                         Section {
@@ -356,14 +357,11 @@ private struct RequestDetail: View {
                                 .padding(.top, 12)
                                 .padding(.bottom, 20)
                         } header: {
-                            VStack(spacing: 0) {
-                                Hairline()
-                                tabBar
-                                    .padding(.horizontal, 12)
-                                    .padding(.top, 8)
-                                    .overlay(alignment: .bottom) { Hairline() }
-                            }
-                            .background(Color.sidebar)
+                            tabBar
+                                .padding(.horizontal, 12)
+                                .padding(.top, 8)
+                                .background(Color.sidebar)
+                                .overlay(alignment: .bottom) { Hairline() }
                         }
                     }
                 }

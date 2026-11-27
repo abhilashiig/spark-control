@@ -54,11 +54,11 @@ struct RequestsView: View {
             filterBar
             Hairline()
             HStack(spacing: 0) {
-                table(shown)
+                table(shown).layoutPriority(1)
                 if let current {
                     Hairline(vertical: true)
                     RequestDetail(entry: current, gatewayBase: gatewayBase) { selected = nil }
-                        .frame(width: 400)
+                        .frame(minWidth: 320, idealWidth: 400, maxWidth: 400)
                         .background(Color.sidebar)
                 }
             }
@@ -120,20 +120,24 @@ struct RequestsView: View {
 
     private func table(_ rows: [RequestEntry]) -> some View {
         let longest = rows.map(\.duration).max() ?? 0
-        return ScrollView {
-            LazyVStack(spacing: 0, pinnedViews: .sectionHeaders) {
-                Section {
-                    ForEach(rows) { e in
-                        RequestRow(entry: e, selected: e.id == selected, longest: longest)
-                            .contentShape(Rectangle())
-                            .onTapGesture { selected = selected == e.id ? nil : e.id }
-                            .accessibilityAddTraits(e.id == selected ? [.isButton, .isSelected] : .isButton)
-                        Rectangle().fill(Color(light: 0xF4F4F5, dark: 0x1A1A1E)).frame(height: 1)
+        return GeometryReader { geo in
+            ScrollView([.horizontal, .vertical]) {
+                LazyVStack(spacing: 0, pinnedViews: .sectionHeaders) {
+                    Section {
+                        ForEach(rows) { e in
+                            RequestRow(entry: e, selected: e.id == selected, longest: longest)
+                                .contentShape(Rectangle())
+                                .onTapGesture { selected = selected == e.id ? nil : e.id }
+                                .accessibilityAddTraits(e.id == selected ? [.isButton, .isSelected] : .isButton)
+                            Rectangle().fill(Color(light: 0xF4F4F5, dark: 0x1A1A1E)).frame(height: 1)
+                        }
+                        emptyState(rows)
+                    } header: {
+                        RequestColumns.header
                     }
-                    emptyState(rows)
-                } header: {
-                    RequestColumns.header
                 }
+                .frame(width: max(geo.size.width, RequestColumns.minWidth))
+                .frame(minHeight: geo.size.height, alignment: .top)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -169,6 +173,9 @@ struct RequestsView: View {
 /// Column widths shared by the header and rows.
 private enum RequestColumns {
     static let time: CGFloat = 96, status: CGFloat = 52, client: CGFloat = 170, tokens: CGFloat = 92, latency: CGFloat = 170, cost: CGFloat = 72
+
+    /// Smallest width that shows every column; narrower windows scroll horizontally instead of clipping.
+    static let minWidth: CGFloat = time + status + 140 + client + tokens + latency + cost + 6 * 14 + 2 * 28
 
     static var header: some View {
         HStack(spacing: 14) {
@@ -306,31 +313,50 @@ private struct RequestDetail: View {
 
     var body: some View {
         let e = entry
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 10) {
-                        StatusBadge(entry: e)
-                        Text("\(e.method) \(e.path)").font(.system(size: 13, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Color.text).lineLimit(1).truncationMode(.middle)
-                        Spacer(minLength: 0)
-                        Button(action: close) { Label("Close", systemImage: "xmark") }
-                            .buttonStyle(GhostIconStyle())
-                            .help("Close")
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    StatusBadge(entry: e)
+                    Text("\(e.method) \(e.path)").font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.text).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 0)
+                    Button(action: close) { Label("Close", systemImage: "xmark") }
+                        .buttonStyle(GhostIconStyle())
+                        .help("Close")
+                }
+                Text("\(e.model) · from \(e.client.isEmpty ? "Unknown" : e.client) · \(e.date.formatted(.dateTime.hour().minute().second()))")
+                    .font(.system(size: 12.5)).foregroundStyle(Color.text3).textSelection(.enabled)
+                if let err = e.error {
+                    Text(err).font(.system(size: 12)).foregroundStyle(Color.danger).textSelection(.enabled).padding(.top, 2)
+                }
+            }
+            .padding(20)
+            Hairline()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        timing.padding(20)
+                        Hairline()
+                        tokens.padding(20)
                     }
-                    Text("\(e.model) · from \(e.client.isEmpty ? "Unknown" : e.client) · \(e.date.formatted(.dateTime.hour().minute().second()))")
-                        .font(.system(size: 12.5)).foregroundStyle(Color.text3).textSelection(.enabled)
-                    if let err = e.error {
-                        Text(err).font(.system(size: 12)).foregroundStyle(Color.danger).textSelection(.enabled).padding(.top, 2)
+                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
+                        Section {
+                            content(e)
+                                .padding(.horizontal, 20)
+                                .padding(.top, 12)
+                                .padding(.bottom, 20)
+                        } header: {
+                            VStack(spacing: 0) {
+                                Hairline()
+                                tabBar
+                                    .padding(.horizontal, 12)
+                                    .padding(.top, 8)
+                                    .overlay(alignment: .bottom) { Hairline() }
+                            }
+                            .background(Color.sidebar)
+                        }
                     }
                 }
-                .padding(20)
-                Hairline()
-                timing.padding(20)
-                Hairline()
-                tokens.padding(20)
-                Hairline()
-                body(e).padding(20)
             }
         }
         .onChange(of: entry.id) { expanded = [] }
@@ -384,27 +410,29 @@ private struct RequestDetail: View {
         }
     }
 
-    private func body(_ e: RequestEntry) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 4) {
-                ForEach(Tab.allCases, id: \.self) { t in
-                    Button { tab = t } label: {
-                        Text(t.rawValue)
-                            .lineLimit(1)
-                            .fixedSize()
-                            .font(.system(size: 13, weight: tab == t ? .medium : .regular))
-                            .foregroundStyle(tab == t ? Color.text : Color.text3)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .overlay(alignment: .bottom) { if tab == t { Rectangle().fill(Color.text).frame(height: 2) } }
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(tab == t ? .isSelected : [])
+    private var tabBar: some View {
+        HStack(spacing: 4) {
+            ForEach(Tab.allCases, id: \.self) { t in
+                Button { tab = t } label: {
+                    Text(t.rawValue)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .font(.system(size: 13, weight: tab == t ? .medium : .regular))
+                        .foregroundStyle(tab == t ? Color.text : Color.text3)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 8)
+                        .overlay(alignment: .bottom) { if tab == t { Rectangle().fill(Color.text).frame(height: 2) } }
+                        .contentShape(Rectangle())
                 }
-                Spacer(minLength: 0)
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(tab == t ? .isSelected : [])
             }
-            .overlay(alignment: .bottom) { Hairline() }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func content(_ e: RequestEntry) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             if tab == .request || tab == .json {
                 HStack {
                     Text("As sent to the Spark").foregroundStyle(Color.text2)

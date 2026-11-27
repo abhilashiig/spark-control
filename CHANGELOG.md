@@ -7,7 +7,7 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ### Fixed
 - Requests: the close button and the Request/JSON/Response/Headers tabs stay pinned while you scroll a request's detail, so a long conversation no longer hides them.
-- Requests: on narrow windows the table scrolls sideways instead of clipping columns; every column stays reachable, and the detail panel now shrinks (down to 320 pt) before the table does.
+- Requests: on narrow windows the table scrolls sideways instead of clipping columns, so every column stays reachable. The detail panel keeps its 400 pt width while the table has room to shrink, and narrows to 320 pt only once the window runs out of space.
 
 ## [1.15.0] - 2026-11-26
 

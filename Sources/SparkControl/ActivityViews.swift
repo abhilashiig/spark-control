@@ -121,29 +121,41 @@ struct RequestsView: View {
     private func table(_ rows: [RequestEntry]) -> some View {
         let longest = rows.map(\.duration).max() ?? 0
         return GeometryReader { geo in
-            ScrollView([.horizontal, .vertical]) {
-                LazyVStack(spacing: 0, pinnedViews: .sectionHeaders) {
-                    Section {
-                        ForEach(rows) { e in
-                            RequestRow(entry: e, selected: e.id == selected, longest: longest)
-                                .contentShape(Rectangle())
-                                .onTapGesture { selected = selected == e.id ? nil : e.id }
-                                .accessibilityAddTraits(e.id == selected ? [.isButton, .isSelected] : .isButton)
-                            Rectangle().fill(Color(light: 0xF4F4F5, dark: 0x1A1A1E)).frame(height: 1)
-                        }
-                        emptyState(rows)
-                    } header: {
-                        RequestColumns.header
-                    }
+            // Only scroll sideways when the columns genuinely don't fit; forcing a 2-axis scroll
+            // view on a wide table would overflow by the scrollbar gutter's width.
+            if geo.size.width >= RequestColumns.minWidth {
+                ScrollView {
+                    tableBody(rows, longest: longest, width: nil)
+                        .frame(maxWidth: .infinity)
                 }
-                .frame(width: max(geo.size.width, RequestColumns.minWidth))
-                .frame(minHeight: rows.isEmpty ? 0 : geo.size.height, alignment: .top)
+            } else {
+                ScrollView([.horizontal, .vertical]) {
+                    tableBody(rows, longest: longest, width: geo.size.width)
+                        .frame(width: RequestColumns.minWidth, alignment: .leading)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    @ViewBuilder private func emptyState(_ rows: [RequestEntry]) -> some View {
+    private func tableBody(_ rows: [RequestEntry], longest: Double, width: CGFloat?) -> some View {
+        LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
+            Section {
+                ForEach(rows) { e in
+                    RequestRow(entry: e, selected: e.id == selected, longest: longest)
+                        .contentShape(Rectangle())
+                        .onTapGesture { selected = selected == e.id ? nil : e.id }
+                        .accessibilityAddTraits(e.id == selected ? [.isButton, .isSelected] : .isButton)
+                    Rectangle().fill(Color(light: 0xF4F4F5, dark: 0x1A1A1E)).frame(height: 1)
+                }
+                emptyState(rows, width: width)
+            } header: {
+                RequestColumns.header
+            }
+        }
+    }
+
+    @ViewBuilder private func emptyState(_ rows: [RequestEntry], width: CGFloat?) -> some View {
         VStack(spacing: 6) {
             if !source.isEmpty && rows.isEmpty {
                 Text("No requests match").font(.system(size: 14, weight: .medium)).foregroundStyle(Color.text)
@@ -165,7 +177,8 @@ struct RequestsView: View {
         }
         .font(.system(size: 13))
         .multilineTextAlignment(.center)
-        .frame(maxWidth: .infinity)
+        // Inside the sideways-scrolling table, stay in the visible viewport, not the 992 pt document.
+        .frame(width: width ?? .infinity)
         .padding(.vertical, 56)
     }
 }

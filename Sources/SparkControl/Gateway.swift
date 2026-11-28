@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import os
 
 struct HTTPRequest {
     var method: String
@@ -90,10 +91,12 @@ final class Gateway: @unchecked Sendable {
     private let state: AppState
     private let session: URLSession
     private var listener: NWListener?
+    private let open = OSAllocatedUnfairLock(initialState: 0)
 
     private static let skipRequest: Set<String> = [
         "host", "content-length", "connection", "keep-alive", "transfer-encoding",
         "accept-encoding", "expect", "proxy-connection", "upgrade", "te",
+        "authorization", // the gateway's own key; a recipe's backendKey is set afresh below
     ]
     private static let skipResponse: Set<String> = [
         "content-length", "content-encoding", "transfer-encoding", "connection", "keep-alive",
@@ -114,9 +117,13 @@ final class Gateway: @unchecked Sendable {
     }
 
     func start(port: Int, lan: Bool) {
+        listener?.stateUpdateHandler = nil // its .cancelled would clear the error set below
         listener?.cancel()
         listener = nil
-        guard let p = NWEndpoint.Port(rawValue: UInt16(clamping: port)) else { return }
+        guard let p = UInt16(exactly: port).flatMap(NWEndpoint.Port.init(rawValue:)), port > 0 else {
+            Task { @MainActor in state.gatewayError = "Port \(port) is out of range (1–65535)." }
+            return
+        }
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
         let state = state
@@ -136,7 +143,8 @@ final class Gateway: @unchecked Sendable {
                 Task { @MainActor in state.gatewayError = message }
             }
             l.newConnectionHandler = { [weak self] nw in
-                guard let self else { return nw.cancel() }
+                // ponytail: a fixed cap; idle clients are cut off by the read deadline in serve().
+                guard let self, self.open.withLock({ n in guard n < 256 else { return false }; n += 1; return true }) else { return nw.cancel() }
                 nw.start(queue: .global(qos: .userInitiated))
                 Task { await self.serve(HTTPConnection(nw)) }
             }
@@ -148,9 +156,11 @@ final class Gateway: @unchecked Sendable {
     }
 
     private func serve(_ c: HTTPConnection) async {
-        defer { c.close() }
+        defer { c.close(); open.withLock { $0 -= 1 } }
+        let deadline = Task { try await Task.sleep(for: .seconds(120)); c.nw.cancel() }
+        defer { deadline.cancel() }
         let req: HTTPRequest
-        do { req = try await c.readRequest() }
+        do { req = try await c.readRequest(); deadline.cancel() }
         catch HTTPError.chunked { return await sendError(c, 411, "Chunked request bodies aren't supported. Send Content-Length.") }
         catch HTTPError.tooLarge { return await sendError(c, 413, "Request too large.") }
         catch { return }
@@ -162,6 +172,10 @@ final class Gateway: @unchecked Sendable {
         if req.method == "OPTIONS" {
             try? await c.send(Self.head(204, Self.cors))
             return
+        }
+        // Without a key, a web page could drive the Spark through the user's browser; browsers always send Origin.
+        if s.settings.apiKey.isEmpty, req.header("origin") != nil {
+            return await sendError(c, 403, "Set an API key in Settings to use the gateway from a browser.", type: "authentication_error")
         }
         if !s.settings.apiKey.isEmpty, req.header("authorization") != "Bearer \(s.settings.apiKey)" {
             return await sendError(c, 401, "Invalid API key.", type: "authentication_error")
@@ -178,7 +192,9 @@ final class Gateway: @unchecked Sendable {
             }
             return await sendJSON(c, 200, modelObject(r, s))
         }
-        guard path.hasPrefix("/v1/") else { return await sendError(c, 404, "Not found.") }
+        guard path.hasPrefix("/v1/"), let decoded = path.removingPercentEncoding?.replacingOccurrences(of: "\\", with: "/"),
+              !decoded.split(separator: "/").contains(where: { $0 == "." || $0 == ".." })
+        else { return await sendError(c, 404, "Not found.") }
 
         var body = req.body.isEmpty ? nil : (try? JSONSerialization.jsonObject(with: req.body)) as? [String: Any]
         let recipe: Recipe
@@ -236,7 +252,7 @@ final class Gateway: @unchecked Sendable {
                 for try await byte in bytes {
                     line.append(byte)
                     guard byte == 10 else { continue }
-                    if Transform.isTokenChunk(line) { tokenChunks += 1; if firstToken == nil { firstToken = Date() } }
+                    if tokenChunks < 3, Transform.isTokenChunk(line) { tokenChunks += 1; if firstToken == nil { firstToken = Date() } }
                     let (l, u) = Transform.sseLine(line, recipe: recipe, inject: s.settings.injectCost)
                     if let u { usage = u }
                     out.append(l)

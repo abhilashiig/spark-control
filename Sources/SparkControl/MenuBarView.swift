@@ -55,12 +55,12 @@ struct MenuBarView: View {
                         Text("\(r.priceIn.usd) / \(r.priceOut.usd)").font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                .disabled(state.isBusy || state.route == nil || phase == .ready)
+                .disabled(state.isBusy || state.sshTarget == nil || phase == .ready)
             }
 
             Divider().padding(.horizontal, 10).padding(.vertical, 5)
 
-            if (state.tapoCanPowerOn && state.route == nil) || state.tapoPhase.isBusy {
+            if (state.tapoCanPowerOn && state.sshTarget == nil) || state.tapoPhase.isBusy {
                 MenuRow(action: {
                     if state.tapoPhase.isBusy {
                         state.cancelTapoPowerCycle()

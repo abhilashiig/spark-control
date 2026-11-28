@@ -5,7 +5,17 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+### Changed
+- Gateway: with no API key set, requests from web pages in your browser are refused, so a website can't run models on your Spark through it. Set an API key to use the gateway from a browser app.
+- Gateway: the gateway's own API key is no longer passed on to the model server on the Spark.
+
 ### Fixed
+- Security: names read from the Spark (Hugging Face cache folders, Ollama model names) can no longer run commands when a download is started, cancelled or deleted.
+- Security: `config.json` and the shared model list on the Spark, which hold API keys, are now readable only by you. vLLM's API key and the Wi-Fi password no longer show on the Spark's process list (`nmcli` still shows the Wi-Fi password briefly while it joins).
+- Gateway: requests whose path tries to leave `/v1/` with `..` are refused, idle connections are closed after 2 minutes, and an out-of-range port shows an error instead of quietly using another port.
+- Chat: typing in a chat's instructions or any settings field no longer rewrites the whole chats or config file on every keystroke, and long streamed replies stay smooth. Scrolling up while a reply streams no longer snaps you back to the bottom.
+- Smart plug: Power On now shows, and Shut Down is disabled, when the Spark is offline on a fixed Local or Tailscale connection. Changing the plug's email keeps its saved password, and waiting for the Spark to power down no longer re-authenticates with the plug every 5 seconds.
+- Wi-Fi: a failed scan after entering your password now says the Spark couldn't be reached instead of claiming the password was wrong.
 - Overview: the four charts and the four tiles at the top now keep their rows full as you resize the window: all four side by side when there's room, two per row when there isn't, one per row only when the window is very narrow. Previously the GPU temperature chart could be left sitting alone on a fourth row, and at the default window size the charts showed one per row.
 
 ## [1.15.1] - 2026-11-27

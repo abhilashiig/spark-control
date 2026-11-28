@@ -727,7 +727,7 @@ struct WiFiView: View {
         .sheet(isPresented: $scanSheet) {
             SudoPasswordSheet(title: "Scan for Networks", button: "Scan", target: state.sshTarget ?? "", error: nil) { pw in
                 await load(sudo: pw)
-                return status?.scanBlocked == true ? "That password didn't work." : nil
+                return failed ? "Couldn't reach the Spark." : status?.scanBlocked == true ? "That password didn't work." : nil
             }
         }
         .sheet(item: $joining) { n in joinSheet(n) }
@@ -828,7 +828,8 @@ struct WiFiView: View {
     }
 
     private func load(sudo: String? = nil) async {
-        guard let target = state.sshTarget else { return }
+        guard let target = state.sshTarget else { failed = true; return }
+        failed = false
         let res = await SSH.run(target, "bash -c \(SSH.quote(WiFi.listScript))", timeout: 30, input: sudo ?? "")
         failed = res.code != 0
         guard !failed else { return }

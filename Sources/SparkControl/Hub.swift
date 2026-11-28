@@ -17,12 +17,13 @@ enum Jobs {
     /// "/" can't be in a file name.
     static func key(_ prefix: String, _ name: String) -> String { prefix + "-" + name.replacingOccurrences(of: "/", with: "~") }
 
-    /// Runs `job` detached from SSH, so it survives the Mac sleeping. The job touches "$D/<key>.ok" when it succeeds.
+    /// Runs `job` detached from SSH, so it survives the Mac sleeping. The job touches "$D/$K.ok" when it succeeds.
+    /// Keys carry names read from the Spark (cache folders, scraped model names), so they only reach bash as $K.
     static func launch(_ key: String, _ job: String) -> String {
         """
-        export D="\(TensorFold.dataDir)"; mkdir -p "$D"; rm -f "${D:?}/\(key).ok"
-        nohup bash -c \(SSH.quote(job)) > "$D/\(key).log" 2>&1 < /dev/null &
-        echo $! > "$D/\(key).pid"
+        export D="\(TensorFold.dataDir)" K=\(SSH.quote(key)); mkdir -p "$D"; rm -f "${D:?}/$K.ok"
+        nohup bash -c \(SSH.quote(job)) > "$D/$K.log" 2>&1 < /dev/null &
+        echo $! > "$D/$K.pid"
         """
     }
 
@@ -50,7 +51,7 @@ enum Jobs {
     }
 
     static func dismiss(_ key: String) -> String {
-        "D=\"\(TensorFold.dataDir)\"; rm -f \"${D:?}/\(key).log\" \"${D:?}/\(key).pid\" \"${D:?}/\(key).ok\""
+        "D=\"\(TensorFold.dataDir)\" K=\(SSH.quote(key)); rm -f \"${D:?}/$K.log\" \"${D:?}/$K.pid\" \"${D:?}/$K.ok\""
     }
 }
 
@@ -171,7 +172,7 @@ enum HF {
         Jobs.launch(key(repo), """
         HF=$(command -v hf || echo "$HOME/.local/bin/hf")
         [ -x "$HF" ] || { echo "✗ The Hugging Face CLI isn't installed. Install it above, then retry."; exit 1; }
-        "$HF" download \(SSH.quote(repo)) && touch "$D/\(key(repo)).ok"
+        "$HF" download \(SSH.quote(repo)) && touch "$D/$K.ok"
         """)
     }
 
@@ -192,15 +193,15 @@ enum HF {
     /// Download again instead of claiming the files are there.
     static func deleteScript(_ r: Repo, records: [String]) -> String {
         "H=\"\(TensorFold.hubDir)\"; D=\"\(TensorFold.dataDir)\"\n" + removeFunction
-            + "hfrm \(SSH.quote(r.cacheName)) && echo \"› Deleted \(r.repo)\"\n"
-            + records.map { "rm -f \"$D/\($0)\".ok \"$D/\($0)\".keep\n" }.joined()
+            + "hfrm \(SSH.quote(r.cacheName)) && echo \(SSH.quote("› Deleted \(r.repo)"))\n"
+            + records.map { "rm -f \"$D/\"\(SSH.quote($0)).ok \"$D/\"\(SSH.quote($0)).keep\n" }.joined()
     }
 
     /// Removes a repo's leftover partial files: an interrupted download leaves `*.incomplete` behind even after a
     /// later one finishes, and hf never cleans them up. Files touched in the last 2 minutes are left alone. Unlike
     /// `hf cache prune`, it doesn't touch revisions no ref points to (vLLM serves pinned ones).
     static func cleanScript(_ r: Repo) -> String {
-        "H=\"\(TensorFold.hubDir)\"; find \"$H\"/\(SSH.quote(r.cacheName)) -name '*.incomplete' -mmin +2 -delete && echo \"› Removed unfinished files of \(r.repo)\""
+        "H=\"\(TensorFold.hubDir)\"; find \"$H\"/\(SSH.quote(r.cacheName)) -name '*.incomplete' -mmin +2 -delete && echo \(SSH.quote("› Removed unfinished files of \(r.repo)"))"
     }
 
     /// Hugging Face's own installer: its own Python environment, linked into ~/.local/bin. No sudo.
@@ -351,16 +352,15 @@ enum Ollama {
     /// and stopped again afterwards unless a model was loaded meanwhile. Run in an interactive shell, so an OLLAMA_HOST
     /// set in ~/.bashrc points the client at the right port.
     static func pullScript(_ name: String) -> String {
-        let k = key(name)
         let job = """
         up() { ollama list >/dev/null 2>&1; }
         s=; if ! up; then sudo -n systemctl start ollama 2>/dev/null && s=1; for i in $(seq 30); do up && break; sleep 1; done; fi
         if ! up; then [ -n "$s" ] && sudo -n systemctl stop ollama; echo "✗ Ollama isn't running on the Spark and couldn't be started without a password. Start it (sudo systemctl start ollama), then retry."; exit 1; fi
         ollama pull \(SSH.quote(name)); r=$?
         [ -n "$s" ] && [ -z "$(ollama ps 2>/dev/null | tail -n +2)" ] && sudo -n systemctl stop ollama
-        [ $r = 0 ] && touch "$D/\(k).ok"; exit $r
+        [ $r = 0 ] && touch "$D/$K.ok"; exit $r
         """
-        return Jobs.launch(k, job)
+        return Jobs.launch(key(name), job)
     }
 
     /// The installed version, and each pull (see `Jobs.lines`).

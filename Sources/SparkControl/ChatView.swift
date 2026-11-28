@@ -75,6 +75,7 @@ final class ChatStore {
     var selection: UUID?
     var streamingChat: UUID?
     @ObservationIgnored private var task: Task<Void, Never>?
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
     static let url = Store.dir.appending(path: "chats.json")
     private static let session: URLSession = {
         let c = URLSessionConfiguration.ephemeral
@@ -87,9 +88,22 @@ final class ChatStore {
         // ponytail: one JSON file with images inline; fine for personal use, move attachments to files if it grows large.
         chats = (try? JSONDecoder().decode([Chat].self, from: Data(contentsOf: Self.url))) ?? []
         selection = chats.first?.id
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { if self?.saveTask != nil { self?.flush() } }
+        }
     }
 
-    func save() { try? JSONEncoder().encode(chats).write(to: Self.url, options: .atomic) }
+    /// Debounced: the chat-instructions editor saves per keystroke, and chats.json carries every attachment inline.
+    func save() {
+        saveTask?.cancel()
+        saveTask = Task { try? await Task.sleep(for: .milliseconds(500)); if !Task.isCancelled { flush() } }
+    }
+
+    func flush() {
+        saveTask?.cancel()
+        saveTask = nil
+        try? JSONEncoder().encode(chats).write(to: Self.url, options: .atomic)
+    }
     func index(_ id: UUID) -> Int? { chats.firstIndex { $0.id == id } }
 
     @discardableResult
@@ -107,6 +121,7 @@ final class ChatStore {
     func delete(_ ids: Set<UUID>) {
         if let s = streamingChat, ids.contains(s) { stop() }
         chats.removeAll { ids.contains($0.id) }
+        Thumbnails.cache = [:]
         if let s = selection, ids.contains(s) { selection = chats.first?.id }
         save()
     }
@@ -232,6 +247,14 @@ final class ChatStore {
         var completion: Int?
         var usage: Transform.Usage?
         var cost = 0.0
+        // Deltas land in batches: each edit re-renders the whole message.
+        var pending = (text: "", thought: ""), shown = Date.distantPast
+        func show() {
+            guard !pending.text.isEmpty || !pending.thought.isEmpty else { return }
+            edit { $0.content += pending.text; $0.reasoning += pending.thought }
+            pending = ("", "")
+            shown = Date()
+        }
         do {
             let (bytes, resp) = try await Self.session.bytes(for: request)
             if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
@@ -257,11 +280,14 @@ final class ChatStore {
                 let thought = d["reasoning_content"] as? String ?? d["reasoning"] as? String ?? ""
                 guard !text.isEmpty || !thought.isEmpty else { continue }
                 if first == nil { first = Date() }
-                edit { $0.content += text; $0.reasoning += thought }
+                pending.text += text
+                pending.thought += thought
+                if Date().timeIntervalSince(shown) > 0.05 { show() }
             }
         } catch {
             if !Task.isCancelled { edit { $0.error = error.localizedDescription } }
         }
+        show()
         let end = Date()
         var parts: [String] = []
         if let first, let c = completion, let tps = Speed.decode(completion: c, decodeTime: end.timeIntervalSince(first)) {
@@ -504,6 +530,9 @@ private struct Conversation: View {
     @State private var importing = false
     @State private var problem: String?
     @State private var editingSystem = false
+    @State private var pinned = true
+    @State private var userScrolling = false
+    @State private var atBottom = true
     @State private var editingProfiles = false
     @FocusState private var focused: Bool
 
@@ -640,9 +669,18 @@ private struct Conversation: View {
                         Text("Start a conversation").font(.system(size: 19, weight: .semibold)).foregroundStyle(Color.text)
                     }
                 }
-                .onChange(of: chat?.messages.last?.content.count) { proxy.scrollTo("bottom", anchor: .bottom) }
-                .onChange(of: chat?.messages.last?.reasoning.count) { proxy.scrollTo("bottom", anchor: .bottom) }
-                .onChange(of: chat?.messages.count) { proxy.scrollTo("bottom", anchor: .bottom) }
+                // Follows the reply only while the view is at the bottom; scrolling up to read stops it, back down resumes.
+                .onScrollPhaseChange { _, phase in
+                    userScrolling = phase == .interacting || phase == .decelerating
+                    if userScrolling && !atBottom { pinned = false }
+                }
+                .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.containerSize.height >= $0.contentSize.height - 40 } action: { _, bottom in
+                    atBottom = bottom
+                    if bottom || userScrolling { pinned = bottom }
+                }
+                .onChange(of: chat?.messages.last?.content.count) { if pinned { proxy.scrollTo("bottom", anchor: .bottom) } }
+                .onChange(of: chat?.messages.last?.reasoning.count) { if pinned { proxy.scrollTo("bottom", anchor: .bottom) } }
+                .onChange(of: chat?.messages.count) { pinned = true; proxy.scrollTo("bottom", anchor: .bottom) }
                 .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
             }
 
@@ -1182,10 +1220,19 @@ private struct MarkdownText: View {
                 if i % 2 == 1 {
                     CodeBlock(raw: segment)
                 } else if !segment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(Self.render(segment)).font(.system(size: 14)).foregroundStyle(Color(light: 0x27272A, dark: 0xE4E4E7)).textSelection(.enabled).lineSpacing(7)
+                    Prose(text: segment)
                 }
             }
         }
+    }
+}
+
+/// Its own view so SwiftUI skips re-parsing segments a streamed token didn't change.
+private struct Prose: View {
+    let text: String
+
+    var body: some View {
+        Text(Self.render(text)).font(.system(size: 14)).foregroundStyle(Color(light: 0x27272A, dark: 0xE4E4E7)).textSelection(.enabled).lineSpacing(7)
     }
 
     private static func render(_ s: String) -> AttributedString {

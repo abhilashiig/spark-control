@@ -388,7 +388,10 @@ enum Store {
         c.recipes.removeAll(where: \.isBlank)
         let e = JSONEncoder()
         e.outputFormatting = [.prettyPrinted, .sortedKeys]
+        // Holds API keys. The folder is owner-only too: an atomic write briefly has default permissions.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
         try? e.encode(c).write(to: configURL, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configURL.path)
     }
 
     static func loadUsage() -> [UsageRecord] {

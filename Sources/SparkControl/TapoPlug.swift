@@ -1075,8 +1075,8 @@ final class TapoTPAPClient {
         guard let s = share["result"] as? [String: Any] else {
             throw TapoError.protocolError("Missing result in pake_share response")
         }
-        let devConfirm = ((s["dev_confirm"] as? String) ?? "").lowercased()
-        guard devConfirm == eConf.base64EncodedString().lowercased() else {
+        let devConfirm = Data(base64Encoded: (s["dev_confirm"] as? String) ?? "") ?? Data()
+        guard devConfirm.count == eConf.count, zip(devConfirm, eConf).reduce(0, { $0 | ($1.0 ^ $1.1) }) == 0 else {
             throw TapoError.authFailed("SPAKE2+ confirmation mismatch — check your TP-Link email and password.")
         }
 

@@ -170,13 +170,14 @@ enum VLLM {
     /// Runs in the foreground so its log reaches Logs and a crash fails the start. Offline, so it serves only
     /// what's downloaded. vLLM, FlashInfer and Triton compile caches persist between starts.
     static func startCommand(_ m: Model, port: Int, name: String, total: Double = gb10Memory) -> String {
-        var args = ["docker rm -f \(container(name)) >/dev/null 2>&1;", "exec docker run --rm --name \(container(name))",
+        var args = ["docker rm -f \(container(name)) >/dev/null 2>&1;", "VLLM_API_KEY=\"$(cat \"\(TensorFold.dataDir)/api-key\")\" exec docker run --rm --name \(container(name))",
+                    "-e VLLM_API_KEY", // from the environment, so the key isn't on any command line in ps
                     "--gpus all --ipc=host -p \(port):8000",
                     "-v \"\(TensorFold.hubDir):/root/.cache/huggingface/hub\"",
                     "-v \"$HOME/.cache/spark-control-vllm:/root/.cache\"",
                     "-e HF_HUB_OFFLINE=1", m.runImage,
                     m.repo.id] + (m.repo.revision.map { ["--revision", $0] } ?? [])
-        args += ["--served-model-name", name, "--api-key", "\"$(cat \"\(TensorFold.dataDir)/api-key\")\"",
+        args += ["--served-model-name", name,
                  "--max-num-seqs \(m.maxSeqs)", "--enable-prefix-caching --enable-prompt-tokens-details"]
         args += m.parsers + m.flags
         let cmd = withMemory(withContext(args.joined(separator: " "), m.startWindow ?? m.window), m.memoryGB, total: total,

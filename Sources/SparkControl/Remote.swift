@@ -215,8 +215,10 @@ enum Probe {
     }
 
     static func backend(_ base: String, key apiKey: String? = nil) async -> Backend? {
-        guard let listed = await ids(base + "/v1/models", "data", "id", apiKey) else { return nil }
-        return Backend(loaded: await ids(base + "/api/ps", "models", "name", apiKey), listed: listed)
+        async let listed = ids(base + "/v1/models", "data", "id", apiKey)
+        async let loaded = ids(base + "/api/ps", "models", "name", apiKey)
+        guard let listed = await listed else { return nil }
+        return Backend(loaded: await loaded, listed: listed)
     }
 
     private static func ids(_ url: String, _ list: String, _ key: String, _ apiKey: String?) async -> [String]? {
@@ -434,8 +436,10 @@ enum WiFi {
         exec >"$3" 2>&1
         # connect only looks in the last scan, which goes stale without one (a scan over SSH needs this job's rights).
         nmcli device wifi list --rescan yes >/dev/null 2>&1
+        wp=$(cat "$2" 2>/dev/null); rm -f "$2"
         old=$(nmcli -t -f UUID,TYPE connection show --active | awk -F: '$2 ~ /wireless/ {print $1; exit}')
-        r=$(if [ -n "$2" ]; then nmcli -w 45 device wifi connect "$1" password "$2"; else nmcli -w 45 device wifi connect "$1"; fi 2>&1) && { echo "Joined $1."; exit; }
+        # ponytail: `device wifi connect` takes the password only as an argument, so it shows in ps while nmcli runs.
+        r=$(if [ -n "$wp" ]; then nmcli -w 45 device wifi connect "$1" password "$wp"; else nmcli -w 45 device wifi connect "$1"; fi 2>&1) && { echo "Joined $1."; exit; }
         r=$(printf '%s' "$r" | tail -n 1)
         if [ -n "$old" ] && nmcli -w 45 connection up uuid "$old" >/dev/null 2>&1; then echo "Couldn't join $1, so the Spark went back to its previous Wi-Fi. $r"
         else echo "Couldn't join $1. $r"; fi
@@ -447,7 +451,8 @@ enum WiFi {
         if printf '%s\\n' "$p" | grep -q 'network-control:yes' && printf '%s\\n' "$p" | grep -q 'settings.modify.system:yes'; then pre=
         elif sudo -n true 2>/dev/null || { [ -n "$sp" ] && printf '%s\\n' "$sp" | sudo -S -p '' -v 2>/dev/null; }; then pre="sudo -n"
         else echo __NEEDS_SUDO__; exit 3; fi
-        $pre setsid -f bash -c \(SSH.quote(job)) _ \(SSH.quote(ssid)) "$wp" "$log" </dev/null >/dev/null 2>&1 && echo __STARTED__
+        pf=$(umask 077; mktemp); printf %s "$wp" > "$pf"
+        $pre setsid -f bash -c \(SSH.quote(job)) _ \(SSH.quote(ssid)) "$pf" "$log" </dev/null >/dev/null 2>&1 && echo __STARTED__ || rm -f "$pf"
         """
     }
 }

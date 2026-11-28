@@ -6,6 +6,8 @@ import SwiftUI
 struct TapoSettingsView: View {
     @Environment(AppState.self) private var state
     @State private var passwordDraft = ""
+    @State private var emailDraft = ""
+    @FocusState private var emailFocused: Bool
     @State private var feedback: String?
     @State private var feedbackIsError = false
     @State private var testing = false
@@ -153,7 +155,11 @@ struct TapoSettingsView: View {
 
                 // MARK: Step 2 — Local Credentials
                 Section {
-                    TextField("Account email", text: tapo.email, prompt: Text("you@example.com"))
+                    // Committed whole, not per keystroke: the saved password moves along with it.
+                    TextField("Account email", text: $emailDraft, prompt: Text("you@example.com"))
+                        .focused($emailFocused)
+                        .onSubmit { state.setTapoEmail(emailDraft) }
+                        .onChange(of: emailFocused) { if !emailFocused { state.setTapoEmail(emailDraft) } }
                     HStack(spacing: 8) {
                         SecureField(
                             "Account password",
@@ -166,7 +172,8 @@ struct TapoSettingsView: View {
 
                         if state.tapoHasPassword {
                             Button("Clear", role: .destructive) {
-                                state.clearTapoPassword()
+                                state.clearTapoPassword() // first, so the email commit has nothing to carry
+                                state.setTapoEmail(emailDraft)
                                 passwordDraft = ""
                                 feedback = "Password removed from Keychain."
                                 feedbackIsError = false
@@ -315,7 +322,9 @@ struct TapoSettingsView: View {
             }
         }
         .page()
+        .onDisappear { state.setTapoEmail(emailDraft) }
         .onAppear {
+            emailDraft = state.config.tapo.email
             if state.config.tapo.enabled && state.tapoDiscovered.isEmpty && state.config.tapo.host.isEmpty {
                 Task {
                     await state.scanTapoPlugs()
@@ -368,11 +377,12 @@ struct TapoSettingsView: View {
         !testing
             && !state.tapoPhase.isBusy
             && !state.config.tapo.host.trimmingCharacters(in: .whitespaces).isEmpty
-            && !state.config.tapo.email.trimmingCharacters(in: .whitespaces).isEmpty
+            && !emailDraft.trimmingCharacters(in: .whitespaces).isEmpty
             && (!passwordDraft.isEmpty || state.tapoHasPassword)
     }
 
     private func saveAndTest() async {
+        state.setTapoEmail(emailDraft) // a button click doesn't end the email field's editing
         testing = true
         feedback = nil
         defer { testing = false }

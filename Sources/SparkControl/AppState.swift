@@ -163,13 +163,16 @@ final class AppState {
             Task { @MainActor in self?.networkChanged("the Mac's network changed") }
         }
         monitor.start(queue: .main)
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { if let self, self.saveTask != nil { Store.save(self.config) } }
+        }
         Task {
             if tapoConfigured { await checkTapoReachable() }
             while true {
                 try? await Task.sleep(for: .seconds(15))
                 if route == nil { await selectRoute() }
+                await refresh() // first: pullModels needs sshTarget, which is nil until refresh sees the Spark back
                 if Date().timeIntervalSince(lastPull) > 60 { await pullModels() }
-                await refresh()
                 if tapoConfigured && (offline || route == nil) { await checkTapoReachable() }
                 if Date().timeIntervalSince(spark.last?.date ?? .distantPast) > 10 { await sampleSpark() }
                 // Follow downloads while their pages are closed too, so finishing ones can notify.
@@ -183,7 +186,8 @@ final class AppState {
     // MARK: Derived
 
     var activeRecipe: Recipe? { config.recipes.first { $0.id == activeID } }
-    var sshTarget: String? { route.flatMap { r in config.device?.sshTarget(r) } }
+    /// nil while the Spark is offline: a fixed route stays set then, but nothing can reach it.
+    var sshTarget: String? { offline ? nil : route.flatMap { r in config.device?.sshTarget(r) } }
     /// Where a model is served: its own port, or the Spark's default.
     func backendBase(for r: Recipe?) -> String? { route.flatMap { config.device?.backendBase($0, port: r?.port) } }
     func port(of r: Recipe) -> Int { r.port ?? config.device?.backendPort ?? 18300 }
@@ -220,7 +224,9 @@ final class AppState {
 
     private func configChanged(from old: Config) {
         guard config != old else { return }
-        Store.save(config)
+        // Debounced: text fields all over the app bind straight to the config, one change per keystroke.
+        saveTask?.cancel()
+        saveTask = Task { try? await Task.sleep(for: .milliseconds(500)); if !Task.isCancelled { Store.save(config); saveTask = nil } }
         if (config.recipes.filter({ !$0.isBlank }) != old.recipes.filter({ !$0.isBlank }) || config.profiles != old.profiles
             || config.gateway.autoSwap != old.gateway.autoSwap) && !applyingShared {
             modelsUpdated = Date()
@@ -299,8 +305,8 @@ final class AppState {
 
     /// Keeps tools that already list Spark Control on the current models, a moment after the last edit.
     private func syncTools() {
-        guard config.gateway.syncTools else { return }
         toolSync?.cancel()
+        guard config.gateway.syncTools, (1...65535).contains(config.gateway.port) else { return }
         toolSync = Task {
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
@@ -358,6 +364,7 @@ final class AppState {
 
     @ObservationIgnored private var applyingShared = false
     @ObservationIgnored private var pushTask: Task<Void, Never>?
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var lastPull = Date.distantPast
 
     /// When this Mac last changed its model list or took the Spark's. Nil until its first sync.
@@ -426,7 +433,7 @@ final class AppState {
             guard let data = try? e.encode(SharedModels(updated: stamp, recipes: config.recipes.filter { !$0.isBlank }, profiles: config.profiles,
                                                             autoSwap: config.gateway.autoSwap)) else { return }
             let file = SharedModels.path
-            let cmd = "mkdir -p \"$(dirname \"\(file)\")\" && cat > \"\(file).tmp\" && mv \"\(file).tmp\" \"\(file)\""
+            let cmd = "umask 077 && mkdir -p \"$(dirname \"\(file)\")\" && cat > \"\(file).tmp\" && mv \"\(file).tmp\" \"\(file)\""
             // Detached: writing the list to ssh's stdin may block until ssh connects.
             let res = await Task.detached { await SSH.run(target, cmd, timeout: 30, input: String(decoding: data, as: UTF8.self)) }.value
             if res.code != 0 { event("Couldn't save the model list on the Spark: \(res.output.trimmingCharacters(in: .whitespacesAndNewlines))") }
@@ -471,12 +478,20 @@ final class AppState {
         guard transition == nil else { return }
         offline = false
         var foundExternal: String?
-        for p in Array(Set([device.backendPort] + config.recipes.map(port(of:)))).sorted() {
+        let ports = Array(Set([device.backendPort] + config.recipes.map(port(of:)))).sorted()
+        let infos = await withTaskGroup(of: (Int, Probe.Backend?).self) { group in
+            for p in ports {
+                let onPort = config.recipes.filter { port(of: $0) == p }
+                let key = (onPort.first { phases[$0.id] == .ready && $0.backendKey != nil } ?? onPort.first { $0.backendKey != nil })?.backendKey
+                let base = device.backendBase(route, port: p)
+                group.addTask { (p, await Probe.backend(base, key: key)) }
+            }
+            return await group.reduce(into: [Int: Probe.Backend?]()) { $0[$1.0] = $1.1 }
+        }
+        guard transition == nil else { return }
+        for p in ports {
             let onPort = config.recipes.filter { port(of: $0) == p }
-            let key = (onPort.first { phases[$0.id] == .ready && $0.backendKey != nil } ?? onPort.first { $0.backendKey != nil })?.backendKey
-            let info = await Probe.backend(device.backendBase(route, port: p), key: key)
-            guard transition == nil else { return }
-            guard let info else {
+            guard let info = infos[p] ?? nil else {
                 for r in onPort where phases[r.id] == .ready { phases[r.id] = .failed("Not responding") }
                 continue
             }
@@ -819,6 +834,17 @@ final class AppState {
         }
     }
 
+    /// The password is kept under the email, so it moves to the new one.
+    func setTapoEmail(_ email: String) {
+        guard email != config.tapo.email else { return }
+        if !TapoKeychain.hasPassword(account: email), let pw = TapoKeychain.loadPassword(account: config.tapo.email),
+           TapoKeychain.savePassword(pw, account: email) {
+            TapoKeychain.deletePassword(account: config.tapo.email)
+            tapoKeychainVersion += 1
+        }
+        config.tapo.email = email
+    }
+
     func clearTapoPassword() {
         TapoKeychain.deletePassword(account: config.tapo.email)
         tapoKeychainVersion += 1
@@ -1003,9 +1029,13 @@ final class AppState {
             // SSH closes early in shutdown, so confirm via the plug's power meter that the Spark is really off
             // (~1 W standby). Plugs without metering report nil and are cut straight away, as before.
             var checks = 0
+            var poller: TapoTPAPClient? // one session for the whole poll, not a SPAKE2+ handshake every 5 s
             while true {
                 guard !Task.isCancelled else { tapoPhase = .idle; return }
-                let watts = try? await withTapoClient { try await $0.getStatus() }.currentPowerWatts
+                let status: TapoPlugStatus?
+                if let p = poller, let s = try? await p.getStatus() { status = s }
+                else { status = try? await withTapoClient { c in poller = c; return try await c.getStatus() } }
+                let watts = status?.currentPowerWatts
                 if let w = watts, w > 1.5 {
                     checks += 1
                     guard checks < 60 else {  // 5 minutes
@@ -1022,10 +1052,11 @@ final class AppState {
             guard !Task.isCancelled else { tapoPhase = .idle; return }
             tapoPhase = .turningOff
             do {
-                try await withTapoClient { client in
+                let off: (TapoTPAPClient) async throws -> Void = { client in
                     try await client.setPower(false)
-                    tapoStatus = try? await client.getStatus()
+                    self.tapoStatus = try? await client.getStatus()
                 }
+                if let p = poller, (try? await off(p)) != nil {} else { try await withTapoClient(off) }
                 tapoPhase = .idle
                 event("Turned smart plug OFF after Spark shut down")
                 Notify.post("Smart plug turned off", "Cut power after DGX Spark shut down.")

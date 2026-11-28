@@ -495,8 +495,8 @@ enum TensorFold {
     /// Stops a detached download by its record id (a TensorFold model id or a vLLM model's key).
     static func cancelScript(_ id: String) -> String {
         """
-        D="\(dataDir)"; p=$(cat "$D/\(id).pid" 2>/dev/null) || exit 0
-        pkill -TERM -P "$p"; kill "$p" 2>/dev/null; rm -f "$D/\(id).pid"; echo "Download cancelled" >> "$D/\(id).log"
+        D="\(dataDir)" K=\(SSH.quote(id)); p=$(cat "$D/$K.pid" 2>/dev/null) || exit 0
+        pkill -TERM -P "$p"; kill "$p" 2>/dev/null; rm -f "$D/$K.pid"; echo "Download cancelled" >> "$D/$K.log"
         """
     }
 

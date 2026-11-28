@@ -5,6 +5,8 @@ New entries go under **Unreleased**; a release renames that section to the versi
 
 ## [Unreleased]
 
+## [1.15.2] - 2026-11-28
+
 ### Changed
 - Gateway: with no API key set, requests from web pages in your browser are refused, so a website can't run models on your Spark through it. Set an API key to use the gateway from a browser app.
 - Gateway: the gateway's own API key is no longer passed on to the model server on the Spark.
